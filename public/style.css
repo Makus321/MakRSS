@@ -408,7 +408,7 @@ select:focus-visible { outline: none; }
 .a-thumb { grid-column: 1; grid-row: 1; }
 .a-main { grid-column: 2; grid-row: 1; min-width: 0; }
 .a-excerpt { grid-column: 1 / -1; grid-row: 2; }
-.article.compact .a-thumb { display: block; }
+.article.compact-thumb .a-thumb { display: block; }
 .a-thumb { display: none; width: 128px; height: 84px; object-fit: cover; border-radius: 8px; background: var(--panel-2); }
 /* Заголовок статьи — ссылка, но без подчёркивания; жирный всегда, цвет — как у текста
    статьи (белый в тёмной теме, чёрный в светлой), без оттенка гаммы. */

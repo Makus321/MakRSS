@@ -8,7 +8,7 @@ const COLLAPSE_KEY = 'rss.collapsed';
 
 const state = {
   data: { feeds: [], folders: [], items: [], counts: { all: 0, unread: 0, starred: 0 }, fetching: {} },
-  settings: { authEnabled: false, envAuth: false, user: '', fever: null, fetchFull: true, defaultView: 'compact', defaultLines: 4, defaultWidth: 100, telegram: {} },
+  settings: { authEnabled: false, envAuth: false, user: '', fever: null, fetchFull: true, defaultView: 'compact-thumb', defaultLines: 4, defaultWidth: 100, telegram: {} },
   session: { authRequired: false, authenticated: true },
   view: { type: 'unread', id: null },   // unread | starred | feed | folder (all — только как запасной)
   snapshot: null,                       // состав списка, зафиксированный при входе в ленту
@@ -227,7 +227,7 @@ const viewFolder = () => state.data.folders.find((f) => f.id === state.view.id) 
 const feedById = (id) => state.data.feeds.find((f) => f.id === id) ?? null;
 
 /** Режим показа для канала: своя настройка либо общая по умолчанию. */
-const feedMode = (feedId) => feedById(feedId)?.view ?? state.settings.defaultView ?? 'compact';
+const feedMode = (feedId) => feedById(feedId)?.view ?? state.settings.defaultView ?? 'compact-thumb';
 
 /** Порядок статей: у каждого канала свой, иначе общий из настроек. */
 const sortDir = () => (state.view.type === 'feed'
@@ -446,8 +446,9 @@ function renderToolbar() {
   $('#unread-mode-wrap').hidden = state.view.type === 'starred';
   $('#view-refresh').classList.toggle('spin', Boolean(state.data.refreshing));
 
-  const mode = state.view.type === 'feed' ? feedMode(state.view.id) : (state.settings.defaultView ?? 'compact');
-  for (const btn of document.querySelectorAll('#view-switch button')) btn.classList.toggle('on', btn.dataset.mode === mode);
+  const mode = state.view.type === 'feed' ? feedMode(state.view.id) : (state.settings.defaultView ?? 'compact-thumb');
+  const modeSelect = $('#view-switch');
+  if (modeSelect) modeSelect.value = mode;
   const lines = Math.min(12, Math.max(1, Number(
     state.view.type === 'feed' ? (viewFeed()?.lines ?? state.settings.defaultLines ?? 2) : (state.settings.defaultLines ?? 2),
   )));
@@ -765,7 +766,7 @@ function articleHtml(item) {
          onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${esc(thumbSource)}';}else{this.remove();}">`
     : '';
   // Картинка показывается только в «Кратко»: от этого зависит отступ текста слева.
-  const hasThumb = Boolean(thumb) && mode === 'compact';
+  const hasThumb = Boolean(thumb) && mode === 'compact-thumb';
   // Заголовок — ссылка на оригинал: открывается в новой вкладке. Раскрытие — по краткому тексту.
   const title = item.link
     ? `<a href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>`
@@ -1471,17 +1472,24 @@ async function refreshFeeds(feedId) {
   finally { $('#refresh-all').classList.remove('spin'); }
 }
 
+/** Человеческая подпись режима показа. */
+function modeLabel(mode) {
+  if (mode === 'full') return 'полностью';
+  if (mode === 'compact-thumb') return 'кратко, с картинкой';
+  return 'кратко, без картинки';
+}
+
 async function setViewMode(mode) {
   if (state.view.type === 'feed') {
     try {
       applyPayload(await api('/api/feeds/view', { id: state.view.id, view: mode }));
-      toast(`Канал показывает статьи: ${mode === 'full' ? 'полностью' : 'кратко'}`);
+      toast(`Канал показывает статьи: ${modeLabel(mode)}`);
     } catch (err) { toast(err.message, true); }
   } else {
     state.settings.defaultView = mode;
     await api('/api/settings', { defaultView: mode }).catch(() => {});
     render();
-    toast(`Режим по умолчанию: ${mode === 'full' ? 'полностью' : 'кратко'}`);
+    toast(`Режим по умолчанию: ${modeLabel(mode)}`);
   }
 }
 
@@ -1643,10 +1651,7 @@ $('#list').addEventListener('scroll', (event) => {
   }
 });
 
-$('#view-switch').addEventListener('click', (event) => {
-  const btn = event.target.closest('button[data-mode]');
-  if (btn) setViewMode(btn.dataset.mode);
-});
+$('#view-switch').addEventListener('change', (event) => setViewMode(event.target.value));
 
 $('#tree').addEventListener('click', async (event) => {
   const toggle = event.target.closest('[data-toggle]');
@@ -2232,7 +2237,7 @@ function setSettingsLoading(loading) {
 function fillSettingsForm() {
   const s = state.settings ?? {};
   $('#set-theme').value = state.prefs.theme;
-  $('#set-default-view').value = s.defaultView ?? 'compact';
+  $('#set-default-view').value = s.defaultView ?? 'compact-thumb';
   $('#set-density').value = state.prefs.density;
   setSelectValue($('#set-thumbs'), state.prefs.thumbs ? 'yes' : 'no');
   setSelectValue($('#set-borders'), state.prefs.borders !== false ? 'yes' : 'no');

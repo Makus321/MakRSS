@@ -155,7 +155,7 @@ const settings = () => {
   const s = db.settings;
   if (!('auth' in s)) s.auth = null;
   if (!s.telegram || typeof s.telegram !== 'object') s.telegram = { token: '', botUsername: '', lastUpdateId: 0 };
-  if (!s.defaultView) s.defaultView = 'compact';
+  if (!s.defaultView) s.defaultView = 'compact-thumb';      // кратко, с картинкой
   if (!Number.isFinite(Number(s.defaultLines)) || Number(s.defaultLines) < 1) s.defaultLines = 4;
   // Ширина текста статьи: 100% — во всю ширину (как было), минимум 50% от окна.
   s.defaultWidth = clampTextWidth(s.defaultWidth ?? MAX_TEXT_WIDTH);
@@ -1765,7 +1765,7 @@ async function api(req, res, url) {
       s.fetchFull = body.fetchFull;
       if (body.fetchFull) { enqueueAllFullText(); pumpQueue(); }
     }
-    if (body.defaultView === 'compact' || body.defaultView === 'full') s.defaultView = body.defaultView;
+    if (['compact', 'compact-thumb', 'full'].includes(body.defaultView)) s.defaultView = body.defaultView;
     if (body.defaultSort === 'asc' || body.defaultSort === 'desc') s.defaultSort = body.defaultSort;
     if (body.defaultLines !== undefined) {
       const lines = Math.min(12, Math.max(1, Math.round(Number(body.defaultLines)) || 2));
@@ -1902,7 +1902,7 @@ async function api(req, res, url) {
     const { id, view, lines, sort, width, imagesOnly } = await readJson(req);
     const feed = feedById(id);
     if (!feed) return json(res, 404, { ok: false, error: 'лента не найдена' });
-    if (view === 'compact' || view === 'full') feed.view = view;
+    if (['compact', 'compact-thumb', 'full'].includes(view)) feed.view = view;
     else if (view === null) feed.view = null;
     if (lines !== undefined) {
       const count = Number(lines);
@@ -2341,6 +2341,20 @@ export async function init(options = {}) {
   await backfillContentLength();
   await cleanupStoredBodies();
   await migrateTelegramTitles();
+
+  // Раньше «кратко» означало «кратко с картинкой». Теперь режимов три, и старые
+  // значения «compact» надо перевести в «compact-thumb», иначе у всех читателей
+  // картинки в списке внезапно исчезнут.
+  if (!userSettings.viewModeMigrated) {
+    if (userSettings.defaultView === 'compact') userSettings.defaultView = 'compact-thumb';
+    let migrated = 0;
+    for (const feed of db.feeds) {
+      if (feed.view === 'compact') { feed.view = 'compact-thumb'; migrated += 1; }
+    }
+    userSettings.viewModeMigrated = true;
+    store.saveStateSoon();
+    if (migrated) log(`режим «кратко» переведён в «кратко с картинкой»: ${migrated} лент`);
+  }
 
   // Ширина текста теперь одна на всю читалку — личные значения у лент убираем.
   let clearedWidths = 0;

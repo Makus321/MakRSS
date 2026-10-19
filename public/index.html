@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MAK RSS Reader</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f97316'/><circle cx='10' cy='22' r='3' fill='white'/><path d='M7 14a11 11 0 0 1 11 11' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/><path d='M7 7a18 18 0 0 1 18 18' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="/style.css?v=56">
+<link rel="stylesheet" href="/style.css?v=57">
 <!-- Установка на домашний экран телефона (PWA) -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -62,10 +62,11 @@
       <div class="head-row">
         <button class="icon-btn menu-btn" id="menu-btn" title="Подписки" aria-label="Подписки">☰</button>
         <h2 id="view-title">Все статьи</h2>
-        <div class="seg" id="view-switch" title="Как показывать статьи этого канала">
-          <button data-mode="compact">Кратко</button>
-          <button data-mode="full">Полностью</button>
-        </div>
+        <select id="view-switch" class="mini-field" title="Как показывать статьи этого канала">
+          <option value="compact">Кратко</option>
+          <option value="compact-thumb">Кратко + картинка</option>
+          <option value="full">Полностью</option>
+        </select>
         <label class="mini-field" title="Сколько строк краткого текста показывать">Строк
           <select id="lines-select">
             <option value="1">1</option>
@@ -198,7 +199,8 @@
         </div>
         <label class="row-line">Показывать статьи по умолчанию
           <select id="set-default-view">
-            <option value="compact">кратко, с картинкой</option>
+            <option value="compact">кратко, без картинки</option>
+            <option value="compact-thumb">кратко, с картинкой</option>
             <option value="full">полностью</option>
           </select>
         </label>
@@ -416,6 +418,6 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
-<script src="/app.js?v=77" type="module"></script>
+<script src="/app.js?v=79" type="module"></script>
 </body>
 </html>
