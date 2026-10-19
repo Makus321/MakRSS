@@ -97,6 +97,17 @@ function loadPrefs() {
   state.prefs.fontTree = fontPx(state.prefs.fontTree, '13px');
   state.prefs.fontArticle = fontPx(state.prefs.fontArticle, '14.5px');
   state.prefs.fontExcerpt = fontPx(state.prefs.fontExcerpt, '14.5px');
+  // Раньше у краткого вида была своя сетка размеров (11.5/12.5/16/19.5). Если в
+  // настройках сохранено такое значение, оно и рисовалось — при том что в списке
+  // показывался ближайший новый пункт. Переводим старые значения в новые.
+  const excerptMigration = { '11.5px': '13px', '12.5px': '14.5px', '16px': '18px', '19.5px': '22px' };
+  if (excerptMigration[state.prefs.fontExcerpt]) {
+    state.prefs.fontExcerpt = excerptMigration[state.prefs.fontExcerpt];
+  }
+  const articleMigration = { '11.5px': '13px', '12.5px': '14.5px', '16px': '18px', '19.5px': '22px' };
+  if (articleMigration[state.prefs.fontArticle]) {
+    state.prefs.fontArticle = articleMigration[state.prefs.fontArticle];
+  }
   // Один раз переводим старые галочки в новый выбор «по клику / при прокрутке»:
   // раньше по умолчанию была включена только «при раскрытии», и отметка при
   // прокрутке не работала вовсе.
