@@ -35,7 +35,7 @@ const state = {
   bodies: new Map(),                    // id -> { content, fullHtml, note }
   comments: new Map(),                  // id -> { loading, ok, total, count, threads, error }
   selectedId: null,
-  limit: 40,
+  limit: 10,                     // сначала показываем 10 карточек, остальное — по прокрутке
   resetScroll: false,                   // сбросить прокрутку при следующей отрисовке
   drag: null,
   loadingBodies: false,
@@ -681,7 +681,7 @@ function switchView(view) {
   // в ленте и папке галочка остаётся такой, какой её поставил пользователь.
   if (view.type === 'unread') state.prefs.unreadOnly = true;
   else if (view.type === 'all') state.prefs.unreadOnly = false;
-  state.limit = 40;
+  state.limit = 10;
   state.resetScroll = true;
   state.expandedItems.clear();
   state.commentsOnly.clear();
@@ -1502,7 +1502,7 @@ document.addEventListener('keydown', (event) => {
     const base = index < 0 ? (delta > 0 ? -1 : 0) : index;
     const position = Math.min(items.length - 1, Math.max(0, base + delta));
     state.selectedId = items[position].id;
-    if (position >= state.limit) state.limit = position + 10;
+    if (position >= state.limit) state.limit = position + 10;   // догружаем по мере надобности
     renderList();
   };
   switch (event.key) {
@@ -1608,7 +1608,7 @@ $('#list').addEventListener('scroll', (event) => {
   scrollSettleTimer = setTimeout(() => { updateActiveArticle(); }, 260);
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 400) {
     const total = visibleItems().length;
-    if (state.limit < total) { state.limit += 40; renderList(); }
+    if (state.limit < total) { state.limit += 10; renderList(); }
   }
 });
 
@@ -1827,7 +1827,7 @@ $('#unread-mode').addEventListener('change', (event) => {
     state.prefs.unreadOnly = onlyUnread;      // для папки и общих видов — как значение по умолчанию
   }
   savePrefs();
-  state.limit = 40;
+  state.limit = 10;
   state.view = { ...state.view };             // ключ вида изменится — снимок соберётся заново
   resetSnapshot();
   render();
@@ -1901,7 +1901,7 @@ $('#search').addEventListener('input', (event) => {
   const value = event.target.value;
   searchTimer = setTimeout(() => {
     state.query = value;
-    state.limit = 40;
+    state.limit = 10;
     resetSnapshot();          // новый поиск — новый список
     render();
   }, 120);
