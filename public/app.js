@@ -2860,5 +2860,28 @@ function sanitize(html, baseUrl) {
     const onlyMedia = children.every((el) => ['IMG', 'VIDEO', 'PICTURE', 'SOURCE', 'A', 'BR'].includes(el.tagName));
     if (onlyMedia && block.querySelector('img, video')) block.classList.add('img-alone');
   }
+  // Подряд идущие картинки собираем в один блок: тогда читалка раскладывает их
+  // в несколько колонок, если по ширине помещается больше одной, вместо длинной
+  // ленты одиночных картинок.
+  const ownsMedia = (node) => node.nodeType === 1 && node.classList?.contains('img-alone');
+  let run = [];
+  const flush = () => {
+    if (run.length < 2) { run = []; return; }
+    const row = document.createElement('div');
+    row.className = 'img-row';
+    row.dataset.count = String(run.length);
+    run[0].before(row);
+    for (const block of run) {
+      for (const media of [...block.querySelectorAll('img, video')]) row.append(media);
+      block.remove();
+    }
+    run = [];
+  };
+  for (const node of [...root.children]) {
+    if (ownsMedia(node)) run.push(node);
+    else flush();
+  }
+  flush();
+
   return root.innerHTML;
 }
