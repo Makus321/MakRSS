@@ -2308,9 +2308,18 @@ function renderTelegramInfo() {
 }
 
 $('#open-settings').addEventListener('click', openSettings);
-$('#settings-close').addEventListener('click', () => { $('#settings-modal').hidden = true; stopSettingsRefresh(); });
+function closeSettings() {
+  $('#settings-modal').hidden = true;
+  setSettingsLoading(false);
+  try { stopSettingsRefresh(); } catch { /* уже остановлено */ }
+}
+
+$('#settings-close').addEventListener('click', closeSettings);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !$('#settings-modal').hidden) closeSettings();
+});
 $('#settings-modal').addEventListener('click', (event) => {
-  if (event.target.id === 'settings-modal') { $('#settings-modal').hidden = true; stopSettingsRefresh(); }
+  if (event.target.id === 'settings-modal') closeSettings();
 });
 
 /** Пока настройки открыты, их показания обновляются — иначе цифры расходятся
