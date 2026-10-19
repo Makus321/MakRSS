@@ -846,6 +846,32 @@ state.filling = false;
  * Если после отрисовки список короче экрана, прокручивать нечего и догрузка по
  * прокрутке не сработает — значит порцию надо увеличить сразу.
  */
+/**
+ * Пока картинка грузится, держим под неё место заглушкой — иначе текст прыгает,
+ * когда изображения догружаются. Как только картинка пришла, заглушка снимается.
+ */
+function holdImageSpace(root) {
+  for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
+    if (img.dataset.hold === '1' || img.complete) continue;
+    img.dataset.hold = '1';
+    img.classList.add('pending');
+    img.addEventListener('load', () => { img.classList.remove('pending'); });
+    img.addEventListener('error', () => { img.classList.remove('pending'); });
+  }
+  for (const row of root.querySelectorAll('.img-row')) {
+    const images = [...row.querySelectorAll('img')];
+    if (!images.length) continue;
+    const done = () => {
+      if (images.every((img) => img.complete)) row.classList.add('ready');
+    };
+    if (images.every((img) => img.complete)) row.classList.add('ready');
+    else {
+      row.classList.add('waiting');
+      for (const img of images) img.addEventListener('load', done), img.addEventListener('error', done);
+    }
+  }
+}
+
 function fillViewport() {
   if (state.filling) return;
   const listEl = $('#list');
@@ -927,6 +953,7 @@ function renderList() {
   setupReadObservers();
   requestCommentCounts();
   fillViewport();          // если карточек меньше экрана — догружаем сразу
+  holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
   updateActiveArticle();
 }
 

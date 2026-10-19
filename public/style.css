@@ -744,3 +744,16 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   border-radius: 8px;
   margin: 0;
 }
+
+/* Пока картинка не пришла, под неё держим место: иначе текст прыгает. */
+.a-body img.pending, .comment-body img.pending {
+  aspect-ratio: 3 / 2;
+  min-height: 120px;
+  background: var(--panel-2);
+  border-radius: 8px;
+}
+.a-body .img-row.waiting, .comment-body .img-row.waiting {
+  min-height: 180px;
+  background: var(--panel-2);
+  border-radius: 8px;
+}
