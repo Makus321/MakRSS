@@ -35,7 +35,7 @@ const state = {
   bodies: new Map(),                    // id -> { content, fullHtml, note }
   comments: new Map(),                  // id -> { loading, ok, total, count, threads, error }
   selectedId: null,
-  limit: 10,                     // сначала показываем 10 карточек, остальное — по прокрутке
+  limit: 20,                     // сначала показываем 20 карточек, остальное — по прокрутке
   resetScroll: false,                   // сбросить прокрутку при следующей отрисовке
   drag: null,
   loadingBodies: false,
@@ -681,7 +681,7 @@ function switchView(view) {
   // в ленте и папке галочка остаётся такой, какой её поставил пользователь.
   if (view.type === 'unread') state.prefs.unreadOnly = true;
   else if (view.type === 'all') state.prefs.unreadOnly = false;
-  state.limit = 10;
+  state.limit = 20;
   state.resetScroll = true;
   state.expandedItems.clear();
   state.commentsOnly.clear();
@@ -836,6 +836,26 @@ document.addEventListener('mouseup', () => {
   if (renderPending) setTimeout(() => { if (renderPending) { renderPending = false; renderList(); } }, 0);
 }, true);
 
+state.filling = false;
+
+/**
+ * Если после отрисовки список короче экрана, прокручивать нечего и догрузка по
+ * прокрутке не сработает — значит порцию надо увеличить сразу.
+ */
+function fillViewport() {
+  if (state.filling) return;
+  const listEl = $('#list');
+  if (!listEl) return;
+  const total = visibleItems().length;
+  if (state.limit >= total) return;
+  if (listEl.scrollHeight > listEl.clientHeight + 120) return;
+  state.filling = true;
+  state.limit = Math.min(total, state.limit + 20);
+  renderList();
+  state.filling = false;
+  fillViewport();
+}
+
 function renderList() {
   if (pointerDown) { renderPending = true; return; }
   const listEl = $('#list');
@@ -902,6 +922,7 @@ function renderList() {
   ensureBodiesNeeded();
   setupReadObservers();
   requestCommentCounts();
+  fillViewport();          // если карточек меньше экрана — догружаем сразу
   updateActiveArticle();
 }
 
@@ -1606,9 +1627,10 @@ $('#list').addEventListener('scroll', (event) => {
   // прокрутки иногда не доходит, и статья оставалась непрочитанной.
   clearTimeout(scrollSettleTimer);
   scrollSettleTimer = setTimeout(() => { updateActiveArticle(); }, 260);
-  if (el.scrollTop + el.clientHeight > el.scrollHeight - 400) {
+  // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
+  if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {
     const total = visibleItems().length;
-    if (state.limit < total) { state.limit += 10; renderList(); }
+    if (state.limit < total) { state.limit += 20; renderList(); }
   }
 });
 
@@ -1827,7 +1849,7 @@ $('#unread-mode').addEventListener('change', (event) => {
     state.prefs.unreadOnly = onlyUnread;      // для папки и общих видов — как значение по умолчанию
   }
   savePrefs();
-  state.limit = 10;
+  state.limit = 20;
   state.view = { ...state.view };             // ключ вида изменится — снимок соберётся заново
   resetSnapshot();
   render();
@@ -1901,7 +1923,7 @@ $('#search').addEventListener('input', (event) => {
   const value = event.target.value;
   searchTimer = setTimeout(() => {
     state.query = value;
-    state.limit = 10;
+    state.limit = 20;
     resetSnapshot();          // новый поиск — новый список
     render();
   }, 120);
