@@ -438,6 +438,11 @@ select:focus-visible { outline: none; }
 /* У раскрытой, но не выбранной статьи кнопки просто в углу: текст статьи получает
    отступ справа, чтобы не заходить под них. */
 .article.expanded:not(.selected) .a-body { padding-right: 46px; }
+/* Плавающие кнопки полупрозрачны, чтобы не заслонять текст; при наведении
+   проявляются полностью. */
+.a-actions.floating { opacity: .5; transition: opacity .18s ease; }
+.a-actions.floating:hover, .a-actions.floating:focus-within { opacity: 1; }
+
 .a-actions button, .a-actions a.icon-btn {
   width: 26px; height: 22px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
   /* Фон карточки и панели близки — кнопкам даём более плотную подложку и тень,

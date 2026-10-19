@@ -1032,6 +1032,7 @@ function positionArticleActions() {
     const visible = cardRect.bottom > listRect.top + 8 && cardRect.top < listRect.bottom;
     const leaving = cardRect.bottom < listRect.top + 120;
     if (!isActive || !visible || leaving) {
+      actions.classList.remove('floating');
       actions.style.position = '';
       actions.style.top = '';
       actions.style.right = '';
@@ -1042,6 +1043,7 @@ function positionArticleActions() {
     }
     const lowest = cardRect.bottom - 140 - height;       // «рельс» заканчивается выше конца
     const top = Math.max(listRect.top + 8, Math.min(wantedTop, lowest));
+    actions.classList.add('floating');      // кнопки становятся полупрозрачными
     actions.style.display = '';
     actions.style.position = 'fixed';
     actions.style.top = `${Math.round(top)}px`;
