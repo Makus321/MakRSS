@@ -21,7 +21,7 @@ const state = {
     // Значения по умолчанию для нового клиента: тёмная тема, «Кратко», 4 строки,
     // дата по убыванию, только непрочитанные, отметка при прокрутке.
     theme: 'dark', paletteDark: 'graphite', paletteLight: 'day', background: 'palette', density: 'compact', thumbs: true,
-    fontTree: '13px', fontArticle: '14.5px', fontExcerpt: '12.5px', fontFamily: 'system', lineHeight: 'normal',
+    fontTree: '13px', fontArticle: '14.5px', fontExcerpt: '14.5px', fontFamily: 'system', lineHeight: 'normal',
     borders: true,
     readOnExpand: true, readOnScroll: true, readOnFinish: false,
     treeFilter: 'all',
@@ -96,7 +96,7 @@ function loadPrefs() {
   // Размеры шрифта храним в виде «13px»: старые настройки держали число.
   state.prefs.fontTree = fontPx(state.prefs.fontTree, '13px');
   state.prefs.fontArticle = fontPx(state.prefs.fontArticle, '14.5px');
-  state.prefs.fontExcerpt = fontPx(state.prefs.fontExcerpt, '12.5px');
+  state.prefs.fontExcerpt = fontPx(state.prefs.fontExcerpt, '14.5px');
   // Один раз переводим старые галочки в новый выбор «по клику / при прокрутке»:
   // раньше по умолчанию была включена только «при раскрытии», и отметка при
   // прокрутке не работала вовсе.
@@ -145,7 +145,7 @@ function applyVisualPrefs() {
   document.documentElement.style.setProperty('--ui-scale', String(Math.max(0.8, Math.min(1.5, treeSize / 13))));
   root.style.setProperty('--font-tree', state.prefs.fontTree || '13px');
   root.style.setProperty('--font-article', state.prefs.fontArticle || '14.5px');
-  root.style.setProperty('--font-excerpt', state.prefs.fontExcerpt || '12.5px');
+  root.style.setProperty('--font-excerpt', state.prefs.fontExcerpt || '14.5px');
   $('#list').classList.toggle('comfortable', state.prefs.density === 'comfortable');
   // «Невидимые рамки» — минималистичный вид: у карточек и панелей рамок нет,
   // остаётся только подсветка активной статьи.
