@@ -749,7 +749,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 }
 
 /* Пока картинка не пришла, под неё держим место: иначе текст прыгает. */
-.a-body img.pending, .comment-body img.pending {
+/* Заглушка нужна только одиночным картинкам: в сетке ряда место уже держит
+   сам ряд, а лишняя высота заставляла картинки «перескакивать». */
+.a-body img.pending:not(.img-row img), .comment-body img.pending:not(.img-row img) {
   aspect-ratio: 3 / 2;
   min-height: 120px;
   background: var(--panel-2);
