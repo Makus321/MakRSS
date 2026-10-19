@@ -1,7 +1,7 @@
 // Service worker читалки: кэш оболочки, чтобы приложение открывалось без сети.
 // Стратегия — network-first: сначала свежий файл, а если сети нет — то, что уже
 // лежит в кэше. Данные и служебные адреса всегда идут с сервера, без кэша.
-const CACHE = 'rss-shell-v104';
+const CACHE = 'rss-shell-v105';
 const SHELL = ['/', '/style.css', '/app.js', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
