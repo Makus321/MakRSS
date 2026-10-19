@@ -93,7 +93,7 @@ const MAX_UNREAD_PER_FEED = Number(process.env.MAX_UNREAD_PER_FEED || argValue('
 const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-read', 1000));
 // Версия разборщика: когда он меняется, ленты перечитываются заново, даже если
 // сайт отвечает «не изменилось» — иначе старые записи остаются без новых полей.
-const PARSER_VERSION = 4;
+const PARSER_VERSION = 5;
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
