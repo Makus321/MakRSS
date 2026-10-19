@@ -770,7 +770,10 @@ function articleHtml(item) {
   const title = item.link
     ? `<a href="${esc(item.link)}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>`
     : esc(item.title);
-  return `<article class="article ${item.read ? 'read' : 'unread'} ${mode}${hasThumb ? ' has-thumb' : ''}${expanded ? ' expanded' : ''}${item.id === state.selectedId ? ' selected' : ''}" style="--read-width:${width}%" data-item="${esc(item.id)}">
+  // has-title: у карточки есть заголовок. По нему в кратком виде решается,
+  // нужен ли отступ справа под плавающие кнопки.
+  const hasTitle = Boolean(String(item.title ?? '').trim());
+  return `<article class="article ${item.read ? 'read' : 'unread'} ${mode}${hasTitle ? ' has-title' : ''}${hasThumb ? ' has-thumb' : ''}${expanded ? ' expanded' : ''}${item.id === state.selectedId ? ' selected' : ''}" style="--read-width:${width}%" data-item="${esc(item.id)}">
     <div class="a-rail">
       <div class="a-actions">
         <button data-star="${esc(item.id)}" class="${item.starred ? 'on' : ''}" title="В избранное (s)">${item.starred ? '★' : '☆'}</button>

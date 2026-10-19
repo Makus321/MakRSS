@@ -418,6 +418,10 @@ select:focus-visible { outline: none; }
 .a-excerpt { color: var(--article-text); font-size: var(--font-excerpt); margin: 0; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
   /* Тот же интервал, что у раскрытой статьи: иначе краткий и полный вид заметно расходятся. */
   line-height: calc(1.65 * var(--lh-scale, 1)); text-align: justify; hyphens: auto; }
+/* В кратком виде отступ справа нужен только там, где есть заголовок: иначе
+   текст расходится с заголовком по левому краю. Карточкам без заголовка отдаём
+   всю ширину, чтобы текст не заканчивался раньше края. */
+.article.compact.has-title .a-excerpt { padding-right: 46px; }
 .article.expanded .a-excerpt { display: none; }
 .a-meta { font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .a-meta .src { color: var(--accent); }
