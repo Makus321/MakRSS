@@ -843,6 +843,31 @@ async function discoverCandidates(input) {
   if (first.ok && looksLikeFeed(first.text)) {
     addFeedCandidate(first.finalUrl ?? url, first.text, 'это сама лента');
   } else if (first.ok && /html/i.test(first.contentType)) {
+    // Каналы Telegram, на которые ссылается сам сайт (у iXBT это t.me/ixbt_official):
+    // иначе по адресу сайта находились только RSS-ленты.
+    const telegramNames = [...new Set([...first.text.matchAll(/(?:https?:\/\/)?(?:t|telegram)\.me\/([A-Za-z0-9_]{3,40})/g)].map((m) => m[1]))]
+      .filter((name) => !['s', 'joinchat', 'share', 'addstickers', 'proxy', 'iv'].includes(name.toLowerCase()))
+      .slice(0, 2);
+    for (const name of telegramNames) {
+      const channelUrl = `https://t.me/${name}`;
+      if (seen.has(channelUrl)) continue;
+      try {
+        const res = await httpGet(telegramPreviewUrl(name), { timeout: 20000, accept: 'text/html,application/xhtml+xml' });
+        if (!res.ok) continue;
+        const parsed = parseTelegramChannel(res.text, channelUrl, 'probe', itemId);
+        if (!parsed.items.length) continue;         // не публичный канал
+        seen.add(channelUrl);
+        candidates.push({
+          url: channelUrl,
+          title: parsed.meta.title || `Telegram: ${name}`,
+          format: 'telegram',
+          siteUrl: channelUrl,
+          items: parsed.items.length,
+          hint: 'канал Telegram, найден на сайте',
+        });
+      } catch { /* канал недоступен — пропускаем */ }
+    }
+
     // Сначала то, что сайт объявляет сам, затем типовые адреса.
     const declared = discoverFeedLinks(first.text, url).slice(0, 6);
     const base = new URL(url);
