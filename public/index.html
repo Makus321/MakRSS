@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAK RSS Reader</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f97316'/><circle cx='10' cy='22' r='3' fill='white'/><path d='M7 14a11 11 0 0 1 11 11' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/><path d='M7 7a18 18 0 0 1 18 18' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/></svg>">
+<link rel="stylesheet" href="/style.css?v=44">
+<!-- Установка на домашний экран телефона (PWA) -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#f97316">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RSS">
+</head>
+<body>
+<div class="app" id="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◔</span>
+      <h1>MAK RSS Reader</h1>
+      <button class="icon-btn" id="refresh-all" title="Обновить все ленты (r)">⟳</button>
+      <button class="icon-btn" id="open-settings" title="Настройки">⚙</button>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item" data-view="unread"><span class="nav-ico">◍</span>Непрочитанные<span class="badge" id="badge-unread"></span></button>
+      <button class="nav-item" data-view="starred"><span class="nav-ico">★</span>Избранное<span class="badge" id="badge-starred"></span></button>
+    </nav>
+
+    <div class="section-title">
+      <span>Подписки <span id="feed-count" class="muted"></span></span>
+      <span class="title-actions">
+        <button class="mini-btn" id="new-feed" title="Добавить подписку">＋ подписка</button>
+        <button class="mini-btn" id="new-folder" title="Создать папку">＋ папка</button>
+      </span>
+    </div>
+    <div class="seg tree-seg" id="tree-filter" title="Какие подписки показывать в дереве">
+      <button data-tree="unread">Непрочитанные</button>
+      <button data-tree="all">Все</button>
+    </div>
+    <ul class="tree" id="tree"></ul>
+    <div class="drop-hint" id="drop-hint">отпустите здесь, чтобы вынести из папки</div>
+    <div class="add-status" id="add-status"></div>
+
+    <div class="sidebar-bottom">
+      <div class="footer-row">
+        <label class="link-btn">Импорт OPML<input type="file" id="opml-file" accept=".opml,.xml" hidden></label>
+        <a class="link-btn" href="/api/opml" download>Экспорт OPML</a>
+        <span class="muted" id="store-info"></span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="splitter" id="splitter" title="Потяните, чтобы изменить ширину"></div>
+
+  <main class="list-pane">
+    <header class="pane-head">
+      <div class="head-row">
+        <button class="icon-btn menu-btn" id="menu-btn" title="Подписки" aria-label="Подписки">☰</button>
+        <h2 id="view-title">Все статьи</h2>
+        <div class="seg" id="view-switch" title="Как показывать статьи этого канала">
+          <button data-mode="compact">Кратко</button>
+          <button data-mode="full">Полностью</button>
+        </div>
+        <label class="mini-field" title="Сколько строк краткого текста показывать">Строк
+          <select id="lines-select">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="10">10</option>
+          </select>
+        </label>
+        <label class="mini-field" title="Порядок статей">Порядок
+          <select id="sort-select">
+            <option value="desc">Дата: убывание</option>
+            <option value="asc">Дата: возрастание</option>
+          </select>
+        </label>
+        <span class="width-controls" title="Ширина текста статьи на этом устройстве: «−» — уже, «+» — шире">
+          <button class="icon-btn" id="width-minus" aria-label="Уже текст">−</button>
+          <span id="width-value" class="muted">100%</span>
+          <button class="icon-btn" id="width-plus" aria-label="Шире текст">+</button>
+        </span>
+        <span class="countdown" id="refresh-countdown" title="До следующего обновления лент">—</span>
+        <button class="icon-btn tune-btn" id="install-top" title="Установить приложение на телефон" aria-label="Установить приложение" hidden>📱</button>
+        <button class="icon-btn tune-btn" id="tune-btn" title="Вид и фильтры" aria-label="Вид и фильтры">⋯</button>
+        <button class="icon-btn tune-btn" id="refresh-top" title="Обновить ленту" aria-label="Обновить ленту">⟳</button>
+        <button class="icon-btn" id="theme-toggle" title="Светлая/тёмная тема">◐</button>
+      </div>
+      <div class="sub" id="view-sub"></div>
+      <div class="head-tools">
+        <button class="btn nav-arrow" id="prev-item" title="Предыдущая статья (k)" aria-label="Предыдущая статья">↑</button>
+        <button class="btn nav-arrow" id="next-item" title="Следующая статья (j)" aria-label="Следующая статья">↓</button>
+        <button class="btn" id="comments-top" title="Комментарии к выбранной статье" hidden>Комментарии</button>
+        <input id="search" class="search" type="search" placeholder="Поиск (/)" autocomplete="off">
+        <label class="mini-field" title="Показывать непрочитанные или все статьи этой ленты" id="unread-mode-wrap">
+          <select id="unread-mode">
+            <option value="unread">Непрочитанные</option>
+            <option value="all">Все</option>
+          </select>
+        </label>
+                <label class="mini-field" id="images-only-wrap" title="Показывать в статьях только картинки, без разметки сайта" hidden>
+          <select id="images-only">
+            <option value="no">Обычный вид</option>
+            <option value="yes">Только картинки</option>
+          </select>
+        </label>
+        <button class="btn" id="filters-btn" title="Фильтры лент: что скрывать и что показывать">Фильтры</button>
+        <button class="btn" id="mark-all" title="Отметить прочитанным всё в текущем виде">Прочитать всё</button>
+        <button class="btn" id="expand-all" title="Развернуть или свернуть все статьи списка">Развернуть все</button>
+        <button class="btn" id="install-app" hidden>📱 Установить приложение</button>
+        <button class="btn" id="view-refresh" title="Обновить ленту">⟳</button>
+      </div>
+      <div class="filter-row" id="filter-row" hidden>
+        <span class="note">Найдено по запросу «<b id="filter-term"></b>»:</span>
+        <button class="btn" id="filter-hide">Скрывать такие статьи</button>
+        <button class="btn" id="filter-only">Показывать только такие</button>
+        <span class="note" id="filter-hint"></span>
+      </div>
+      <div class="filter-row new-row" id="new-row" hidden>
+        <span class="note" id="new-text"></span>
+        <button class="btn primary" id="new-show">Показать</button>
+      </div>
+    </header>
+    <div class="list" id="list"></div>
+    <div class="empty" id="empty-state" hidden></div>
+    <div class="tree-backdrop" id="tree-backdrop"></div>
+  </main>
+</div>
+
+<!-- Настройки -->
+<div class="modal" id="settings-modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Настройки <span class="settings-loading" id="settings-loading" hidden>загрузка…</span></h3>
+      <button class="btn" id="settings-close">Закрыть</button>
+    </div>
+    <div class="modal-body">
+      <section>
+        <h4>Вид</h4>
+        <label class="row-line">Межстрочный интервал
+          <select id="set-line-height">
+            <option value="tiny">самый маленький</option>
+            <option value="small">маленький</option>
+            <option value="normal">нормальный</option>
+            <option value="large">большой</option>
+            <option value="huge">самый большой</option>
+          </select>
+        </label>
+        <div class="grid2">
+          <label class="row-line">Тема
+            <select id="set-theme">
+              <option value="dark">тёмная</option>
+              <option value="light">светлая</option>
+              <option value="auto">как в системе</option>
+            </select>
+          </label>
+          <label class="row-line">Фон
+            <select id="set-background" title="Какой цвет у фона читалки">
+              <option value="theme">фон темы (белый/чёрный)</option>
+              <option value="palette">фон с гаммой</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid2">
+          <label class="row-line">Гамма тёмной темы
+            <select id="set-palette-dark">
+              <option value="graphite">Графит</option>
+              <option value="blue">Синяя</option>
+              <option value="green">Изумруд</option>
+              <option value="violet">Фиалка</option>
+              <option value="amber">Янтарь</option>
+              <option value="cyan">Лазурь</option>
+              <option value="rose">Роза</option>
+              <option value="forest">Лес</option>
+              <option value="mono">Монохром</option>
+            </select>
+          </label>
+          <label class="row-line">Гамма светлой темы
+            <select id="set-palette-light">
+              <option value="day">Дневная</option>
+              <option value="sky">Небо</option>
+              <option value="mint">Мята</option>
+              <option value="lavender">Лаванда</option>
+              <option value="sand">Песок</option>
+              <option value="ice">Лёд</option>
+              <option value="blush">Румянец</option>
+              <option value="sepia">Сепия</option>
+              <option value="mono">Монохром</option>
+            </select>
+          </label>
+        </div>
+        <label class="row-line">Показывать статьи по умолчанию
+          <select id="set-default-view">
+            <option value="compact">кратко, с картинкой</option>
+            <option value="full">полностью</option>
+          </select>
+        </label>
+        <label class="row-line">Плотность списка
+          <select id="set-density">
+            <option value="compact">компактно</option>
+            <option value="comfortable">свободно</option>
+          </select>
+        </label>
+                <label class="row-line">Картинки в списке
+          <select id="set-thumbs">
+            <option value="yes">показывать</option>
+            <option value="no">не показывать</option>
+          </select>
+        </label>
+        <label class="row-line">Хранить прочитанное
+          <select id="set-keep-days">
+            <option value="7">1 неделя</option>
+            <option value="14">2 недели</option>
+            <option value="21">3 недели</option>
+            <option value="28">4 недели</option>
+          </select>
+        </label>
+                <label class="row-line">По умолчанию показывать
+          <select id="set-unread-default">
+            <option value="unread">только непрочитанные</option>
+            <option value="all">все статьи</option>
+          </select>
+        </label>
+                <label class="row-line">Рамки в интерфейсе
+          <select id="set-borders">
+            <option value="yes">показывать</option>
+            <option value="no">без рамок</option>
+          </select>
+        </label>
+        <label class="row-line">Шрифт интерфейса
+          <select id="set-font-family">
+            <option value="system">системный</option>
+            <option value="condensed">узкий (condensed)</option>
+            <option value="book">книжный, с засечками</option>
+            <option value="mono">моноширинный</option>
+            <option value="cursive">рукописный</option>
+            <option value="tight">плотный (узкие межбуквенные)</option>
+            <option value="airy">широкий (свободные межбуквенные)</option>
+            <option value="display">заголовочный (с засечками, разреженный)</option>
+          </select>
+        </label>
+        <div class="grid2">
+          <label class="row-line">Шрифт в дереве
+            <select id="set-font-tree">
+              <option value="12px">мелкий</option>
+              <option value="13px">обычный</option>
+              <option value="16.5px">крупный</option>
+              <option value="20px">очень крупный</option>
+            </select>
+          </label>
+          <label class="row-line">Шрифт статьи
+            <select id="set-font-article">
+              <option value="13px">мелкий</option>
+              <option value="14.5px">обычный</option>
+              <option value="18px">крупный</option>
+              <option value="22px">очень крупный</option>
+            </select>
+          </label>
+          <label class="row-line">Шрифт краткого вида
+            <select id="set-font-excerpt">
+              <option value="11.5px">мелкий</option>
+              <option value="12.5px">обычный</option>
+              <option value="16px">крупный</option>
+              <option value="19.5px">очень крупный</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <h4>Когда считать прочитанным</h4>
+        <p class="hint">Статья прочитана, когда ушла под шапку или рамка перешла на неё при прокрутке.</p>
+                <label class="row-line">Считать прочитанным
+          <select id="set-read-mode">
+            <option value="click">по клику</option>
+            <option value="scroll">при прокрутке</option>
+            <option value="both">по клику и при прокрутке</option>
+          </select>
+        </label>
+      </section>
+
+      <section>
+        <h4>Обновление лент</h4>
+        <label class="row-line">Обновлять каждые
+          <select id="set-refresh">
+            <option value="5">5 минут</option>
+            <option value="10">10 минут</option>
+            <option value="15">15 минут</option>
+            <option value="20">20 минут</option>
+            <option value="30">30 минут</option>
+            <option value="45">45 минут</option>
+            <option value="60">1 час</option>
+            <option value="120">2 часа</option>
+            <option value="180">3 часа</option>
+            <option value="240">4 часа</option>
+            <option value="480">8 часов</option>
+            <option value="720">12 часов</option>
+            <option value="1440">раз в сутки</option>
+          </select>
+        </label>
+        <div class="queue-info" id="refresh-info"></div>
+      </section>
+
+      <section>
+        <h4>Аккаунт и Fever API</h4>
+        <p class="hint">Под этими логином и паролем вы входите в читалку; они же подходят внешним
+          приложениям (Reeder, Unread, Fiery Feeds и подобным) — те подключаются по протоколу Fever.
+          Новых пользователей заводит администратор в админке.</p>
+        <div class="fever-info" id="account-info"></div>
+        <div class="grid2">
+          <label class="row-line">Текущий пароль <input id="set-pass-current" type="password" autocomplete="current-password"></label>
+          <label class="row-line">Новый пароль <input id="set-pass" type="password" autocomplete="new-password" placeholder="не короче 4 символов"></label>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="save-credentials">Сменить пароль</button>
+          <button class="btn" id="logout-btn">Выйти из аккаунта</button>
+        </div>
+        <div class="fever-info" id="fever-info"></div>
+      </section>
+
+      <section>
+        <h4>Докачка полного текста</h4>
+        <p class="hint">Если лента отдаёт только анонс, читалка скачивает текст со страницы статьи
+          и хранит его, пока вы не прочитаете. Кнопка «Докачать» в статье делает это по требованию.</p>
+        <label class="row-line">Докачивать текст статей
+          <select id="set-fetch-full">
+            <option value="yes">автоматически</option>
+            <option value="no">только по кнопке</option>
+          </select>
+        </label>
+        <div class="queue-info" id="queue-info"></div>
+        <div class="btn-row">
+          <button class="btn" id="queue-start">Докачать сейчас</button>
+          <button class="btn" id="queue-clear">Очистить очередь</button>
+        </div>
+      </section>
+
+      <!-- Каналы Telegram: раздел скрыт до востребования (подключение через бота) -->
+      <section hidden>
+        <h4>Каналы Telegram</h4>
+        <p class="hint">Публичные каналы читаются через веб-превью t.me, настройка для них не нужна.
+          Токен бота добавляет второй способ: бот получает новые посты каналов, куда его добавили
+          администратором (например, ваших собственных).</p>
+        <label class="row-line">Токен бота <input id="set-tg-token" type="text" placeholder="123456:AA…" autocomplete="off"></label>
+        <div class="btn-row">
+          <button class="btn primary" id="save-tg">Проверить и сохранить</button>
+          <button class="btn" id="clear-tg">Убрать токен</button>
+        </div>
+        <div class="queue-info" id="tg-info"></div>
+      </section>
+
+      <section>
+        <h4>Администрирование</h4>
+        <p class="hint">Пользователи, пароли и ключи Fever заводятся в админке.</p>
+        <div class="btn-row" id="admin-row" hidden>
+          <a class="btn" href="/admin" target="_blank" rel="noopener">Открыть админку</a>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Фильтры лент -->
+<div class="modal" id="filters-modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Фильтры лент</h3>
+      <button class="btn" id="filters-close">Закрыть</button>
+    </div>
+    <div class="modal-body">
+      <p class="hint">Фильтр задаётся словом или фразой и действует только на свою ленту.
+        «Скрывать» убирает подходящие статьи из списка, «показывать только» оставляет лишь их.
+        Скрытые статьи не считаются прочитанными и вернутся, если фильтр удалить.</p>
+      <div id="filters-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Новая подписка -->
+<div class="modal" id="add-modal" hidden>
+  <div class="modal-box small">
+    <div class="modal-head">
+      <h3>Новая подписка</h3>
+      <button class="btn" id="add-close">Закрыть</button>
+    </div>
+    <div class="modal-body">
+      <p class="hint">Вставьте адрес сайта, страницы или канала Telegram — читалка проверит его
+        и покажет, какие подписки там есть. Можно указать просто сайт, например <code>habr.com</code>.</p>
+      <label class="row-line">Адрес <input id="add-input" type="text" placeholder="example.com или https://t.me/канал" autocomplete="off" spellcheck="false"></label>
+      <div class="btn-row"><button class="btn primary" id="add-check">Проверить</button></div>
+      <div class="queue-info" id="add-result"></div>
+      <div class="add-candidates" id="add-candidates"></div>
+      <div class="btn-row"><button class="btn primary" id="add-subscribe" disabled>Подписаться</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Вход -->
+<div class="modal" id="login-modal" hidden>
+  <div class="modal-box small">
+    <div class="modal-head"><h3>Вход в MAK RSS Reader</h3></div>
+    <div class="modal-body">
+      <label class="row-line">Логин <input id="login-user" type="text" autocomplete="username"></label>
+      <label class="row-line">Пароль <input id="login-pass" type="password" autocomplete="current-password"></label>
+      <label class="row-line check"><input type="checkbox" id="login-remember" checked> запомнить меня на 30 дней</label>
+      <div class="login-error" id="login-error"></div>
+      <div class="btn-row"><button class="btn primary" id="login-submit">Войти</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/app.js?v=67" type="module"></script>
+</body>
+</html>

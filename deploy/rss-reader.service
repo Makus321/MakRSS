@@ -1,0 +1,35 @@
+[Unit]
+Description=RSS/Atom reader (local web server)
+Documentation=file://__APP_DIR__/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=-/etc/rss-reader.env
+Environment=NODE_ENV=production
+ExecStart=__NODE__ __APP_DIR__/server.mjs
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rss-reader
+
+# Ограничения: сервису разрешена запись только в каталог данных.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+ReadWritePaths=__DATA_DIR__
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

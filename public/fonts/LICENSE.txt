@@ -1,0 +1,6 @@
+PT Sans Narrow (c) ParaType Ltd.
+Licensed under the SIL Open Font License, Version 1.1.
+https://scripts.sil.org/OFL
+Files: ptsansnarrow-400-cyrillic.woff2, ptsansnarrow-400-latin.woff2,
+       ptsansnarrow-700-cyrillic.woff2, ptsansnarrow-700-latin.woff2
+Fetched from Google Fonts (fonts.gstatic.com), subset: cyrillic + latin.

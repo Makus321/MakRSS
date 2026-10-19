@@ -1,0 +1,38 @@
+# Пример конфигурации nginx для читалки на VPS.
+# Положить в /etc/nginx/sites-available/rss-reader и включить:
+#   ln -s /etc/nginx/sites-available/rss-reader /etc/nginx/sites-enabled/
+#   nginx -t && systemctl reload nginx
+#
+# Пароль проверяет само приложение (учётные записи заводятся в админке /admin),
+# поэтому дополнительный auth_basic здесь не нужен. Если хотите закрыть сервер
+# ещё и на уровне nginx — раскомментируйте auth_basic ниже.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name rss.example.com;
+
+    # Для TLS используйте certbot: sudo certbot --nginx -d rss.example.com
+    # и он сам добавит listen 443 ssl и редирект.
+
+    client_max_body_size 16m;   # с запасом для импорта OPML
+    access_log /var/log/nginx/rss-reader.access.log;
+
+    # auth_basic "RSS reader";
+    # auth_basic_user_file /etc/nginx/.htpasswd;
+
+    location / {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Долгие запросы: сервер сам ходит в интернет за лентами и статьями.
+        proxy_connect_timeout 30s;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_buffering off;
+    }
+}
