@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MAK RSS Reader</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f97316'/><circle cx='10' cy='22' r='3' fill='white'/><path d='M7 14a11 11 0 0 1 11 11' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/><path d='M7 7a18 18 0 0 1 18 18' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="/style.css?v=44">
+<link rel="stylesheet" href="/style.css?v=45">
 <!-- Установка на домашний экран телефона (PWA) -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -391,13 +391,12 @@
       <button class="btn" id="add-close">Закрыть</button>
     </div>
     <div class="modal-body">
-      <p class="hint">Вставьте адрес сайта, страницы или канала Telegram — читалка проверит его
-        и покажет, какие подписки там есть. Можно указать просто сайт, например <code>habr.com</code>.</p>
-      <label class="row-line">Адрес <input id="add-input" type="text" placeholder="example.com или https://t.me/канал" autocomplete="off" spellcheck="false"></label>
-      <div class="btn-row"><button class="btn primary" id="add-check">Проверить</button></div>
+      <label class="row-line">Адрес или название
+        <input id="add-input" type="text" placeholder="example.com, https://t.me/канал или habr.com" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="btn-row"><button class="btn primary" id="add-check">Добавить</button></div>
       <div class="queue-info" id="add-result"></div>
       <div class="add-candidates" id="add-candidates"></div>
-      <div class="btn-row"><button class="btn primary" id="add-subscribe" disabled>Подписаться</button></div>
     </div>
   </div>
 </div>
@@ -417,6 +416,6 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
-<script src="/app.js?v=67" type="module"></script>
+<script src="/app.js?v=68" type="module"></script>
 </body>
 </html>

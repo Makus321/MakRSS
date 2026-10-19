@@ -1990,9 +1990,56 @@ function openAddDialog() {
   $('#add-subscribe').disabled = true;
   addCandidates = [];
   $('#add-modal').hidden = false;
+  searchSubscriptions();
   // На телефоне клавиатуру сразу не поднимаем: она закрывает половину экрана,
   // а на iOS из-за фокуса страница ещё и увеличивалась.
   if (!window.matchMedia('(pointer: coarse)').matches) setTimeout(() => $('#add-input').focus(), 50);
+}
+
+/**
+ * Живой поиск: пока человек печатает, показываем, какие подписки есть по этому
+ * адресу — как в других читалках. Первый найденный вариант сразу отмечен, так что
+ * достаточно нажать «Добавить».
+ */
+async function searchSubscriptions() {
+  const input = $('#add-input');
+  const url = input.value.trim();
+  const result = $('#add-result');
+  const list = $('#add-candidates');
+  if (!url) {
+    result.textContent = '';
+    list.innerHTML = '';
+    addCandidates = [];
+    return;
+  }
+  result.textContent = 'Ищу подписку…';
+  list.innerHTML = '';
+  addCandidates = [];
+  try {
+    const payload = await api('/api/discover', { url });
+    addCandidates = payload.candidates ?? [];
+    if (!payload.ok || !addCandidates.length) {
+      result.textContent = payload.error ?? 'Подписки не найдены';
+      return;
+    }
+    result.textContent = addCandidates.length === 1
+      ? 'Найдена подписка:'
+      : `Найдено ${addCandidates.length} ${plural(addCandidates.length, 'подписка', 'подписки', 'подписок')}:`;
+    const firstFree = addCandidates.findIndex((c) => !c.subscribed);
+    list.innerHTML = addCandidates.map((c, index) => {
+      const hints = [c.format, c.items ? `статей: ${c.items}` : '', c.subscribed ? 'уже подписаны' : (c.hint ?? '')]
+        .filter(Boolean).join(' · ');
+      const domain = (() => { try { return new URL(c.url).hostname; } catch { return ''; } })();
+      return `<div class="cand${c.subscribed ? ' subscribed' : ''}${index === firstFree ? ' active' : ''}"
+          data-cand="${index}" title="${esc(c.url)}">
+        <div class="cand-title">${esc(c.label || c.title)}</div>
+        ${hints ? `<div class="cand-hints">${esc(hints)}</div>` : ''}
+        <div class="cand-url">${esc(domain || c.url)}</div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    result.textContent = err.message;
+  }
 }
 
 async function checkAddress() {
@@ -2026,9 +2073,10 @@ async function checkAddress() {
 }
 
 async function subscribeSelected() {
-  const chosen = [...document.querySelectorAll('#add-candidates input:checked')]
-    .map((el) => addCandidates[Number(el.dataset.cand)])
-    .filter(Boolean);
+  const selected = document.querySelector('#add-candidates .cand.active');
+  const chosen = selected
+    ? [addCandidates[Number(selected.dataset.cand)]].filter(Boolean)
+    : [];
   if (!chosen.length) return;
   $('#add-subscribe').disabled = true;
   $('#add-result').textContent = 'Подписываюсь…';
@@ -2060,8 +2108,23 @@ async function subscribeSelected() {
 $('#new-feed').addEventListener('click', openAddDialog);
 $('#add-close').addEventListener('click', () => { $('#add-modal').hidden = true; });
 $('#add-modal').addEventListener('click', (event) => { if (event.target.id === 'add-modal') $('#add-modal').hidden = true; });
+let addTimer = null;
+$('#add-input').addEventListener('input', () => {
+  clearTimeout(addTimer);
+  addTimer = setTimeout(searchSubscriptions, 450);
+});
+
 $('#add-check').addEventListener('click', checkAddress);
-$('#add-subscribe').addEventListener('click', subscribeSelected);
+$('#add-candidates').addEventListener('click', async (event) => {
+  const row = event.target.closest('.cand');
+  if (!row) return;
+  const already = row.classList.contains('active');
+  for (const other of document.querySelectorAll('#add-candidates .cand')) other.classList.remove('active');
+  row.classList.add('active');
+  if (already) await subscribeSelected();     // повторный клик по выбранной — подписаться
+});
+
+$('#add-subscribe')?.addEventListener('click', subscribeSelected);
 $('#add-input').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); checkAddress(); } });
 
 $('#lines-select').addEventListener('change', async (event) => {

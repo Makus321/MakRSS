@@ -678,3 +678,12 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .nav-arrow { min-width: 34px; padding: 3px 8px; font-size: calc(15px * var(--ui-scale, 1)); line-height: 1.2; }
 #prev-item.nav-arrow { order: 90; margin-left: auto; }
 #next-item.nav-arrow { order: 91; }
+
+/* Список найденных подписок: строка = название, подсказки и адрес сайта. */
+.add-candidates .cand { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; cursor: pointer; }
+.add-candidates .cand:hover { border-color: var(--muted); }
+.add-candidates .cand.active { border-color: var(--accent); background: var(--accent-soft); }
+.add-candidates .cand.subscribed { opacity: .55; }
+.add-candidates .cand-title { font-weight: 600; }
+.add-candidates .cand-hints { color: var(--muted); font-size: calc(11px * var(--ui-scale, 1)); margin-top: 2px; }
+.add-candidates .cand-url { color: var(--muted); font-size: calc(11px * var(--ui-scale, 1)); margin-top: 2px; word-break: break-all; }
