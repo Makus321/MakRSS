@@ -2169,11 +2169,20 @@ async function subscribeSelected() {
     ...added.map((title) => `добавлено: ${esc(title)}`),
     ...failed.map((title) => `пропущено: ${esc(title)}`),
   ].join('<br>') || 'Ничего не добавлено';
-  $('#add-candidates').innerHTML = '';
-  addCandidates = [];
+  // Список не убираем: с одного сайта часто нужно подписаться на несколько лент.
+  // Перерисовываем его — добавленная станет «уже подписаны», а выбор перейдёт
+  // на следующий свободный вариант.
+  if (added.length) {
+    await searchSubscriptions();
+  } else {
+    $('#add-candidates').innerHTML = '';
+    addCandidates = [];
+  }
   const status = $('#add-status');
-  status.className = 'add-status';
-  status.textContent = added.length ? `Добавлено подписок: ${added.length}` : '';
+  if (status) {
+    status.className = 'add-status';
+    status.textContent = added.length ? `Добавлено подписок: ${added.length}` : '';
+  }
   toast(added.length ? `Подписок добавлено: ${added.length}` : 'Ничего не добавлено', !added.length);
 }
 
