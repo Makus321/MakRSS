@@ -736,10 +736,13 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   gap: 6px;
   margin: 10px 0;
 }
+.a-body .img-row, .comment-body .img-row { align-items: stretch; }
+/* Высота ряда — по самой высокой картинке: остальные под неё подрезаются,
+   поэтому ряд получается ровным, а не «лесенкой». */
 .a-body .img-row img, .comment-body .img-row img {
   width: 100%;
-  height: 100%;
-  max-height: 42vh;
+  height: auto;
+  max-height: 70vh;
   object-fit: cover;
   border-radius: 8px;
   margin: 0;
