@@ -1987,7 +1987,6 @@ function openAddDialog() {
   $('#add-input').value = '';
   $('#add-result').textContent = '';
   $('#add-candidates').innerHTML = '';
-  $('#add-subscribe').disabled = true;
   addCandidates = [];
   $('#add-modal').hidden = false;
   searchSubscriptions();
@@ -2048,7 +2047,6 @@ async function checkAddress() {
   if (!url) { result.textContent = 'Введите адрес сайта, страницы или канала'; return; }
   result.textContent = 'Проверяю адрес…';
   $('#add-candidates').innerHTML = '';
-  $('#add-subscribe').disabled = true;
   try {
     const payload = await api('/api/discover', { url });
     addCandidates = payload.candidates ?? [];
@@ -2066,7 +2064,6 @@ async function checkAddress() {
           <span class="cand-url">${esc(c.url)}</span>
         </span>
       </label>`).join('');
-    $('#add-subscribe').disabled = !addCandidates.some((c) => !c.subscribed);
   } catch (err) {
     result.textContent = err.message;
   }
@@ -2078,7 +2075,6 @@ async function subscribeSelected() {
     ? [addCandidates[Number(selected.dataset.cand)]].filter(Boolean)
     : [];
   if (!chosen.length) return;
-  $('#add-subscribe').disabled = true;
   $('#add-result').textContent = 'Подписываюсь…';
   const added = [];
   const failed = [];
@@ -2124,7 +2120,6 @@ $('#add-candidates').addEventListener('click', async (event) => {
   if (already) await subscribeSelected();     // повторный клик по выбранной — подписаться
 });
 
-$('#add-subscribe')?.addEventListener('click', subscribeSelected);
 $('#add-input').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); checkAddress(); } });
 
 $('#lines-select').addEventListener('change', async (event) => {
