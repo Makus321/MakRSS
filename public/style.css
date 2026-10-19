@@ -607,7 +607,13 @@ body.dragging .tree-tail { display: flex; }
   .a-actions { top: 6px; right: 6px; gap: 3px; }
   .a-actions button { width: 30px; height: 30px; font-size: calc(14px * var(--ui-scale, 1)); }
   .a-head { padding: 8px 44px 8px 10px; row-gap: 6px; }
-  .article.has-thumb .a-head::after { content: ""; display: block; clear: both; }
+  /* Карточку с картинкой на телефоне раскладываем обычным потоком: и заголовок,
+     и краткий текст обтекают картинку, а не уезжают во вторую колонку. */
+  .article.has-thumb { display: block; }
+  .article.has-thumb .a-excerpt { grid-column: auto; max-width: 100%; overflow-wrap: anywhere; }
+  /* Чистим обтекание в конце карточки, а не в конце шапки — иначе текст
+     начинался бы ниже картинки. */
+  .article.has-thumb::after { content: ""; display: block; clear: both; }
   .a-thumb { width: 92px; height: 68px; }
   /* На узком экране картинка обтекается текстом: длинный заголовок идёт под ней,
      а не сжимается в узкую колонку справа от картинки. */
