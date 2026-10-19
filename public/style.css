@@ -531,7 +531,12 @@ body.dragging .tree-tail { display: flex; }
 /* Шапка окна остаётся на месте при прокрутке: в настройках список длинный,
    и кнопка «Закрыть» раньше уезжала вверх вместе с содержимым. */
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line);
-  position: sticky; top: 0; z-index: 3; background: var(--panel); border-radius: 14px 14px 0 0; }
+  /* Фон шапки отличается от тела окна, иначе при прокрутке она сливается
+     с содержимым и «теряется». */
+  position: sticky; top: 0; z-index: 3;
+  background: var(--panel-2);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 6px 10px -8px rgba(0, 0, 0, .55); }
 .modal-head h3 { margin: 0; font-size: calc(16px * var(--ui-scale, 1)); }
 .modal-body { padding: 8px 16px 18px; }
 .modal-body section { border-bottom: 1px solid var(--line); padding: 12px 0; }
