@@ -415,7 +415,9 @@ select:focus-visible { outline: none; }
 .a-title { margin: 0 0 3px; font-size: calc(var(--font-article) * 0.95); line-height: calc(1.35 * var(--lh-scale, 1)); font-weight: 700; color: var(--article-text); }
 .a-title a { text-decoration: none; color: inherit; }
 .a-title a:hover { color: var(--accent); }
-.a-excerpt { color: var(--article-text); font-size: var(--font-excerpt); margin: 0; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.a-excerpt { color: var(--article-text); font-size: var(--font-excerpt); margin: 0; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
+  /* Тот же интервал, что у раскрытой статьи: иначе краткий и полный вид заметно расходятся. */
+  line-height: calc(1.65 * var(--lh-scale, 1)); }
 .article.expanded .a-excerpt { display: none; }
 .a-meta { font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .a-meta .src { color: var(--accent); }
