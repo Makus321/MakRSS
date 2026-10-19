@@ -2919,20 +2919,7 @@ function sanitize(html, baseUrl) {
       el.setAttribute('rel', 'noopener noreferrer nofollow');
     }
     if (el.tagName === 'IMG' || el.tagName === 'VIDEO') el.setAttribute('loading', 'lazy');
-    // Если наш прокси не смог отдать картинку, пробуем напрямую с сайта: иначе
-    // картинка «пропадает» после загрузки (заглушка была, а изображения нет).
-    if (el.tagName === 'IMG') {
-      const direct = /^\/api\/img\?u=/.test(el.getAttribute('src') ?? '')
-        ? decodeURIComponent(el.getAttribute('src').replace(/^\/api\/img\?u=/, ''))
-        : '';
-      if (direct) {
-        el.addEventListener('error', () => {
-          if (el.dataset.direct) return;
-          el.dataset.direct = '1';
-          el.setAttribute('src', direct);
-        });
-      }
-    }
+
   }
   for (const el of doomed) el.remove();
 
