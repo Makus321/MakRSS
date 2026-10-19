@@ -1625,8 +1625,14 @@ $('#list').addEventListener('scroll', (event) => {
   scheduleActiveArticle();
   // Дополнительная проверка после остановки: на телефоне последний кадр
   // прокрутки иногда не доходит, и статья оставалась непрочитанной.
+  // На телефоне нет курсора: пока идёт прокрутка кнопки полупрозрачные, а как
+  // только список остановился — проявляются полностью (см. .settled в стилях).
+  for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.remove('settled');
   clearTimeout(scrollSettleTimer);
-  scrollSettleTimer = setTimeout(() => { updateActiveArticle(); }, 260);
+  scrollSettleTimer = setTimeout(() => {
+    updateActiveArticle();
+    for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.add('settled');
+  }, 260);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {
     const total = visibleItems().length;
