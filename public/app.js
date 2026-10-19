@@ -2315,6 +2315,10 @@ function closeSettings() {
 }
 
 $('#settings-close').addEventListener('click', closeSettings);
+// Клик по любому месту шапки тоже закрывает: кнопка мелкая, а промахнуться
+// по ней на телефоне легко.
+$('#settings-modal .modal-head').addEventListener('click', closeSettings);
+$('#settings-close').addEventListener('pointerdown', (event) => { event.stopPropagation(); });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !$('#settings-modal').hidden) closeSettings();
 });
