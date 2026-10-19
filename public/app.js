@@ -2865,15 +2865,21 @@ function sanitize(html, baseUrl) {
         if (/^(https?:|mailto:|data:image\/)/i.test(abs) || abs.startsWith(`${location.origin}/api/media`)) {
           // Картинки по http:// на странице https браузер блокирует («смешанное
           // содержимое») — отдаём их через свой прокси. Ссылки не трогаем.
-          const picture = name !== 'href' && /^http:\/\//i.test(abs);
-          el.setAttribute(attr.name, picture ? `/api/img?u=${encodeURIComponent(abs)}` : abs);
+          // Картинки и видео всегда отдаём через свой прокси: он снимает проблему
+          // «смешанного содержимого», запрета хотлинков и чужого референта.
+          const isMedia = name !== 'href' && /^https?:\/\//i.test(abs);
+          const isVideo = el.tagName === 'VIDEO' || el.tagName === 'AUDIO' || el.tagName === 'SOURCE';
+          const proxied = isMedia
+            ? (isVideo ? `/api/video?u=${encodeURIComponent(abs)}` : `/api/img?u=${encodeURIComponent(abs)}`)
+            : abs;
+          el.setAttribute(attr.name, proxied);
         } else el.removeAttribute(attr.name);
       } else if (name === 'srcset') {
         const fixed = value.split(',').map((part) => {
           const [url, ...rest] = part.trim().split(/\s+/);
           const abs = resolve(url);
           if (!/^https?:/i.test(abs)) return '';
-          const src = /^http:\/\//i.test(abs) ? `/api/img?u=${encodeURIComponent(abs)}` : abs;
+          const src = /^https?:/i.test(abs) ? `/api/img?u=${encodeURIComponent(abs)}` : abs;
           return [src, ...rest].join(' ');
         }).filter(Boolean).join(', ');
         if (fixed) el.setAttribute('srcset', fixed); else el.removeAttribute('srcset');
