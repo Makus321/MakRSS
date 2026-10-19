@@ -3,6 +3,10 @@
 
 const $ = (sel) => document.querySelector(sel);
 const PREF_KEY = 'rss.prefs';
+// Раз в час читалка в фоне просит сервер докачать полные тексты и прогревает
+// кэш статей — чтобы при плохой связи они открывались из памяти.
+const WARM_INTERVAL_MS = 60 * 60 * 1000;
+const WARM_KEY = 'rss.warmedAt';
 const WIDTH_KEY = 'rss.widths';
 const COLLAPSE_KEY = 'rss.collapsed';
 
@@ -872,6 +876,30 @@ function holdImageSpace(root) {
   }
 }
 
+/** Просит сервер докачать тексты и складывает статьи в кэш service worker. */
+async function warmArticles(force = false) {
+  if (!navigator.onLine) return;
+  const last = Number(localStorage.getItem(WARM_KEY) ?? 0);
+  if (!force && Date.now() - last < WARM_INTERVAL_MS) return;
+  localStorage.setItem(WARM_KEY, String(Date.now()));
+  try {
+    await api('/api/queue', { action: 'start' });     // сервер качает полные тексты
+  } catch { /* сервер ответит позже */ }
+  const ids = visibleItems().slice(0, 30).map((item) => item.id);
+  if (!ids.length) return;
+  try {
+    const res = await fetch('/api/bodies', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (res.ok) await res.clone().json();
+  } catch { /* нет сети — попробуем в следующий раз */ }
+  try {
+    navigator.serviceWorker?.controller?.postMessage({ type: 'warm', urls: ['/api/data'] });
+  } catch { /* service worker ещё не готов */ }
+}
+
 function fillViewport() {
   if (state.filling) return;
   const listEl = $('#list');
@@ -953,6 +981,7 @@ function renderList() {
   setupReadObservers();
   requestCommentCounts();
   fillViewport();          // если карточек меньше экрана — догружаем сразу
+  warmArticles();          // раз в час прогреваем кэш статей
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
   updateActiveArticle();
 }

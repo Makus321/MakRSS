@@ -1,8 +1,29 @@
-// Service worker читалки: кэш оболочки, чтобы приложение открывалось без сети.
-// Стратегия — network-first: сначала свежий файл, а если сети нет — то, что уже
-// лежит в кэше. Данные и служебные адреса всегда идут с сервера, без кэша.
-const CACHE = 'rss-shell-v105';
-const SHELL = ['/', '/style.css', '/app.js', '/manifest.webmanifest'];
+// Service worker читалки.
+//
+// Задачи:
+//  1) оболочка (страница, стили, скрипт, шрифты, иконки) — из кэша сразу, чтобы
+//     приложение открывалось мгновенно и без сети;
+//  2) данные читалки (/api/data, /api/bodies) — «сразу из кэша, потом обновим»:
+//     при плохой связи список и тексты статей показываются из памяти;
+//  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
+//  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
+
+const CACHE = 'rss-shell-v106';
+const DATA_CACHE = 'rss-data-v106';
+const MEDIA_CACHE = 'rss-media-v106';
+
+const SHELL = [
+  '/',
+  '/index.html',
+  '/style.css',
+  '/app.js',
+  '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
+  '/fonts/ptsansnarrow-400-cyrillic.woff2',
+  '/fonts/ptsansnarrow-400-latin.woff2',
+];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -15,35 +36,102 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
+    const keep = new Set([CACHE, DATA_CACHE, MEDIA_CACHE]);
     const names = await caches.keys();
-    await Promise.all(names.filter((name) => name !== CACHE).map((name) => caches.delete(name)));
+    await Promise.all(names.filter((name) => !keep.has(name)).map((name) => caches.delete(name)));
     await self.clients.claim();
   })());
 });
+
+const isData = (path) => path === '/api/data' || path === '/api/bodies';
+const isMedia = (path) => path === '/api/img' || path === '/api/thumb' || path === '/api/video';
+const isStatic = (path) => /\.(css|js|png|svg|ico|webmanifest|woff2?|ttf)$/.test(path);
+
+/** Сразу отдаём из кэша, а свежее подтягиваем в фоне. */
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const fresh = await fetch(request);
+  if (fresh && fresh.ok) cache.put(request, fresh.clone()).catch(() => {});
+  return fresh;
+}
+
+/** Сразу из кэша (если есть), параллельно обновляем копию. */
+async function staleWhileRevalidate(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  const network = fetch(request)
+    .then((fresh) => {
+      if (fresh && fresh.ok) cache.put(request, fresh.clone()).catch(() => {});
+      return fresh;
+    })
+    .catch(() => null);
+  if (cached) {
+    network.catch(() => {});
+    return cached;
+  }
+  const fresh = await network;
+  if (fresh) return fresh;
+  throw new Error('нет сети и кэша');
+}
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  // Данные, Fever и админка — только с сервера.
-  if (/^\/(api|fever|admin)/.test(url.pathname)) return;
+
+  // Вход, админка, Fever и всё остальное «действия» — без кэша.
+  if (/^\/(fever|admin)/.test(url.pathname)) return;
+  if (/^\/api\//.test(url.pathname) && !isData(url.pathname) && !isMedia(url.pathname)) return;
+
+  if (isMedia(url.pathname)) {
+    event.respondWith(cacheFirst(request, MEDIA_CACHE).catch(() => Response.error()));
+    return;
+  }
+  if (isData(url.pathname)) {
+    event.respondWith(staleWhileRevalidate(request, DATA_CACHE).catch(() => new Response('{}', {
+      headers: { 'content-type': 'application/json' },
+    })));
+    return;
+  }
+
+  // Оболочка: файлы — из кэша, страницы — с обновлением в фоне.
   event.respondWith((async () => {
-    try {
-      const fresh = await fetch(request);
-      if (fresh && fresh.ok) {
-        const copy = fresh.clone();
-        caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
-      }
-      return fresh;
-    } catch {
-      const cached = await caches.match(request);
-      if (cached) return cached;
-      if (request.mode === 'navigate') {
-        const shell = await caches.match('/');
+    if (request.mode === 'navigate') {
+      try {
+        return await staleWhileRevalidate(request, CACHE);
+      } catch {
+        const shell = await caches.match('/index.html') ?? await caches.match('/');
         if (shell) return shell;
+        throw new Error('нет сети и кэша');
       }
-      throw new Error('нет сети и кэша');
+    }
+    if (isStatic(url.pathname)) {
+      try {
+        return await cacheFirst(request, CACHE);
+      } catch {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        throw new Error('нет сети и кэша');
+      }
+    }
+    return fetch(request);
+  })());
+});
+
+// Клиент может попросить «прогреть» статьи на будущее (раз в час).
+self.addEventListener('message', (event) => {
+  const data = event.data ?? {};
+  if (data.type !== 'warm' || !Array.isArray(data.urls)) return;
+  event.waitUntil((async () => {
+    const cache = await caches.open(DATA_CACHE);
+    for (const url of data.urls.slice(0, 30)) {
+      try {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (res.ok) await cache.put(url, res.clone());
+      } catch { /* нет сети — попробуем в следующий раз */ }
     }
   })());
 });
