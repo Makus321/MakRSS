@@ -94,6 +94,9 @@ const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-
 // Версия разборщика: когда он меняется, ленты перечитываются заново, даже если
 // сайт отвечает «не изменилось» — иначе старые записи остаются без новых полей.
 const PARSER_VERSION = 8;
+// Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
+// видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
+const BODY_VERSION = 2;
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -675,7 +678,13 @@ async function fetchFullText(feedId, itemId) {
   const feed = feedById(feedId);
   const target = feed ? (db.items[feedId] ?? []).find((i) => i.id === itemId) : null;
   if (!feed || !target) return { ok: false, error: 'статья не найдена' };
-  const body = (await store.body(feedId, itemId)) ?? {};
+  let body = (await store.body(feedId, itemId)) ?? {};
+  // Текст, разобранный старой версией, считаем отсутствующим — он скачается заново.
+  if (body.fullHtml && Number(body.bodyVersion ?? 1) < BODY_VERSION) {
+    body = {};
+    // статья считалась «текст есть» — снимаем метку, иначе клиент не попросит заново
+    if (target.hasFull) { target.hasFull = false; store.saveStateSoon(); }
+  }
   if (body.fullHtml) {
     // Текст уже лежит в хранилище — помечаем статью, чтобы не ставить её в очередь снова.
     if (!target.hasFull) { target.hasFull = true; store.saveStateSoon(); }
@@ -698,6 +707,7 @@ async function fetchFullText(feedId, itemId) {
       fullHtml: article.html,
       fullFetchedAt: new Date().toISOString(),
       fullSource: target.link,
+      bodyVersion: BODY_VERSION,        // чтобы старые тексты перекачались после правок разбора
     });
     // Сначала гарантированно записываем текст на диск и только потом помечаем статью скачанной.
     await store.flushFeed(feedId);
