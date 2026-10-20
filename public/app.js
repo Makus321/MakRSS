@@ -190,12 +190,19 @@ async function api(path, body, options = {}) {
 }
 
 /** Принять новое состояние и запомнить его ревизию (для дешёвых опросов). */
+/** Годится ли ответ в состояние: в нём обязательно должен быть массив статей. */
+const looksLikeData = (data) => Boolean(data) && Array.isArray(data.items) && Array.isArray(data.feeds);
+
 const rememberData = (data) => {
+  if (!looksLikeData(data)) return false;         // ответ без данных (нет сети, кэш) — не трогаем состояние
+  // Отметки о прочтении, сделанные без сети, важнее того, что пришло с сервера.
+  applyPendingReads(data.items);
   state.data = data;
   state.revision = data?.revision ?? state.revision;
+  return true;
 };
 
-const applyPayload = (payload) => { if (payload?.data) rememberData(payload.data); render(); };
+const applyPayload = (payload) => { if (payload?.data && rememberData(payload.data)) render(); };
 
 // -------------------------------------------------------------------- время
 
@@ -1300,8 +1307,8 @@ async function fetchFull(id, silent = false) {
   renderList();
   try {
     const res = await api('/api/fetch-full', { id });
-    if (res.data) state.data = res.data;
-    const fresh = state.data.items.find((i) => i.id === id);
+    if (res.data) rememberData(res.data);
+    const fresh = (state.data.items ?? []).find((i) => i.id === id);
     if (fresh) fresh.hasFull = Boolean(res.item?.fullHtml);
     state.bodies.set(id, { content: res.item?.content ?? '', fullHtml: res.item?.fullHtml ?? '', tried: true, loaded: true });
     renderList();
@@ -1405,20 +1412,65 @@ function scrollArticleToTop(el) {
 
 // ----------------------------------------------------------------- действия
 
-async function markRead(ids, read, { silent = false } = {}) {
+// Отметки о прочтении при плохой связи: сначала применяем локально и запоминаем
+// в очереди, потом отправляем. Нет сети — отправим при первой возможности.
+const PENDING_READ_KEY = 'rss.pendingRead';
+const pendingReads = new Map();
+
+function loadPendingReads() {
   try {
-    const payload = await api('/api/read', { ids, read });
-    if (payload.data) {
-      for (const item of state.data.items) if (ids.includes(item.id)) item.read = read;
-      rememberData(payload.data);
-    }
-    if (silent) {
-      renderSidebar();
-      renderToolbar();
-      // Строку обновляем точечно, чтобы не перерисовывать весь список при прокрутке.
-      for (const id of ids) updateRowReadMark(id, read);
-    } else render();
-  } catch (err) { toast(err.message, true); }
+    const saved = JSON.parse(localStorage.getItem(PENDING_READ_KEY) ?? '[]');
+    for (const [id, read] of saved) pendingReads.set(id, Boolean(read));
+  } catch { /* по умолчанию пусто */ }
+}
+
+function savePendingReads() {
+  try { localStorage.setItem(PENDING_READ_KEY, JSON.stringify([...pendingReads])); } catch { /* не критично */ }
+}
+
+/** Накладывает неотправленные отметки на статьи, пришедшие с сервера. */
+function applyPendingReads(items) {
+  if (!pendingReads.size) return;
+  for (const item of items) {
+    if (pendingReads.has(item.id)) item.read = pendingReads.get(item.id);
+  }
+}
+
+/** Отправляет накопленные отметки. Без сети просто попробуем позже. */
+async function flushPendingReads() {
+  if (!pendingReads.size || !navigator.onLine) return;
+  const byValue = new Map([[true, []], [false, []]]);
+  for (const [id, read] of pendingReads) byValue.get(read).push(id);
+  for (const [read, ids] of byValue) {
+    if (!ids.length) continue;
+    try {
+      const payload = await api('/api/read', { ids, read });
+      if (payload?.ok === false) continue;
+      for (const id of ids) pendingReads.delete(id);
+      savePendingReads();
+      if (payload?.data) rememberData(payload.data);
+    } catch { /* нет сети — повторим позже */ }
+  }
+}
+
+loadPendingReads();
+window.addEventListener('online', () => { flushPendingReads(); });
+
+async function markRead(ids, read, { silent = false } = {}) {
+  if (!ids.length) return;
+  // Сразу отмечаем локально и запоминаем в очереди: при плохой связи это главное —
+  // интерфейс не должен ждать сервер и не должен «терять» отметку.
+  const items = state.data.items ?? [];
+  for (const item of items) if (ids.includes(item.id)) item.read = read;
+  for (const id of ids) pendingReads.set(id, read);
+  savePendingReads();
+  if (silent) {
+    renderSidebar();
+    renderToolbar();
+    // Строку обновляем точечно, чтобы не перерисовывать весь список при прокрутке.
+    for (const id of ids) updateRowReadMark(id, read);
+  } else render();
+  await flushPendingReads();
 }
 
 /** Точечно показывает/снимает отметку «прочитано» у строки списка. */
@@ -2654,7 +2706,8 @@ async function loadData({ poll = false } = {}) {
     const payload = await api(`/api/data${query}`);
     if (payload.unchanged) {
       // Ничего не изменилось: обновляем только счётчики и статус докачки.
-      state.data.feeds = payload.feeds;
+      if (!Array.isArray(state.data.items)) return;     // состояние ещё не загружено
+      if (Array.isArray(payload.feeds)) state.data.feeds = payload.feeds;
       state.data.counts = payload.counts;
       state.data.fetching = payload.fetching;
       state.data.refreshing = payload.refreshing;
@@ -2662,9 +2715,9 @@ async function loadData({ poll = false } = {}) {
       renderToolbar();
       return;
     }
-    state.data = payload;
-    state.revision = payload.revision ?? 0;
+    if (!rememberData(payload)) return;         // ответ без данных не применяем
     render();
+    flushPendingReads();                        // заодно отправим отложенные отметки
   } catch (err) {
     if (state.session.authenticated) toast(err.message, true);
   }

@@ -8,9 +8,9 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v108';
-const DATA_CACHE = 'rss-data-v108';
-const MEDIA_CACHE = 'rss-media-v108';
+const CACHE = 'rss-shell-v109';
+const DATA_CACHE = 'rss-data-v109';
+const MEDIA_CACHE = 'rss-media-v109';
 
 const SHELL = [
   '/',
@@ -91,9 +91,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (isData(url.pathname)) {
-    event.respondWith(staleWhileRevalidate(request, DATA_CACHE).catch(() => new Response('{}', {
-      headers: { 'content-type': 'application/json' },
-    })));
+    // Если ни кэша, ни сети — отдаём ошибку сети, а не пустой JSON: иначе клиент
+    // принимал «{}» за настоящие данные и падал на state.data.items.
+    event.respondWith(staleWhileRevalidate(request, DATA_CACHE).catch(() => Response.error()));
     return;
   }
 
