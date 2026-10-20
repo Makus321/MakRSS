@@ -910,6 +910,16 @@ state.filling = false;
  * Пока картинка грузится, держим под неё место заглушкой — иначе текст прыгает,
  * когда изображения догружаются. Как только картинка пришла, заглушка снимается.
  */
+/**
+ * Широкая картинка (по пропорции кадра) должна занимать всю ширину текста, как на
+ * сайте, а не половину ряда. Такие ряды ставим в столбик.
+ */
+function markWideRow(row, images) {
+  const wide = images.some((img) => img.naturalWidth && img.naturalHeight
+    && img.naturalWidth / img.naturalHeight >= 1.5);
+  row.classList.toggle('wide', wide);
+}
+
 function holdImageSpace(root) {
   for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
     if (img.dataset.hold === '1' || img.complete) continue;
@@ -922,7 +932,11 @@ function holdImageSpace(root) {
     const images = [...row.querySelectorAll('img')];
     if (!images.length) continue;
     const done = () => {
-      if (images.every((img) => img.complete)) { row.classList.add('ready'); row.classList.remove('waiting'); }
+      if (images.every((img) => img.complete)) {
+      row.classList.add('ready');
+      row.classList.remove('waiting');
+      markWideRow(row, images);
+    }
     };
     if (images.every((img) => img.complete)) row.classList.add('ready');
     else {

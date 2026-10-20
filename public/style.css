@@ -834,3 +834,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
    остаётся пустое место. */
 .a-body .img-row > *:only-child, .comment-body .img-row > *:only-child { flex-basis: 100%; }
 .a-body .img-row img, .comment-body .img-row img { width: 100%; }
+
+/* Ряд, в котором есть широкий кадр («во всю ширину текста» на сайте): ставим
+   картинки в столбик, каждую — на всю ширину колонки и по центру. */
+.a-body .img-row.wide, .comment-body .img-row.wide { flex-direction: column; align-items: center; }
+.a-body .img-row.wide > *, .comment-body .img-row.wide > * { flex-basis: auto; width: 100%; }
+.a-body .img-row.wide img, .comment-body .img-row.wide img { width: auto; max-width: 100%; margin: 0 auto; }
