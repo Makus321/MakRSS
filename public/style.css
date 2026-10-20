@@ -323,7 +323,15 @@ body.dragging .drop-hint.over { border-color: var(--accent); color: var(--accent
 .filter-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; padding: 6px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; font-size: calc(11.5px * var(--ui-scale, 1)); }
 .filter-row .note { color: var(--muted); }
 /* Полоска «пришли новые статьи»: в список их не добавляем, пока вы здесь. */
-.new-row { background: var(--accent-soft); border-color: var(--accent); }
+/* «Появились новые статьи» — плавающая плашка сверху. Раньше это была строка в
+   шапке: во время чтения она появлялась и сдвигала весь список вниз. */
+.new-row {
+  position: fixed; z-index: 45; top: 10px; left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: calc(100vw - 24px); margin: 0;
+  background: var(--accent-soft); border-color: var(--accent);
+  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, .65);
+}
+.new-row .btn { min-height: 30px; }
 .new-row .note { color: var(--text); }
 /* Пост с видео: кнопка запуска и сам плеер. */
 .a-video { display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; margin: 12px 0 4px; }
@@ -473,7 +481,10 @@ select:focus-visible { outline: none; }
   border-radius: 8px; object-fit: contain;
 }
 /* Картинка, стоящая в абзаце одна, — по центру колонки. */
-.a-body p > img:only-child, .a-body figure img { display: block; margin: 12px auto; }
+/* Одиночная картинка — по центру колонки, в каком бы контейнере она ни лежала
+   (p, div, figure, ссылка): раньше часть кадров прилипала к левому краю. */
+.a-body img, .comment-body img { display: block; margin: 12px auto; }
+.a-body .img-row img, .comment-body .img-row img { margin: 0; }
 /* У <figure> браузер по умолчанию отступы по 40px с боков: из-за них картинки и
    подписи в статьях (например mobile-review) выглядели уже текста, и чем больше
    в статье картинок, тем «уже» казалась статья. */
