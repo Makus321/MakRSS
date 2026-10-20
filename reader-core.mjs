@@ -2402,6 +2402,24 @@ export async function init(options = {}) {
   await cleanupStoredBodies();
   await migrateTelegramTitles();
 
+  // Когда меняется разбор страницы, сохранённые тексты надо перекачать. Снимаем
+  // отметку «текст есть» у всех статей, чтобы очередь докачки и открытие статьи
+  // подтянули их заново (иначе ждали бы FULLTEXT_RETRY_DAYS).
+  if (Number(db.bodySweepVersion ?? 0) < BODY_VERSION) {
+    let marked = 0;
+    for (const feed of db.feeds) {
+      for (const item of db.items[feed.id] ?? []) {
+        if (!item.hasFull) continue;
+        item.hasFull = false;
+        item.fullTriedAt = null;
+        marked += 1;
+      }
+    }
+    db.bodySweepVersion = BODY_VERSION;
+    store.saveStateSoon();
+    if (marked) log(`тексты статей будут перекачаны новой версией разбора: ${marked}`);
+  }
+
   // Разовая (и заодно при каждом старте) чистка: статьи, попавшие под фильтры,
   // раньше оставались в базе и были видны через Fever.
   let filteredOut = 0;
