@@ -797,3 +797,16 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   }
   .a-head { padding-right: 54px; }
 }
+
+/* Сенсорные экраны (телефоны, планшеты, раскладные): кнопки крупные, карточка
+   краткой статьи не ниже столбика кнопок, тема живёт в меню «⋯». */
+@media (pointer: coarse) {
+  #theme-toggle { display: none; }
+  .a-actions { gap: 6px; }
+  .a-actions button, .a-actions a.icon-btn {
+    width: 40px; height: 36px; border-radius: 9px;
+    font-size: calc(17px * var(--ui-scale, 1));
+  }
+  .article.compact { min-height: 132px; }
+  .a-head { padding-right: 54px; }
+}

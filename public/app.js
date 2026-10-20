@@ -158,6 +158,11 @@ function setFontSelect(select, value) {
 const FONT_VARIANTS = new Set(['system', 'condensed', 'book', 'mono', 'cursive', 'tight', 'airy', 'display']);
 const fontVariant = (value) => (FONT_VARIANTS.has(value) ? value : 'system');
 
+/** Сенсорный экран (телефон, планшет, раскладной) или узкое окно. */
+function isTouchDevice() {
+  return window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(max-width: 560px)').matches;
+}
+
 // Выбор размера шрифта на телефоне применяется на ступень крупнее.
 const MOBILE_FONT_STEP = {
   // дерево подписок (12 / 13 / 16.5 / 20)
@@ -178,7 +183,9 @@ function applyVisualPrefs() {
   document.documentElement.dataset.line = state.prefs.lineHeight || 'normal';
   // На телефоне тот же выбор означает шрифт на ступень крупнее: на узком экране
   // обычные размеры читаются заметно мельче, чем на мониторе.
-  const mobile = window.matchMedia('(max-width: 560px)').matches;
+  // «Телефон» — это сенсорный экран, а не узкое окно: у раскладных телефонов
+  // в разложенном виде ширина большая, но шрифты должны остаться крупными.
+  const mobile = isTouchDevice();
   const bigger = (value, fallback) => {
     const size = fontPx(value, fallback);
     if (!mobile) return size;
@@ -199,7 +206,7 @@ function applyVisualPrefs() {
 // Поворот телефона или изменение ширины окна меняет ступень — пересчитываем.
 let mobileQuery = null;
 function watchMobileFonts() {
-  mobileQuery = window.matchMedia('(max-width: 560px)');
+  mobileQuery = window.matchMedia('(pointer: coarse), (max-width: 560px)');
   const onChange = () => applyVisualPrefs();
   if (mobileQuery.addEventListener) mobileQuery.addEventListener('change', onChange);
   else if (mobileQuery.addListener) mobileQuery.addListener(onChange);
