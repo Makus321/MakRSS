@@ -352,7 +352,7 @@ function itemsOfView() {
   return state.data.items.filter((item) => {
     if (state.view.type === 'feed' && item.feedId !== state.view.id) return false;
     if (state.view.type === 'folder' && feedById(item.feedId)?.folderId !== state.view.id) return false;
-    if (state.view.type === 'starred' && !item.starred) return false;
+    if (state.view.type === 'starred' && !item.starred && !pendingUnstar.has(item.id)) return false;
     if (!passesFeedFilters(item)) return false;          // фильтры, сохранённые для ленты
     if (q && !searchHaystack(item).includes(q)) return false;
     return true;
@@ -555,7 +555,7 @@ function pendingNewCount() {
     if (snapshot.has(item.id)) return false;
     if (state.view.type === 'feed' && item.feedId !== state.view.id) return false;
     if (state.view.type === 'folder' && feedById(item.feedId)?.folderId !== state.view.id) return false;
-    if (state.view.type === 'starred' && !item.starred) return false;
+    if (state.view.type === 'starred' && !item.starred && !pendingUnstar.has(item.id)) return false;
     if (!passesFeedFilters(item)) return false;
     if (q && !searchHaystack(item).includes(q)) return false;
     if (onlyUnread && item.read) return false;
@@ -747,6 +747,7 @@ function switchView(view) {
   state.collapsedItems.clear();
   state.selectedId = null;
   manualRead.clear();                   // в другой ленте ручные отметки больше не приоритет
+  pendingUnstar.clear();                // и снятые в избранном карточки больше не держим
   state.framedIds.clear();              // в новом разделе рамка ещё ни на чём не была
   resetSnapshot();                      // в новой ленте список собирается заново
   openTree(false);                      // на телефоне панель подписок закрываем
@@ -1256,6 +1257,13 @@ function keepManualUnread(id) {
  */
 const manualRead = new Map();
 
+/**
+ * Статьи, у которых в «Избранном» сняли звезду. Остаются в списке до перехода
+ * в другой раздел: нажатие могло быть случайным, и карточка не должна исчезать
+ * из-под пальца при любой перерисовке.
+ */
+const pendingUnstar = new Set();
+
 /** Автоматике можно трогать эту статью? */
 function autoReadAllowed(id) {
   return !manualRead.has(id);
@@ -1576,6 +1584,7 @@ async function flushPendingReads() {
       for (const id of ids) pendingReads.delete(id);
       savePendingReads();
       if (payload?.data) rememberData(payload.data);
+    if (next) pendingUnstar.delete(id);
     } catch { /* нет сети — повторим позже */ }
   }
 }
@@ -1693,6 +1702,7 @@ async function toggleStar(id, event) {
     // при переходе в другую ленту или после перезагрузки страницы.
     if (state.view.type === 'starred' && !next) {
       item.starred = false;
+      pendingUnstar.add(id);
       const row = document.querySelector(`.article[data-item="${id}"]`);
       const button = row?.querySelector('[data-star]');
       if (button) {
