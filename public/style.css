@@ -826,4 +826,13 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
    картинки пришли (иначе справа оставался пустой бежевый блок). */
 .a-body .img-row > *:empty, .comment-body .img-row > *:empty { display: none; }
 .a-body .img-row.ready, .comment-body .img-row.ready { min-height: 0; background: none; }
-.a-body .img-row, .comment-body .img-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.a-body .img-row, .comment-body .img-row {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch;
+}
+.a-body .img-row > *, .comment-body .img-row > * {
+  flex: 1 1 min(100%, 220px); min-width: 0; margin: 0;
+}
+/* Одна картинка в ряду — на всю ширину: иначе она жмётся влево, а справа
+   остаётся пустое место. */
+.a-body .img-row > *:only-child, .comment-body .img-row > *:only-child { flex-basis: 100%; }
+.a-body .img-row img, .comment-body .img-row img { width: 100%; }

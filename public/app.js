@@ -1050,6 +1050,7 @@ function renderList() {
   ignoreScrollUntil = Date.now() + 700;
   positionArticleActions();
   scrollBaseline = listEl.scrollTop;
+  if (state.manualUnread) state.manualUnread.lastTop = listEl.scrollTop;
   // Вход в ленту/раздел: рамка — на верхней статье, а не на той, что попала под линию чтения.
   if (reset) pinActive(listEl.querySelector('.article[data-item]')?.dataset.item ?? null);
   ensureBodiesNeeded();
@@ -1231,15 +1232,17 @@ const markedRecently = new Map();   // id → время последней по
  * трогают её, пока список не сдвинули с того места, где её отметили.
  */
 function rememberManualUnread(id) {
-  state.manualUnread = { id, scrollTop: $('#list')?.scrollTop ?? 0 };
+  state.manualUnread = { id, moved: 0, lastTop: $('#list')?.scrollTop ?? 0 };
 }
 
 /** Эту статью сейчас нельзя отмечать прочитанной автоматически? */
 function keepManualUnread(id) {
   const manual = state.manualUnread;
   if (!manual || manual.id !== id) return false;
-  const scrollTop = $('#list')?.scrollTop ?? 0;
-  if (Math.abs(scrollTop - manual.scrollTop) > 120) { state.manualUnread = null; return false; }
+  // Защита снимается, только когда человек реально пролистал дальше: считаем
+  // пройденный путь по событиям прокрутки, а не сравниваем позиции — перерисовка
+  // списка тоже меняет scrollTop, и раньше защита отключалась сразу.
+  if (manual.moved > 220) { state.manualUnread = null; return false; }
   return true;
 }
 
@@ -1852,6 +1855,11 @@ $('#list').addEventListener('click', async (event) => {
 $('#list').addEventListener('scroll', (event) => {
   const el = event.target;
   beginScrollWork();                    // фоновые задачи ждут конца прокрутки
+  if (state.manualUnread) {
+    const step = Math.abs(el.scrollTop - (state.manualUnread.lastTop ?? el.scrollTop));
+    state.manualUnread.moved += step;
+    state.manualUnread.lastTop = el.scrollTop;
+  }
   // Сначала отметка (она смотрит на рамку до этой прокрутки), потом пересчёт рамки.
   scheduleScrollReadCheck();
   scheduleActiveArticle();
