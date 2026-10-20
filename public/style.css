@@ -315,7 +315,7 @@ body.dragging .drop-hint.over { border-color: var(--accent); color: var(--accent
 
 /* ------------------------------------------------------------------ список */
 .pane-head { padding: 10px 14px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
-.head-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.head-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; position: relative; }
 .head-row h2 { margin: 0; font-size: calc(15px * var(--ui-scale, 1)); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub { font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); margin-top: 2px; }
 .head-tools { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
@@ -875,3 +875,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   #tune-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; }
   #theme-toggle { display: none; }
 }
+
+/* Панель меню «⋯» привязана к шапке на любой ширине экрана. */
+.head-row { position: relative; }
+.head-menu { z-index: 60; }
