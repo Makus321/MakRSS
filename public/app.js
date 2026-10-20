@@ -152,7 +152,17 @@ const FONT_VARIANTS = new Set(['system', 'condensed', 'book', 'mono', 'cursive',
 const fontVariant = (value) => (FONT_VARIANTS.has(value) ? value : 'system');
 
 // Выбор размера шрифта на телефоне применяется на ступень крупнее.
-const MOBILE_FONT_STEP = { '13px': '14.5px', '14.5px': '18px', '18px': '22px', '22px': '26px' };
+const MOBILE_FONT_STEP = {
+  // дерево подписок (12 / 13 / 16.5 / 20)
+  '12px': '14px',
+  '13px': '14.5px',
+  '16.5px': '20px',
+  '20px': '24px',
+  // текст статьи и краткий вид (13 / 14.5 / 18 / 22)
+  '14.5px': '18px',
+  '18px': '22px',
+  '22px': '26px',
+};
 
 function applyVisualPrefs() {
   const root = document.documentElement;
