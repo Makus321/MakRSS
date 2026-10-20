@@ -8,9 +8,9 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v130';
-const DATA_CACHE = 'rss-data-v130';
-const MEDIA_CACHE = 'rss-media-v130';
+const CACHE = 'rss-shell-v131';
+const DATA_CACHE = 'rss-data-v131';
+const MEDIA_CACHE = 'rss-media-v131';
 
 const SHELL = [
   '/',
