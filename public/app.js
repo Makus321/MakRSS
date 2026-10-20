@@ -914,6 +914,13 @@ state.filling = false;
  * Широкая картинка (по пропорции кадра) должна занимать всю ширину текста, как на
  * сайте, а не половину ряда. Такие ряды ставим в столбик.
  */
+/** Пустые обёртки в ряду (<figure> без картинки) — лишняя ячейка, убираем. */
+function dropEmptyRowCells(row) {
+  for (const cell of [...row.children]) {
+    if (!cell.querySelector('img, video')) cell.remove();
+  }
+}
+
 function markWideRow(row, images) {
   const wide = images.some((img) => img.naturalWidth && img.naturalHeight
     && img.naturalWidth / img.naturalHeight >= 1.5);
@@ -935,6 +942,7 @@ function holdImageSpace(root) {
       if (images.every((img) => img.complete)) {
       row.classList.add('ready');
       row.classList.remove('waiting');
+      dropEmptyRowCells(row);
       markWideRow(row, images);
     }
     };

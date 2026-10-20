@@ -840,3 +840,8 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .a-body .img-row.wide, .comment-body .img-row.wide { flex-direction: column; align-items: center; }
 .a-body .img-row.wide > *, .comment-body .img-row.wide > * { flex-basis: auto; width: 100%; }
 .a-body .img-row.wide img, .comment-body .img-row.wide img { width: auto; max-width: 100%; margin: 0 auto; }
+
+/* Обёртка без картинки внутри ряда не должна занимать ячейку: из-за неё
+   одиночная картинка уезжала вправо, а первая ячейка пустовала. */
+.a-body .img-row > *:not(:has(img, video)),
+.comment-body .img-row > *:not(:has(img, video)) { display: none; }
