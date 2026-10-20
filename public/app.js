@@ -3038,6 +3038,20 @@ function setupMobile() {
     if (event.target.closest('#menu-refresh')) { closeHeadMenu(); refreshFeeds(state.view.type === 'feed' ? state.view.id : null); return; }
     if (event.target.closest('#menu-settings')) { closeHeadMenu(); openSettings(); }
   });
+  // Жёсткое обновление: сносим кэши и service worker, чтобы приложение
+  // гарантированно загрузило свежую версию (полезно, если оболочка «залипла»).
+  $('#menu-update')?.addEventListener('click', async () => {
+    closeHeadMenu();
+    toast('Обновляю приложение…');
+    try {
+      for (const name of await caches.keys()) await caches.delete(name);
+      const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+      for (const registration of registrations) await registration.unregister();
+    } catch { /* не критично */ }
+    sessionStorage.removeItem('rss.reloaded');
+    location.reload();
+  });
+
   $('#menu-view-mode')?.addEventListener('change', (event) => {
     setViewMode(event.target.value);
   });
