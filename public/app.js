@@ -85,6 +85,13 @@ function applyPalette() {
   document.documentElement.dataset.bg = state.prefs.background === 'theme' ? 'theme' : 'palette';
 }
 
+/** Явный выбор темы: светлая, тёмная или «как в системе». */
+function setThemeChoice(choice) {
+  state.prefs.theme = choice === 'auto' ? 'auto' : choice;
+  savePrefs();
+  applyTheme();
+}
+
 function cycleTheme() {
   const order = ['dark', 'light', 'auto'];
   state.prefs.theme = order[(order.indexOf(state.prefs.theme) + 1) % order.length];
@@ -2816,8 +2823,45 @@ function setupMobile() {
   $('#tree-backdrop').addEventListener('click', () => openTree(false));
   // На телефоне вторая половина шапки (режим, строки, порядок, ширина, фильтры)
   // скрыта за кнопкой «⋯»: иначе она занимает пол-экрана.
-  $('#tune-btn').addEventListener('click', () => {
-    document.body.classList.toggle('tools-open');
+  // Меню «⋯»: тема, вид статей, обновление и настройки — вместо россыпи в шапке.
+  const headMenu = $('#head-menu');
+  const closeHeadMenu = () => { headMenu.hidden = true; };
+  const syncHeadMenu = () => {
+    const mode = state.view.type === 'feed' ? feedMode(state.view.id) : (state.settings.defaultView ?? 'compact-thumb');
+    const select = $('#menu-view-mode');
+    if (select) select.value = mode;
+    const chosen = state.prefs.theme === 'auto' ? 'auto' : state.prefs.theme;
+    for (const btn of headMenu.querySelectorAll('[data-theme-set]')) {
+      btn.classList.toggle('on', btn.dataset.themeSet === chosen);
+    }
+  };
+
+  $('#tune-btn').addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = headMenu.hidden;
+    headMenu.hidden = !open;
+    if (open) syncHeadMenu();
+  });
+  headMenu.addEventListener('click', (event) => {
+    const themeBtn = event.target.closest('[data-theme-set]');
+    if (themeBtn) {
+      setThemeChoice(themeBtn.dataset.themeSet);
+      syncHeadMenu();
+      return;
+    }
+    if (event.target.closest('#menu-refresh')) { closeHeadMenu(); refreshFeeds(state.view.type === 'feed' ? state.view.id : null); return; }
+    if (event.target.closest('#menu-settings')) { closeHeadMenu(); openSettings(); }
+  });
+  $('#menu-view-mode')?.addEventListener('change', (event) => {
+    setViewMode(event.target.value);
+  });
+  document.addEventListener('click', (event) => {
+    if (headMenu.hidden) return;
+    if (event.target.closest('#head-menu') || event.target.closest('#tune-btn')) return;
+    closeHeadMenu();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !headMenu.hidden) closeHeadMenu();
   });
 
   // Свайпы: вправо с левой половины — открыть подписки, влево по открытой панели —

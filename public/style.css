@@ -762,3 +762,38 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   background: var(--panel-2);
   border-radius: 8px;
 }
+
+/* Меню «⋯»: аккуратная панель вместо россыпи кнопок в шапке. */
+.head-menu {
+  position: absolute; right: 12px; top: calc(100% + 6px); z-index: 40;
+  width: min(280px, calc(100vw - 24px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, .55);
+  padding: 10px 12px 12px;
+}
+.head-menu[hidden] { display: none; }
+.head-menu-sec {
+  font-size: calc(10.5px * var(--ui-scale, 1)); text-transform: uppercase;
+  letter-spacing: .07em; color: var(--muted); margin: 8px 0 6px;
+}
+.head-menu-sec:first-child { margin-top: 0; }
+.head-menu-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.head-menu-row .btn { flex: 1 1 auto; min-height: 34px; }
+.head-menu .btn.on { border-color: var(--accent); color: var(--accent); }
+.menu-select {
+  width: 100%; min-height: 36px; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px;
+  font-size: calc(13px * var(--ui-scale, 1));
+}
+@media (max-width: 560px) {
+  .head-row { position: relative; }
+  /* Тема переехала в меню «⋯» — в строке она больше не нужна. */
+  #theme-toggle { display: none; }
+  /* Кнопки действий в статье крупнее: пальцем в мелкие не попасть. */
+  .a-actions { gap: 6px; }
+  .a-actions button, .a-actions a.icon-btn {
+    width: 40px; height: 36px; border-radius: 9px;
+    font-size: calc(17px * var(--ui-scale, 1));
+  }
+  .a-head { padding-right: 54px; }
+}
