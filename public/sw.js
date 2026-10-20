@@ -8,9 +8,9 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v129';
-const DATA_CACHE = 'rss-data-v109';
-const MEDIA_CACHE = 'rss-media-v109';
+const CACHE = 'rss-shell-v130';
+const DATA_CACHE = 'rss-data-v130';
+const MEDIA_CACHE = 'rss-media-v130';
 
 const SHELL = [
   '/',
@@ -103,10 +103,18 @@ self.addEventListener('fetch', (event) => {
   // Оболочка: файлы — из кэша, страницы — с обновлением в фоне.
   event.respondWith((async () => {
     if (request.mode === 'navigate') {
+      // Сначала сеть: иначе установленное приложение может долго показывать
+      // старую оболочку (страница берётся из кэша, а свежая кладётся «на потом»).
       try {
-        return await staleWhileRevalidate(request, CACHE);
+        const fresh = await fetch(request);
+        if (fresh && fresh.ok) {
+          const cache = await caches.open(CACHE);
+          cache.put('/index.html', fresh.clone()).catch(() => {});
+          cache.put(request, fresh.clone()).catch(() => {});
+        }
+        return fresh;
       } catch {
-        const shell = await caches.match('/index.html') ?? await caches.match('/');
+        const shell = await caches.match('/index.html') ?? await caches.match('/') ?? await caches.match(request);
         if (shell) return shell;
         throw new Error('нет сети и кэша');
       }
