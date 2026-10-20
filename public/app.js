@@ -1308,6 +1308,25 @@ function timeoutSignal(ms) {
 const isBodyLoaded = (id) => Boolean(state.bodies.get(id)?.loaded);
 
 /** Подгружает тела раскрытых статей пачкой. */
+/** Играет ли сейчас видео в статье — перерисовка списка его бы «схлопнула». */
+function videoPlaying() {
+  for (const video of document.querySelectorAll('.a-body video, .video-overlay video')) {
+    if (!video.paused && !video.ended) return true;
+  }
+  return false;
+}
+
+/** Отложенная перерисовка: сделаем её, когда видео остановится. */
+function renderListSoon() {
+  if (videoPlaying()) { state.renderAfterVideo = true; return; }
+  renderList();
+}
+
+document.addEventListener('pause', () => {
+  if (!state.renderAfterVideo) return;
+  setTimeout(() => { if (!videoPlaying()) { state.renderAfterVideo = false; renderList(); } }, 400);
+}, true);
+
 async function ensureBodiesNeeded() {
   if (state.loadingBodies) return;
   const items = visibleItems().slice(0, state.limit);
@@ -1316,6 +1335,7 @@ async function ensureBodiesNeeded() {
   state.loadingBodies = true;
   try {
     // Свой таймаут: зависший запрос раньше оставлял «Загрузка текста…» навсегда.
+    state.bodyRetryCount = 0;                 // тела пришли — счётчик повторов сбрасываем
     const payload = await api('/api/bodies', { ids: need.slice(0, 60) }, { signal: timeoutSignal(10000) });
     for (const [id, body] of Object.entries(payload.bodies ?? {})) {
       state.bodies.set(id, { ...body, loaded: true });
@@ -1324,13 +1344,15 @@ async function ensureBodiesNeeded() {
       if (item) item.hasFull = Boolean(body.hasFull);
     }
     for (const id of need) if (!state.bodies.has(id)) state.bodies.set(id, { content: '', fullHtml: '', loaded: true });
-    renderList();
+    renderListSoon();
   } catch (err) {
     // Не ругаемся вслух: текст — не критичная часть, а тост только мешает.
     console.warn('не удалось загрузить текст статей:', err?.message ?? err);
     // Разрешаем повтор: тех, кому ответ не пришёл, спрашиваем снова через 3 секунды.
     for (const id of need) if (!state.bodies.has(id)) state.bodies.delete(id);
-    if (!state.bodyRetryTimer) {
+    // Повторяем не бесконечно: три попытки, потом ждём следующего раскрытия статьи.
+    state.bodyRetryCount = (state.bodyRetryCount ?? 0) + 1;
+    if (state.bodyRetryCount <= 3 && !state.bodyRetryTimer) {
       state.bodyRetryTimer = setTimeout(() => {
         state.bodyRetryTimer = null;
         ensureBodiesNeeded();
