@@ -1684,9 +1684,26 @@ async function toggleStar(id, event) {
   event?.preventDefault();
   const item = state.data.items.find((i) => i.id === id);
   if (!item) return;
+  const next = !item.starred;
   try {
-    const payload = await api('/api/star', { id, starred: !item.starred });
+    const payload = await api('/api/star', { id, starred: next });
     rememberData(payload.data);
+    // В «Избранном» снятие звезды не перерисовываем сразу: нажатие могло быть
+    // случайным, и статья не должна исчезать из-под пальца. Список пересоберётся
+    // при переходе в другую ленту или после перезагрузки страницы.
+    if (state.view.type === 'starred' && !next) {
+      item.starred = false;
+      const row = document.querySelector(`.article[data-item="${id}"]`);
+      const button = row?.querySelector('[data-star]');
+      if (button) {
+        button.classList.remove('on');
+        button.textContent = '☆';
+      }
+      row?.classList.remove('starred');
+      renderSidebar();
+      renderToolbar();
+      return;
+    }
     render();
   } catch (err) { toast(err.message, true); }
 }
