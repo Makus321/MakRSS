@@ -398,6 +398,13 @@ async function dedupeFeeds() {
 
 /** Свежие статьи сверху, следом — то, что уже было (лента могла «сдвинуть окно»). */
 async function mergeItems(feedId, fresh) {
+  const feed = feedById(feedId);
+  // Отфильтрованное не скачиваем вовсе: и в базе, и в Fever его быть не должно.
+  const skipped = feed ? fresh.filter((item) => !passesFilters(feed, toMeta(item))) : [];
+  if (skipped.length) {
+    fresh = fresh.filter((item) => passesFilters(feed, toMeta(item)));
+    log(`лента ${feedId}: отфильтровано статей ${skipped.length}`);
+  }
   const old = db.items[feedId] ?? [];
   const oldIds = new Set(old.map((i) => i.id));
   const oldById = new Map(old.map((i) => [i.id, i]));
@@ -1074,6 +1081,47 @@ function normaliseFilters(list) {
     out.push({ id, mode, query });
   }
   return out;
+}
+
+/** Текст статьи для фильтров: у Telegram заголовок — имя канала, его не берём. */
+function filterHaystack(item) {
+  const telegram = (item.categories ?? []).includes('telegram');
+  return `${telegram ? '' : item.title ?? ''} ${item.excerpt ?? ''}`.toLowerCase();
+}
+
+/**
+ * Подходит ли статья под фильтры своей ленты. Логика совпадает с той, что в
+ * интерфейсе: «скрывать» важнее «показывать только».
+ * Фильтрованные статьи не скачиваем и не храним — их не должно быть и в Fever.
+ */
+function passesFilters(feed, item) {
+  const filters = normaliseFilters(feed?.filters);
+  if (!filters.length) return true;
+  const hay = filterHaystack(item);
+  if (filters.some((f) => f.mode === 'hide' && hay.includes(f.query.toLowerCase()))) return false;
+  const only = filters.filter((f) => f.mode === 'only');
+  if (only.length && !only.some((f) => hay.includes(f.query.toLowerCase()))) return false;
+  return true;
+}
+
+/** Убирает из ленты уже сохранённые статьи, попавшие под фильтры. */
+async function purgeFiltered(feedId) {
+  const feed = feedById(feedId);
+  if (!feed) return 0;
+  const items = db.items[feedId] ?? [];
+  const keep = items.filter((item) => passesFilters(feed, item));
+  const removed = items.length - keep.length;
+  if (!removed) return 0;
+  const keepIds = new Set(keep.map((i) => i.id));
+  for (const item of items) {
+    if (keepIds.has(item.id)) continue;
+    delete db.read[item.id];
+    delete db.starred[item.id];
+  }
+  db.items[feedId] = keep;
+  await store.pruneContent(feedId, keepIds);
+  store.saveStateSoon();
+  return removed;
 }
 
 function feedView(feed) {
@@ -1932,6 +1980,8 @@ async function api(req, res, url) {
     if (!feed) return json(res, 404, { ok: false, error: 'лента не найдена' });
     feed.filters = normaliseFilters(filters);
     store.saveStateSoon();
+    const dropped = await purgeFiltered(feed.id);
+    if (dropped) log(`лента «${feed.title}»: удалено под фильтры ${dropped} статей`);
     return json(res, 200, { ok: true, data: buildPayload() });
   }
 
@@ -2351,6 +2401,12 @@ export async function init(options = {}) {
   await backfillContentLength();
   await cleanupStoredBodies();
   await migrateTelegramTitles();
+
+  // Разовая (и заодно при каждом старте) чистка: статьи, попавшие под фильтры,
+  // раньше оставались в базе и были видны через Fever.
+  let filteredOut = 0;
+  for (const feed of db.feeds) filteredOut += await purgeFiltered(feed.id);
+  if (filteredOut) log(`под фильтры удалено статей: ${filteredOut}`);
 
   // Раньше «кратко» означало «кратко с картинкой». Теперь режимов три, и старые
   // значения «compact» надо перевести в «compact-thumb», иначе у всех читателей
