@@ -744,6 +744,7 @@ function switchView(view) {
   state.commentsOnly.clear();
   state.collapsedItems.clear();
   state.selectedId = null;
+  manualRead.clear();                   // в другой ленте ручные отметки больше не приоритет
   state.framedIds.clear();              // в новом разделе рамка ещё ни на чём не была
   resetSnapshot();                      // в новой ленте список собирается заново
   openTree(false);                      // на телефоне панель подписок закрываем
@@ -1136,7 +1137,7 @@ function updateActiveArticle() {
       if (entry.rect.top >= lineY - 1) continue;   // ещё не спряталась под шапку
       const id = entry.row.dataset.item;
       const item = state.data.items.find((i) => i.id === id);
-      if (item && !item.read && !keepManualUnread(id)) markReadOnce(id, true);
+      if (item && !item.read) markReadOnce(id, true);
     }
   }
   // Дополнительное правило: рамка перешла на статью — она тоже прочитана.
@@ -1146,7 +1147,7 @@ function updateActiveArticle() {
   const fromUserScroll = Date.now() - userScrollAt < 900 && Date.now() >= activePin.until;
   if (state.prefs.readOnScroll && fromUserScroll
     && activeMeta.id && activeMeta.id !== activeId && activeId) {
-    markReadOnce(activeId, true);
+    markReadOnce(activeId, true);   // внутри markReadOnce ручные отметки уже учтены
   }
   // Плавающие кнопки — у активной статьи (той, что сейчас читается), даже если
   // лента раскрывает статьи по умолчанию и «выбранной» никто не назначал.
@@ -1246,11 +1247,23 @@ function keepManualUnread(id) {
   return true;
 }
 
+/**
+ * Ручные отметки. Нажатие на кнопку «прочитано/непрочитано» — приоритетнее любых
+ * автоматических правил (прокрутка, рамка, раскрытие): такие статьи автоматика не
+ * трогает вовсе. Приоритет снимается только при переходе в другую ленту.
+ */
+const manualRead = new Map();
+
+/** Автоматике можно трогать эту статью? */
+function autoReadAllowed(id) {
+  return !manualRead.has(id);
+}
+
 function markReadOnce(id, read = true) {
   // Повторные отметки в пределах нескольких секунд не шлём, но и не блокируем
   // статью навсегда: запись «когда пытались» сама устаревает.
   const now = Date.now();
-  if (read && keepManualUnread(id)) return;          // вернули «непрочитано» — не спорим
+  if (!autoReadAllowed(id)) return;                  // по этой статье решал человек — не спорим
   if (now - (markedRecently.get(id) ?? 0) < 4000) return;
   const item = state.data.items.find((i) => i.id === id);
   if (!item || item.read === read) return;
@@ -1442,7 +1455,7 @@ async function expandItem(id) {
   state.commentsOnly.delete(id);
   state.collapsedItems.delete(id);
   state.expandedItems.add(id);
-  if (!item.read && state.prefs.readOnExpand) markRead([id], true);
+  if (!item.read && state.prefs.readOnExpand && autoReadAllowed(id)) markRead([id], true);
   if (!isBodyLoaded(id)) {
     renderList();                       // покажет «Загрузка текста…»
     await ensureBodiesNeeded();
@@ -1806,7 +1819,8 @@ $('#list').addEventListener('click', async (event) => {
   const readBtn = event.target.closest('[data-read]');
   // Явная отметка «непрочитано» должна держаться, а не отменяться через миг
   // автоматическим правилом прокрутки.
-  if (readBtn && readBtn.dataset.value === '1') rememberManualUnread(readBtn.dataset.read);
+  // Запоминаем решение человека: дальше автоматика эту статью не трогает.
+  if (readBtn) manualRead.set(readBtn.dataset.read, readBtn.dataset.value === '1');
   if (readBtn) { event.stopPropagation(); markRead([readBtn.dataset.read], readBtn.dataset.value === '1'); return; }
   const fetchBtn = event.target.closest('[data-fetch]');
   if (fetchBtn) { event.stopPropagation(); fetchFull(fetchBtn.dataset.fetch); return; }
