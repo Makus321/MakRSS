@@ -811,7 +811,10 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Сенсорные экраны (телефоны, планшеты, раскладные): кнопки крупные, карточка
    краткой статьи не ниже столбика кнопок, тема живёт в меню «⋯». */
 @media (pointer: coarse) {
+  /* Тема и меню «⋯»: на сенсорных экранах тема уходит в меню, а само меню
+     должно быть доступно и на широком (раскрытом) экране тоже. */
   #theme-toggle { display: none; }
+  #tune-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .a-actions { gap: 6px; }
   .a-actions button, .a-actions a.icon-btn {
     width: 40px; height: 36px; border-radius: 9px;
@@ -852,3 +855,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 
 /* «Прочитано» в подписи карточки больше не нужно: то же показывает кнопка. */
 .a-meta .read-mark { display: none; }
+
+/* Текст идёт под картинкой, когда шапка карточки ниже картинки: иначе первая
+   строка начиналась бы справа от кадра, а под заголовком оставалась пустота. */
+.article.text-under-thumb .a-excerpt { clear: both; }

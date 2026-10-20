@@ -926,6 +926,21 @@ state.filling = false;
  * Широкая картинка (по пропорции кадра) должна занимать всю ширину текста, как на
  * сайте, а не половину ряда. Такие ряды ставим в столбик.
  */
+/**
+ * Если шапка карточки (заголовок, автор, метки) по высоте короче картинки,
+ * краткий текст начинается под картинкой, а не справа от неё под заголовком.
+ */
+function layoutCardThumbs(root) {
+  for (const card of (root ?? document).querySelectorAll('.article.has-thumb')) {
+    const head = card.querySelector('.a-head');
+    const thumb = card.querySelector('.a-thumb');
+    if (!head || !thumb || !thumb.offsetHeight) continue;
+    const headBottom = head.getBoundingClientRect().bottom;
+    const thumbBottom = thumb.getBoundingClientRect().bottom;
+    card.classList.toggle('text-under-thumb', thumbBottom > headBottom + 2);
+  }
+}
+
 /** Пустые обёртки в ряду (<figure> без картинки) — лишняя ячейка, убираем. */
 function dropEmptyRowCells(row) {
   for (const cell of [...row.children]) {
@@ -944,7 +959,7 @@ function holdImageSpace(root) {
     if (img.dataset.hold === '1' || img.complete) continue;
     img.dataset.hold = '1';
     img.classList.add('pending');
-    img.addEventListener('load', () => { img.classList.remove('pending'); });
+    img.addEventListener('load', () => { img.classList.remove('pending'); layoutCardThumbs(); });
     img.addEventListener('error', () => { img.classList.remove('pending'); });
   }
   for (const row of root.querySelectorAll('.img-row')) {
@@ -1097,6 +1112,7 @@ function renderList() {
   fillViewport();          // если карточек меньше экрана — догружаем сразу
   warmArticles();          // раз в час прогреваем кэш статей
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
+  layoutCardThumbs(listEl); // текст под картинкой, если шапка ниже неё
   updateActiveArticle();
 }
 
