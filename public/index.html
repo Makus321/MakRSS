@@ -100,11 +100,25 @@
             <button class="btn" data-theme-set="dark" title="Тёмная тема">Тёмная</button>
             <button class="btn" data-theme-set="auto" title="Как в системе">Авто</button>
           </div>
+          <div class="head-menu-sec">Какие статьи</div>
+          <select class="menu-select" id="menu-unread">
+            <option value="unread">Непрочитанные</option>
+            <option value="all">Все</option>
+          </select>
           <div class="head-menu-sec">Как показывать статьи</div>
           <select class="menu-select" id="menu-view-mode">
             <option value="compact">Кратко</option>
             <option value="compact-thumb">Кратко + картинка</option>
             <option value="full">Полностью</option>
+          </select>
+          <div class="head-menu-sec">Строк в кратком виде</div>
+          <select class="menu-select" id="menu-lines">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="10">10</option>
           </select>
           <div class="head-menu-sec">Ещё</div>
           <div class="head-menu-row">
@@ -437,6 +451,6 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
-<script src="/app.js?v=94" type="module"></script>
+<script src="/app.js?v=95" type="module"></script>
 </body>
 </html>

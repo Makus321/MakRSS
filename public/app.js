@@ -2830,6 +2830,16 @@ function setupMobile() {
     const mode = state.view.type === 'feed' ? feedMode(state.view.id) : (state.settings.defaultView ?? 'compact-thumb');
     const select = $('#menu-view-mode');
     if (select) select.value = mode;
+    // Текущие значения «непрочитанные/все» и «строк» — те же, что в шапке.
+    const unread = $('#menu-unread');
+    if (unread) unread.value = unreadModeFor() ? 'unread' : 'all';
+    const linesSelect = $('#menu-lines');
+    if (linesSelect) {
+      const linesNow = Math.min(12, Math.max(1, Number(
+        state.view.type === 'feed' ? (viewFeed()?.lines ?? state.settings.defaultLines ?? 2) : (state.settings.defaultLines ?? 2),
+      )));
+      linesSelect.value = String(linesNow);
+    }
     const chosen = state.prefs.theme === 'auto' ? 'auto' : state.prefs.theme;
     for (const btn of headMenu.querySelectorAll('[data-theme-set]')) {
       btn.classList.toggle('on', btn.dataset.themeSet === chosen);
@@ -2854,6 +2864,33 @@ function setupMobile() {
   });
   $('#menu-view-mode')?.addEventListener('change', (event) => {
     setViewMode(event.target.value);
+  });
+  // «Непрочитанные / Все» — то же, что переключатель в шапке.
+  $('#menu-unread')?.addEventListener('change', (event) => {
+    const onlyUnread = event.target.value !== 'all';
+    if (state.view.type === 'feed') {
+      state.prefs.feedUnread = { ...(state.prefs.feedUnread ?? {}), [state.view.id]: onlyUnread };
+    } else {
+      state.prefs.unreadOnly = onlyUnread;
+    }
+    savePrefs();
+    state.limit = 10;
+    state.view = { ...state.view };
+    resetSnapshot();
+    closeHeadMenu();
+    render();
+  });
+  // «Строк» — как в шапке: запоминается у ленты.
+  $('#menu-lines')?.addEventListener('change', async (event) => {
+    const lines = Math.min(12, Math.max(1, Number(event.target.value) || 2));
+    closeHeadMenu();
+    if (state.view.type === 'feed') {
+      try { applyPayload(await api('/api/feeds/view', { id: state.view.id, lines })); } catch (err) { toast(err.message, true); }
+    } else {
+      state.settings.defaultLines = lines;
+      try { await api('/api/settings', { defaultLines: lines }); } catch { /* не критично */ }
+      render();
+    }
   });
   document.addEventListener('click', (event) => {
     if (headMenu.hidden) return;
