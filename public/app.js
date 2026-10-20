@@ -940,12 +940,14 @@ state.filling = false;
  */
 function layoutCardThumbs(root) {
   for (const card of (root ?? document).querySelectorAll('.article.has-thumb')) {
-    const head = card.querySelector('.a-head');
+    const main = card.querySelector('.a-main') ?? card.querySelector('.a-head');
     const thumb = card.querySelector('.a-thumb');
-    if (!head || !thumb || !thumb.offsetHeight) continue;
-    const headBottom = head.getBoundingClientRect().bottom;
+    if (!main || !thumb || !thumb.offsetHeight) continue;
+    // Сравниваем картинку не с шапкой целиком (картинка лежит внутри неё),
+    // а с колонкой заголовка и подписи: если картинка ниже — текст пойдёт под ней.
+    const mainBottom = main.getBoundingClientRect().bottom;
     const thumbBottom = thumb.getBoundingClientRect().bottom;
-    card.classList.toggle('text-under-thumb', thumbBottom > headBottom + 2);
+    card.classList.toggle('text-under-thumb', thumbBottom > mainBottom + 2);
   }
 }
 

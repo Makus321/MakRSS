@@ -867,3 +867,11 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Версия приложения в подвале дерева подписок, рядом с импортом/экспортом. */
 .version-row { justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
 .version-row .link-btn { min-height: 0; padding: 0; }
+
+/* Сенсорные экраны: кнопка «⋯» показывается всегда, в том числе на широком
+   (раскрытом) экране. Правило в конце файла — иначе его перекрывает
+   «.tune-btn { display: none }» из обычных стилей. */
+@media (pointer: coarse) {
+  #tune-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  #theme-toggle { display: none; }
+}
