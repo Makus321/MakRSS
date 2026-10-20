@@ -124,6 +124,7 @@ function loadPrefs() {
   state.unreadOnly = Boolean(state.prefs.unreadOnly);
   applyTheme();
   applyVisualPrefs();
+  watchMobileFonts();
 }
 
 /** Размер шрифта в виде «13px»: принимает и число, и строку, и «13 px». */
@@ -150,21 +151,41 @@ function setFontSelect(select, value) {
 const FONT_VARIANTS = new Set(['system', 'condensed', 'book', 'mono', 'cursive', 'tight', 'airy', 'display']);
 const fontVariant = (value) => (FONT_VARIANTS.has(value) ? value : 'system');
 
+// Выбор размера шрифта на телефоне применяется на ступень крупнее.
+const MOBILE_FONT_STEP = { '13px': '14.5px', '14.5px': '18px', '18px': '22px', '22px': '26px' };
+
 function applyVisualPrefs() {
   const root = document.documentElement;
   // Семейство шрифта — атрибутом на :root, остальные значения берутся из CSS.
   document.documentElement.dataset.font = fontVariant(state.prefs.fontFamily);
   document.documentElement.dataset.line = state.prefs.lineHeight || 'normal';
+  // На телефоне тот же выбор означает шрифт на ступень крупнее: на узком экране
+  // обычные размеры читаются заметно мельче, чем на мониторе.
+  const mobile = window.matchMedia('(max-width: 560px)').matches;
+  const bigger = (value, fallback) => {
+    const size = fontPx(value, fallback);
+    if (!mobile) return size;
+    return MOBILE_FONT_STEP[size] ?? size;
+  };
   // Остальной интерфейс подстраивается под размер шрифта дерева (13px — обычный).
-  const treeSize = parseFloat(fontPx(state.prefs.fontTree, '13px')) || 13;
-  document.documentElement.style.setProperty('--ui-scale', String(Math.max(0.8, Math.min(1.5, treeSize / 13))));
-  root.style.setProperty('--font-tree', state.prefs.fontTree || '13px');
-  root.style.setProperty('--font-article', state.prefs.fontArticle || '14.5px');
-  root.style.setProperty('--font-excerpt', state.prefs.fontExcerpt || '14.5px');
+  const treeSize = parseFloat(bigger(state.prefs.fontTree, '13px')) || 13;
+  document.documentElement.style.setProperty('--ui-scale', String(Math.max(0.8, Math.min(1.6, treeSize / 13))));
+  root.style.setProperty('--font-tree', bigger(state.prefs.fontTree, '13px'));
+  root.style.setProperty('--font-article', bigger(state.prefs.fontArticle, '14.5px'));
+  root.style.setProperty('--font-excerpt', bigger(state.prefs.fontExcerpt, '14.5px'));
   $('#list').classList.toggle('comfortable', state.prefs.density === 'comfortable');
   // «Невидимые рамки» — минималистичный вид: у карточек и панелей рамок нет,
   // остаётся только подсветка активной статьи.
   document.body.classList.toggle('no-borders', state.prefs.borders === false);
+}
+
+// Поворот телефона или изменение ширины окна меняет ступень — пересчитываем.
+let mobileQuery = null;
+function watchMobileFonts() {
+  mobileQuery = window.matchMedia('(max-width: 560px)');
+  const onChange = () => applyVisualPrefs();
+  if (mobileQuery.addEventListener) mobileQuery.addEventListener('change', onChange);
+  else if (mobileQuery.addListener) mobileQuery.addListener(onChange);
 }
 
 const saveCollapsed = () => localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...state.collapsed]));
