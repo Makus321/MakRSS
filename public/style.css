@@ -328,8 +328,9 @@ body.dragging .drop-hint.over { border-color: var(--accent); color: var(--accent
 .new-row {
   position: fixed; z-index: 45; top: 10px; left: 50%; transform: translateX(-50%);
   width: max-content; max-width: calc(100vw - 24px); margin: 0;
-  background: var(--accent-soft); border-color: var(--accent);
-  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, .65);
+  /* Непрозрачный фон: полупрозрачная плашка сливалась с текстом под ней. */
+  background: var(--panel); border: 1px solid var(--accent);
+  box-shadow: 0 14px 30px -14px rgba(0, 0, 0, .7);
 }
 .new-row .btn { min-height: 30px; }
 .new-row .note { color: var(--text); }
@@ -845,3 +846,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
    одиночная картинка уезжала вправо, а первая ячейка пустовала. */
 .a-body .img-row > *:not(:has(img, video)),
 .comment-body .img-row > *:not(:has(img, video)) { display: none; }
+
+/* Плашка новых статей: крестик справа. */
+.new-row .new-close { width: 28px; height: 28px; flex: 0 0 auto; }
+
+/* «Прочитано» в подписи карточки больше не нужно: то же показывает кнопка. */
+.a-meta .read-mark { display: none; }

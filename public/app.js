@@ -57,7 +57,13 @@ const plural = (n, one, few, many) => {
   return many;
 };
 
+/** Сетевые сбои не показываем всплывашкой: при плохой связи их десятки. */
+function isNetworkError(message) {
+  return /failed to fetch|networkerror|load failed|fetch failed|aborted|timeout|нет сети и кэша|err_/i.test(String(message ?? ''));
+}
+
 function toast(message, isError = false, place = 'bottom') {
+  if (isError && isNetworkError(message)) return;
   const el = $('#toast');
   el.textContent = message;
   el.className = `toast${isError ? ' err' : ''}${place === 'top' ? ' top' : ''}`;
@@ -193,7 +199,9 @@ function applyVisualPrefs() {
   };
   // Остальной интерфейс подстраивается под размер шрифта дерева (13px — обычный).
   const treeSize = parseFloat(bigger(state.prefs.fontTree, '13px')) || 13;
-  document.documentElement.style.setProperty('--ui-scale', String(Math.max(0.8, Math.min(1.6, treeSize / 13))));
+  // Интерфейс (кнопки, подписи, окна) растёт умеренно: иначе на телефоне поля
+  // и подписи выглядят разного размера. Крупный текст статьи задаётся отдельно.
+  document.documentElement.style.setProperty('--ui-scale', String(Math.max(0.9, Math.min(1.15, treeSize / 13))));
   root.style.setProperty('--font-tree', bigger(state.prefs.fontTree, '13px'));
   root.style.setProperty('--font-article', bigger(state.prefs.fontArticle, '14.5px'));
   root.style.setProperty('--font-excerpt', bigger(state.prefs.fontExcerpt, '14.5px'));
@@ -572,6 +580,10 @@ function renderNewRow() {
   if (!count) return;
   $('#new-text').textContent = `Новых статей: ${count} — в список не добавляю, пока вы здесь.`;
 }
+
+$('#new-close').addEventListener('click', () => {
+  $('#new-row').hidden = true;
+});
 
 $('#new-show').addEventListener('click', () => {
   resetSnapshot();                 // снимок пересобирается — новые статьи попадут в список
