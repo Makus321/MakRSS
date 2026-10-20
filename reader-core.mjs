@@ -1086,7 +1086,7 @@ function normaliseFilters(list) {
 /** Текст статьи для фильтров: у Telegram заголовок — имя канала, его не берём. */
 function filterHaystack(item) {
   const telegram = (item.categories ?? []).includes('telegram');
-  return `${telegram ? '' : item.title ?? ''} ${item.excerpt ?? ''}`.toLowerCase();
+  return `${telegram ? '' : item.title ?? ''} ${item.author ?? ''} ${item.excerpt ?? ''}`.toLowerCase();
 }
 
 /**

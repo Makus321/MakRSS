@@ -307,7 +307,9 @@ function resetSnapshot() {
  *  У постов Telegram заголовок — это имя канала, поэтому смотрим только текст. */
 function articleHaystack(item) {
   const telegram = (item.categories ?? []).includes('telegram');
-  return `${telegram ? '' : item.title ?? ''} ${item.excerpt ?? ''}`.toLowerCase();
+  // Автор — часть текста статьи для фильтров: по нему удобно скрывать или
+  // наоборот оставлять материалы конкретного человека (есть у Mobile-Review).
+  return `${telegram ? '' : item.title ?? ''} ${item.author ?? ''} ${item.excerpt ?? ''}`.toLowerCase();
 }
 
 /** Текст для поиска: к тексту статьи добавляем ленту и категории — так ищут и по ленте. */
