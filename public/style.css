@@ -821,3 +821,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   .article.compact { min-height: 132px; }
   .a-head { padding-right: 54px; }
 }
+
+/* Ряд картинок: пустые ячейки не нужны, а «ждущая» подложка исчезает, когда
+   картинки пришли (иначе справа оставался пустой бежевый блок). */
+.a-body .img-row > *:empty, .comment-body .img-row > *:empty { display: none; }
+.a-body .img-row.ready, .comment-body .img-row.ready { min-height: 0; background: none; }
+.a-body .img-row, .comment-body .img-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }

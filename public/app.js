@@ -918,7 +918,7 @@ function holdImageSpace(root) {
     const images = [...row.querySelectorAll('img')];
     if (!images.length) continue;
     const done = () => {
-      if (images.every((img) => img.complete)) row.classList.add('ready');
+      if (images.every((img) => img.complete)) { row.classList.add('ready'); row.classList.remove('waiting'); }
     };
     if (images.every((img) => img.complete)) row.classList.add('ready');
     else {
@@ -1135,7 +1135,7 @@ function updateActiveArticle() {
       if (entry.rect.top >= lineY - 1) continue;   // ещё не спряталась под шапку
       const id = entry.row.dataset.item;
       const item = state.data.items.find((i) => i.id === id);
-      if (item && !item.read) markReadOnce(id, true);
+      if (item && !item.read && !keepManualUnread(id)) markReadOnce(id, true);
     }
   }
   // Дополнительное правило: рамка перешла на статью — она тоже прочитана.
@@ -1226,10 +1226,28 @@ let listObserver = null;
 const seenItems = new Set();
 const markedRecently = new Map();   // id → время последней попытки отметки
 
+/**
+ * Статья, которую вручную сделали непрочитанной. Автоматические правила не
+ * трогают её, пока список не сдвинули с того места, где её отметили.
+ */
+function rememberManualUnread(id) {
+  state.manualUnread = { id, scrollTop: $('#list')?.scrollTop ?? 0 };
+}
+
+/** Эту статью сейчас нельзя отмечать прочитанной автоматически? */
+function keepManualUnread(id) {
+  const manual = state.manualUnread;
+  if (!manual || manual.id !== id) return false;
+  const scrollTop = $('#list')?.scrollTop ?? 0;
+  if (Math.abs(scrollTop - manual.scrollTop) > 120) { state.manualUnread = null; return false; }
+  return true;
+}
+
 function markReadOnce(id, read = true) {
   // Повторные отметки в пределах нескольких секунд не шлём, но и не блокируем
   // статью навсегда: запись «когда пытались» сама устаревает.
   const now = Date.now();
+  if (read && keepManualUnread(id)) return;          // вернули «непрочитано» — не спорим
   if (now - (markedRecently.get(id) ?? 0) < 4000) return;
   const item = state.data.items.find((i) => i.id === id);
   if (!item || item.read === read) return;
@@ -1783,6 +1801,9 @@ $('#list').addEventListener('click', async (event) => {
   const videoBtn = event.target.closest('[data-video]');
   if (videoBtn) { event.stopPropagation(); playVideo(videoBtn); return; }
   const readBtn = event.target.closest('[data-read]');
+  // Явная отметка «непрочитано» должна держаться, а не отменяться через миг
+  // автоматическим правилом прокрутки.
+  if (readBtn && readBtn.dataset.value === '1') rememberManualUnread(readBtn.dataset.read);
   if (readBtn) { event.stopPropagation(); markRead([readBtn.dataset.read], readBtn.dataset.value === '1'); return; }
   const fetchBtn = event.target.closest('[data-fetch]');
   if (fetchBtn) { event.stopPropagation(); fetchFull(fetchBtn.dataset.fetch); return; }
@@ -3163,7 +3184,7 @@ function sanitize(html, baseUrl) {
   // Подряд идущие картинки собираем в один блок: тогда читалка раскладывает их
   // в несколько колонок, если по ширине помещается больше одной, вместо длинной
   // ленты одиночных картинок.
-  const ownsMedia = (node) => node.nodeType === 1 && node.classList?.contains('img-alone');
+  const ownsMedia = (node) => node.nodeType === 1 && node.classList?.contains('img-alone') && !node.classList.contains('img-row');
   let run = [];
   const flush = () => {
     if (run.length < 2) { run = []; return; }
