@@ -3120,9 +3120,28 @@ function setupMobile() {
  * и кнопка установки. Браузеры Android предлагают установку сами, iOS — только
  * вручную через «Поделиться» → «На экран „Домой“», поэтому там показываем подсказку.
  */
+// Версия приложения: показывается на экране входа и в настройках.
+const APP_VERSION = '2.1.0';
+
 function setupPwa() {
+  const versionLabel = 'Версия ' + APP_VERSION + ' · обновляется автоматически';
+  const versionEl = $('#splash-version');
+  if (versionEl) versionEl.textContent = versionLabel;
+  const settingsVersion = $('#settings-version');
+  if (settingsVersion) settingsVersion.textContent = versionLabel;
+
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))) {
-    navigator.serviceWorker.register('/sw.js').catch(() => { /* без воркера всё работает как раньше */ });
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+      .catch(() => { /* без воркера всё работает как раньше */ });
+    // Новая версия оболочки приходит сама: как только воркер активировался,
+    // перезагружаем страницу один раз — иначе в установленном приложении
+    // остаётся старая копия и «ничего не меняется».
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'reload' && sessionStorage.getItem('rss.reloaded') !== '1') {
+        sessionStorage.setItem('rss.reloaded', '1');
+        location.reload();
+      }
+    });
   }
 
   const button = $('#install-app');

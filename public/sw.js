@@ -8,7 +8,7 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v128';
+const CACHE = 'rss-shell-v129';
 const DATA_CACHE = 'rss-data-v109';
 const MEDIA_CACHE = 'rss-media-v109';
 
@@ -40,6 +40,9 @@ self.addEventListener('activate', (event) => {
     const names = await caches.keys();
     await Promise.all(names.filter((name) => !keep.has(name)).map((name) => caches.delete(name)));
     await self.clients.claim();
+    // Сообщаем открытым страницам: оболочка обновилась, можно перезагрузиться.
+    const clients = await self.clients.matchAll({ type: 'window' });
+    for (const client of clients) client.postMessage({ type: 'reload' });
   })());
 });
 
