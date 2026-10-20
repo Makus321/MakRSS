@@ -930,7 +930,7 @@ function holdImageSpace(root) {
 
 /** Просит сервер докачать тексты и складывает статьи в кэш service worker. */
 async function warmArticles(force = false) {
-  if (!navigator.onLine) return;
+  if (!navigator.onLine || state.scrolling) return;
   const last = Number(localStorage.getItem(WARM_KEY) ?? 0);
   if (!force && Date.now() - last < WARM_INTERVAL_MS) return;
   localStorage.setItem(WARM_KEY, String(Date.now()));
@@ -966,8 +966,31 @@ function fillViewport() {
   fillViewport();
 }
 
+/**
+ * Пока список прокручивается, фоновые задачи (перерисовка, догрузка тел, опрос
+ * сервера, счётчики комментариев, прогрев кэша) не запускаются: они отнимают
+ * кадры и дают рывки. Всё отложенное выполняется, когда прокрутка затихла.
+ */
+function beginScrollWork() {
+  state.scrolling = true;
+  clearTimeout(state.scrollIdleTimer);
+  state.scrollIdleTimer = setTimeout(() => {
+    state.scrolling = false;
+    flushScrollWork();
+  }, 220);
+}
+
+/** Выполняет то, что отложили на время прокрутки. */
+function flushScrollWork() {
+  if (state.scrolling) return;
+  if (state.deferredRender) { state.deferredRender = false; renderList(); }
+  if (state.deferredBodies) { state.deferredBodies = false; ensureBodiesNeeded(); }
+  if (state.deferredPoll) { state.deferredPoll = false; loadData({ poll: true }); }
+}
+
 function renderList() {
   if (pointerDown) { renderPending = true; return; }
+  if (state.scrolling) { state.deferredRender = true; return; }
   const listEl = $('#list');
   // При смене ленты/папки список показываем с начала — от новых статей.
   const reset = state.resetScroll;
@@ -1329,6 +1352,7 @@ document.addEventListener('pause', () => {
 
 async function ensureBodiesNeeded() {
   if (state.loadingBodies) return;
+  if (state.scrolling) { state.deferredBodies = true; return; }
   const items = visibleItems().slice(0, state.limit);
   const need = items.filter((i) => isExpanded(i) && !isBodyLoaded(i.id)).map((i) => i.id);
   if (!need.length) return;
@@ -1806,6 +1830,7 @@ $('#list').addEventListener('click', async (event) => {
 
 $('#list').addEventListener('scroll', (event) => {
   const el = event.target;
+  beginScrollWork();                    // фоновые задачи ждут конца прокрутки
   // Сначала отметка (она смотрит на рамку до этой прокрутки), потом пересчёт рамки.
   scheduleScrollReadCheck();
   scheduleActiveArticle();
@@ -3040,9 +3065,18 @@ async function start() {
 
 start();
 // Опрашиваем всегда: иначе при раскрытой статье список и время «замирают».
-setInterval(() => loadData({ poll: true }), 120_000);
-setInterval(() => { if (state.data.fetching?.pending) { loadData({ poll: true }); renderQueueInfo(); } }, 30_000);
-setInterval(() => { refreshTimes(); renderToolbar(); }, 60_000);
+  // Опрос сервера, счётчики и время не мешают прокрутке: пока она идёт,
+  // задачи откладываются и выполняются, когда список остановился.
+  setInterval(() => {
+    if (state.scrolling) { state.deferredPoll = true; return; }
+    if (document.hidden) return;
+    loadData({ poll: true });
+  }, 120_000);
+  setInterval(() => {
+    if (state.scrolling || document.hidden) return;
+    if (state.data.fetching?.pending) { loadData({ poll: true }); renderQueueInfo(); }
+  }, 30_000);
+  setInterval(() => { if (state.scrolling || document.hidden) return; refreshTimes(); renderToolbar(); }, 60_000);
 
 /** Обратный отсчёт до следующего автообновления лент. */
 function updateCountdown() {
