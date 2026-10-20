@@ -3036,8 +3036,7 @@ function setupMobile() {
   });
   // Жёсткое обновление: сносим кэши и service worker, чтобы приложение
   // гарантированно загрузило свежую версию (полезно, если оболочка «залипла»).
-  $('#menu-update')?.addEventListener('click', async () => {
-    closeHeadMenu();
+  const hardReload = async () => {
     toast('Обновляю приложение…');
     try {
       for (const name of await caches.keys()) await caches.delete(name);
@@ -3046,7 +3045,9 @@ function setupMobile() {
     } catch { /* не критично */ }
     sessionStorage.removeItem('rss.reloaded');
     location.reload();
-  });
+  };
+  $('#menu-update')?.addEventListener('click', () => { closeHeadMenu(); hardReload(); });
+  $('#sidebar-update')?.addEventListener('click', hardReload);
 
   $('#menu-view-mode')?.addEventListener('change', (event) => {
     setViewMode(event.target.value);
@@ -3139,6 +3140,8 @@ function setupPwa() {
   if (versionEl) versionEl.textContent = versionLabel;
   const settingsVersion = $('#settings-version');
   if (settingsVersion) settingsVersion.textContent = versionLabel;
+  const sidebarVersion = $('#sidebar-version');
+  if (sidebarVersion) sidebarVersion.textContent = 'Версия ' + APP_VERSION;
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))) {
     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })

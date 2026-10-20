@@ -863,3 +863,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Версия приложения на экране входа и в настройках. */
 .splash-version { padding: 0 16px 14px; text-align: center; font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); }
 #settings-version { color: var(--muted); font-size: calc(11.5px * var(--ui-scale, 1)); }
+
+/* Версия приложения в подвале дерева подписок, рядом с импортом/экспортом. */
+.version-row { justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
+.version-row .link-btn { min-height: 0; padding: 0; }
