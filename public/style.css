@@ -921,3 +921,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
     font-size: calc(16px * var(--ui-scale, 1));
   }
 }
+
+/* Значок ленты — кнопка действий: на телефоне это единственный способ
+   добраться до переименования и перемещения. */
+.fav[data-feed-icon] { cursor: pointer; border-radius: 6px; }
+.fav[data-feed-icon]:hover { outline: 1px solid var(--accent); }
+.row.actions-open .fav[data-feed-icon] { outline: 1px solid var(--accent); }

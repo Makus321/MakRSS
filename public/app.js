@@ -481,7 +481,7 @@ function renderSidebar() {
     const letter = (feed.title || '?').trim().charAt(0).toUpperCase();
     return `<li><div class="row feed-row${active ? ' active' : ''}${feed.lastError ? ' warn' : ''}"
         data-feed-row="${esc(feed.id)}" draggable="true" title="${esc(feed.lastError || feed.url)}">
-      <span class="fav" aria-hidden="true">
+      <span class="fav" data-feed-icon="${esc(feed.id)}" role="button" tabindex="0" title="Действия с лентой">
         <span class="fav-letter">${esc(letter)}</span>
         <img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy" onerror="this.remove()">
       </span>
@@ -837,6 +837,9 @@ function switchView(view) {
   state.commentsOnly.clear();
   state.collapsedItems.clear();
   state.selectedId = null;
+  // Перешли в другую ленту — плашка «новые статьи» больше не актуальна.
+  state.newRowClosedTotals = JSON.stringify(state.data.addedByFeed ?? {});
+  if ($('#new-row')) $('#new-row').hidden = true;
   manualRead.clear();                   // в другой ленте ручные отметки больше не приоритет
   pendingUnstar.clear();                // и снятые в избранном карточки больше не держим
   state.framedIds.clear();              // в новом разделе рамка ещё ни на чём не была
@@ -2126,6 +2129,19 @@ document.addEventListener('pointerdown', (event) => {
 }, true);
 
 $('#tree').addEventListener('click', async (event) => {
+  // Клик по значку ленты открывает панель действий (переименовать, удалить,
+  // переместить): на телефоне наведения мыши нет, а значок есть всегда.
+  const feedIcon = event.target.closest('[data-feed-icon]');
+  if (feedIcon) {
+    event.preventDefault();
+    event.stopPropagation();
+    const iconRow = feedIcon.closest('.row');
+    const wasOpen = iconRow?.classList.contains('actions-open');
+    for (const other of document.querySelectorAll('.row.actions-open')) other.classList.remove('actions-open');
+    if (iconRow && !wasOpen) iconRow.classList.add('actions-open');
+    return;
+  }
+
   const toggle = event.target.closest('[data-toggle]');
   if (toggle) {
     const id = toggle.dataset.toggle;
