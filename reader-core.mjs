@@ -97,7 +97,7 @@ const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-
 // Версия сборки: её сравнивает клиент, чтобы показать кнопку «Обновить приложение».
 const APP_VERSION = '1.0.134';
 
-const PARSER_VERSION = 14;
+const PARSER_VERSION = 15;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
 const BODY_VERSION = 8;
@@ -565,6 +565,36 @@ async function telegramHistory(channel, feedId, startItems, startMinId, pages) {
   return items;
 }
 
+/**
+ * У части каналов веб-превью отдаёт посты без медиа («текст не поддерживается»),
+ * а страница встраивания (?embed=1) содержит фото и обложки видео. Для постов
+ * без картинок забираем медиа со страницы встраивания.
+ */
+async function enrichTelegramMedia(channel, items, limit = 8) {
+  const targets = items
+    .filter((item) => !/<img\b/i.test(item.content ?? '') && !item.video && item.messageId)
+    .slice(0, limit);
+  for (const item of targets) {
+    try {
+      await sleep(400);
+      const res = await httpGet(`https://t.me/${channel}/${item.messageId}?embed=1`, {
+        timeout: 15000, accept: 'text/html,application/xhtml+xml',
+      });
+      if (!res.ok) continue;
+      const parsed = parseTelegramChannel(res.text, `https://t.me/${channel}`, 'probe', itemId);
+      const media = parsed.items[0];
+      if (!media) continue;
+      const pictures = [...(media.content ?? '').matchAll(/<img[^>]+src="([^"]+)"/gi)].map((m) => m[1]);
+      if (pictures.length) {
+        item.content = `${item.content ?? ''}\n${pictures.map((url) => `<p><img src="${url}" alt=""></p>`).join('\n')}`;
+        if (!item.image) item.image = pictures[0];
+      }
+      if (media.video && !item.video) item.video = media.video;
+    } catch { /* медиа необязательно */ }
+  }
+  return items;
+}
+
 async function telegramParse(channel, feedId, firstPageHtml, pages) {
   const parsed = parseTelegramChannel(firstPageHtml, `https://t.me/${channel}`, feedId, itemId);
   const items = await telegramHistory(channel, feedId, parsed.items, parsed.minMessageId, pages);
@@ -593,6 +623,7 @@ async function refreshFeed(feed, { force = false } = {}) {
     let parsed;
     if (isTelegram) {
       parsed = parseTelegramChannel(res.text, feed.url, feed.id, itemId);
+      parsed = { ...parsed, items: await enrichTelegramMedia(channel, parsed.items) };
       if (!feed.historyFilled) {
         parsed = { ...parsed, items: await telegramHistory(channel, feed.id, parsed.items, parsed.minMessageId, 3) };
         feed.historyFilled = true;
