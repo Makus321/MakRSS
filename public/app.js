@@ -2025,13 +2025,8 @@ $('#list').addEventListener('scroll', (event) => {
   clearTimeout(scrollSettleTimer);
   scrollSettleTimer = setTimeout(() => {
     updateActiveArticle();
-    // Кнопки проявляются, когда прокрутка затихла, но через полторы секунды
-    // снова становятся полупрозрачными: они не должны закрывать текст.
-    for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.add('settled');
-    clearTimeout(state.settleFadeTimer);
-    state.settleFadeTimer = setTimeout(() => {
-      for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.remove('settled');
-    }, 1500);
+    // Кнопки остаются полупрозрачными всегда: текст под ними должен читаться.
+    for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.remove('settled');
   }, 260);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {

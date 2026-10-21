@@ -1723,9 +1723,9 @@ function isPublicUrl(parsed) {
 // Крупные картинки пережимаем в WebP: экономия в 3–10 раз, страница легче,
 // особенно на мобильном интернете. Инструмент cwebp (пакет webp) необязателен:
 // если его нет, отдаём оригинал.
-const IMG_RECOMPRESS_ABOVE = Number(process.env.IMG_RECOMPRESS_ABOVE || 200 * 1024);
-const IMG_WEBP_QUALITY = Number(process.env.IMG_WEBP_QUALITY || 78);
-const IMG_WEBP_WIDTH = Number(process.env.IMG_WEBP_WIDTH || 1000);
+const IMG_RECOMPRESS_ABOVE = Number(process.env.IMG_RECOMPRESS_ABOVE || 60 * 1024);
+const IMG_WEBP_QUALITY = Number(process.env.IMG_WEBP_QUALITY || 75);
+const IMG_WEBP_WIDTH = Number(process.env.IMG_WEBP_WIDTH || 900);
 let webpAvailable = null;
 
 async function runCwebp(args) {
