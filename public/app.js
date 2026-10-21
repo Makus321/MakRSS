@@ -3248,13 +3248,24 @@ function setupPwa() {
   const sidebarVersion = $('#sidebar-version');
   if (sidebarVersion) sidebarVersion.textContent = 'Версия ' + APP_VERSION;
 
-  // Кнопка «Обновить приложение» в дереве нужна только когда на сервере лежит
-  // другая версия — иначе она сбивает с толку.
-  fetch('/api/version').then((r) => r.json()).then((data) => {
-    const server = String(data?.version ?? '');
-    const button = $('#sidebar-update');
-    if (button && server && server !== APP_VERSION) button.hidden = false;
-  }).catch(() => { /* без сети — просто не показываем */ });
+  // Кнопка «Обновить приложение» нужна только когда браузер уже скачал новую
+  // версию, но ещё не переключился на неё. Сравнение версий по сети давало
+  // ложные срабатывания, поэтому ориентируемся на состояние service worker.
+  const updateButton = $('#sidebar-update');
+  if (updateButton) {
+    updateButton.hidden = true;
+    navigator.serviceWorker?.getRegistration?.().then((registration) => {
+      if (!registration) return;
+      const check = () => {
+        updateButton.hidden = !(registration.waiting || registration.installing);
+      };
+      check();
+      registration.addEventListener?.('updatefound', () => {
+        const worker = registration.installing;
+        worker?.addEventListener?.('statechange', check);
+      });
+    }).catch(() => { /* без воркера кнопка не нужна */ });
+  }
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))) {
     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
