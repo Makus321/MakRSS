@@ -493,7 +493,7 @@ function renderSidebar() {
       ${badge(
       // В режиме «Все» показываем, сколько статей всего, иначе — сколько непрочитанных.
       state.prefs.feedUnread?.[feed.id] === false ? feed.total : feed.unread,
-      pendingNewForFeed(feed.id),
+      state.data.addedByFeed?.[feed.id] ?? 0,
     )}
     </div></li>`;
   };
@@ -609,6 +609,21 @@ function pendingNewForFeed(feedId) {
 }
 
 function pendingNewCount() {
+  // Считаем ровно те статьи, что сервер добавил при синхронизации — тем же
+  // числом, что и «(+N)» у лент. Иначе в плашку попадали все статьи, которых
+  // нет в снимке списка (а он ограничен первыми 10 карточками).
+  const added = state.data.addedByFeed ?? {};
+  const feedIds = state.view.type === 'feed'
+    ? [state.view.id]
+    : Object.keys(added).filter((id) => {
+        if (state.view.type === 'folder') return feedById(id)?.folderId === state.view.id;
+        if (state.view.type === 'starred') return false;      // у избранного нет «новых»
+        return Boolean(feedById(id));
+      });
+  return feedIds.reduce((sum, id) => sum + (Number(added[id]) || 0), 0);
+}
+
+function pendingNewCountLegacy() {
   const snapshot = state.snapshot?.ids;
   if (!snapshot) return 0;
   const onlyUnread = unreadModeFor();
