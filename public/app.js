@@ -2137,6 +2137,14 @@ document.addEventListener('pointerdown', (event) => {
 }, true);
 
 $('#tree').addEventListener('click', async (event) => {
+  // Кнопки действий уже обработаны на pointerdown: клик по ним не должен
+  // заодно переключать ленту (иначе на телефоне закрывалось дерево).
+  if (event.target.closest('.row-actions button')) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+
   // Клик по значку ленты открывает панель действий (переименовать, удалить,
   // переместить): на телефоне наведения мыши нет, а значок есть всегда.
   const feedIcon = event.target.closest('[data-feed-icon]');
