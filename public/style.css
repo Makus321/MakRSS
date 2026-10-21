@@ -296,7 +296,12 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
 /* Кнопки правки/удаления не сдвигают счётчик: место под них занято всегда,
    а сами они появляются слева от счётчика при наведении. */
 .row-actions { display: flex; gap: 2px; flex: 0 0 auto; visibility: hidden; width: auto; justify-content: flex-end; }
-.row:hover .row-actions, .row:focus-within .row-actions, .row.actions-open .row-actions { visibility: visible; }
+/* На устройствах с мышью — по наведению; на сенсорных только по долгому тапу:
+   иначе кнопки появлялись от любого касания (тап включает «hover»). */
+@media (hover: hover) {
+  .row:hover .row-actions, .row:focus-within .row-actions { visibility: visible; }
+}
+.row.actions-open .row-actions { visibility: visible; }
 .badge-new { color: var(--muted); font-weight: 500; }
 .row-actions button {
   width: 20px; height: 18px; padding: 0; display: inline-flex; align-items: center; justify-content: center;

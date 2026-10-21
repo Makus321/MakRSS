@@ -97,10 +97,10 @@ const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-
 // Версия сборки: её сравнивает клиент, чтобы показать кнопку «Обновить приложение».
 const APP_VERSION = '2.1.1';
 
-const PARSER_VERSION = 12;
+const PARSER_VERSION = 13;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
-const BODY_VERSION = 6;
+const BODY_VERSION = 7;
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
