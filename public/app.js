@@ -487,6 +487,8 @@ function renderSidebar() {
       </span>
       <span class="row-name${feed.unread ? ' unread' : ''}">${esc(feed.title)}</span>
       <span class="row-actions">
+        <button data-feed-up="${esc(feed.id)}" title="Выше">↑</button>
+        <button data-feed-down="${esc(feed.id)}" title="Ниже">↓</button>
         <button data-feed-rename="${esc(feed.id)}" title="Переименовать">✎</button>
         <button class="del" data-feed-del="${esc(feed.id)}" title="Отписаться">×</button>
       </span>
@@ -1881,6 +1883,21 @@ async function saveTree() {
   render();
 }
 
+/** Сдвигает ленту на одну позицию внутри её папки: -1 вверх, +1 вниз. */
+function moveFeedBy(feedId, delta) {
+  const feed = state.data.feeds.find((f) => f.id === feedId);
+  if (!feed) return;
+  const siblings = state.data.feeds.filter((f) => (f.folderId ?? null) === (feed.folderId ?? null));
+  const index = siblings.findIndex((f) => f.id === feedId);
+  const targetIndex = index + delta;
+  if (targetIndex < 0 || targetIndex >= siblings.length) return;
+  // Опускаем — ставим перед следующим за соседом; поднимаем — перед соседом.
+  const beforeFeedId = delta > 0
+    ? (siblings[targetIndex + 1]?.id ?? null)
+    : siblings[targetIndex].id;
+  moveFeed(feedId, feed.folderId ?? null, beforeFeedId);
+}
+
 function moveFeed(feedId, folderId, beforeFeedId = null) {
   const feed = state.data.feeds.find((f) => f.id === feedId);
   if (!feed) return;
@@ -2045,11 +2062,24 @@ $('#view-switch').addEventListener('change', (event) => setViewMode(event.target
 
 $('#tree').addEventListener('click', async (event) => {
   const toggle = event.target.closest('[data-toggle]');
+  // Долгий тап по ленте показывает её действия: на телефоне наведения нет.
+  if (event.target.closest('[data-feed-up], [data-feed-down], [data-feed-rename], [data-feed-del]')) return;
+
   if (toggle) {
     const id = toggle.dataset.toggle;
     if (state.collapsed.has(id)) state.collapsed.delete(id); else state.collapsed.add(id);
     saveCollapsed();
     renderSidebar();
+    return;
+  }
+  const moveUp = event.target.closest('[data-feed-up]');
+  if (moveUp) {
+    moveFeedBy(moveUp.dataset.feedUp, -1);
+    return;
+  }
+  const moveDown = event.target.closest('[data-feed-down]');
+  if (moveDown) {
+    moveFeedBy(moveDown.dataset.feedDown, 1);
     return;
   }
   const renameFeed = event.target.closest('[data-feed-rename]');

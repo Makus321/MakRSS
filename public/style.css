@@ -295,8 +295,8 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
 /* Кнопки в дереве показываются при наведении на строку, размер у них фиксированный. */
 /* Кнопки правки/удаления не сдвигают счётчик: место под них занято всегда,
    а сами они появляются слева от счётчика при наведении. */
-.row-actions { display: flex; gap: 2px; flex: 0 0 auto; visibility: hidden; width: 34px; justify-content: flex-end; }
-.row:hover .row-actions, .row:focus-within .row-actions { visibility: visible; }
+.row-actions { display: flex; gap: 2px; flex: 0 0 auto; visibility: hidden; width: auto; justify-content: flex-end; }
+.row:hover .row-actions, .row:focus-within .row-actions, .row.actions-open .row-actions { visibility: visible; }
 .badge-new { color: var(--muted); font-weight: 500; }
 .row-actions button {
   width: 20px; height: 18px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
@@ -897,3 +897,10 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 
 .new-row .note { flex: 1 1 auto; min-width: 0; }
 .new-row #new-show { margin-left: auto; }
+
+/* Действия ленты: на сенсорных экранах открываются долгим тапом. */
+.row.actions-open { background: var(--panel-2); }
+@media (pointer: coarse) {
+  .row-actions { width: auto; }
+  .row-actions button { min-width: 26px; min-height: 26px; }
+}
