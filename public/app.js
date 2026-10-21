@@ -493,7 +493,7 @@ function renderSidebar() {
       ${badge(
       // В режиме «Все» показываем, сколько статей всего, иначе — сколько непрочитанных.
       state.prefs.feedUnread?.[feed.id] === false ? feed.total : feed.unread,
-      state.data.addedByFeed?.[feed.id] ?? 0,
+      pendingNewForFeed(feed.id),
     )}
     </div></li>`;
   };
@@ -596,6 +596,18 @@ function renderToolbar() {
 }
 
 /** Сколько новых статей пришло в текущий вид после того, как его открыли. */
+/** Сколько новых статей у ленты — по тому же правилу, что и плашка сверху. */
+function pendingNewForFeed(feedId) {
+  const snapshot = state.snapshot?.ids;
+  if (!snapshot) return 0;
+  return (state.data.items ?? []).filter((item) => {
+    if (item.feedId !== feedId) return false;
+    if (snapshot.has(item.id)) return false;
+    if (!passesFeedFilters(item)) return false;
+    return true;
+  }).length;
+}
+
 function pendingNewCount() {
   const snapshot = state.snapshot?.ids;
   if (!snapshot) return 0;
