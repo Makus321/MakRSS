@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MAK RSS Reader</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f97316'/><circle cx='10' cy='22' r='3' fill='white'/><path d='M7 14a11 11 0 0 1 11 11' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/><path d='M7 7a18 18 0 0 1 18 18' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="/style.css?v=97">
+<link rel="stylesheet" href="/style.css?v=98">
 <!-- Установка на домашний экран телефона (PWA) -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -360,7 +360,15 @@
         </div>
         <div class="btn-row">
           <button class="btn primary" id="save-credentials">Сменить пароль</button>
-          <div class="hint" id="settings-version">Версия 1.0</div>
+          <section>
+          <h4>Работа с содержимым</h4>
+          <label class="row-line">Режим <select id="set-content-mode">
+            <option value="native">Обычный: тексты и медиа по запросу</option>
+            <option value="fever">Как клиент Fever: только синхронизация, без подгрузки</option>
+          </select></label>
+          <div class="hint">В режиме Fever список и тексты приходят при синхронизации и хранятся на устройстве; при листании ничего не докачивается, отметки о прочтении отправляются сразу.</div>
+        </section>
+        <div class="hint" id="settings-version">Версия 1.0</div>
         <button class="btn" id="logout-btn">Выйти из аккаунта</button>
         </div>
         <div class="fever-info" id="fever-info"></div>
@@ -458,6 +466,6 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
-<script src="/app.js?v=140" type="module"></script>
+<script src="/app.js?v=141" type="module"></script>
 </body>
 </html>

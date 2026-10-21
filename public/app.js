@@ -1078,7 +1078,13 @@ function holdImageSpace(root) {
 }
 
 /** Просит сервер докачать тексты и складывает статьи в кэш service worker. */
+/** Режим «как клиент Fever»: работает только синхронизация, без подгрузки. */
+function feverMode() {
+  return Boolean(state.settings?.feverMode);
+}
+
 async function warmArticles(force = false) {
+  if (feverMode()) return;            // в режиме Fever фоном ничего не качаем
   if (!navigator.onLine || state.scrolling) return;
   const last = Number(localStorage.getItem(WARM_KEY) ?? 0);
   if (!force && Date.now() - last < WARM_INTERVAL_MS) return;
@@ -2662,6 +2668,7 @@ function setSettingsLoading(loading) {
 function fillSettingsForm() {
   const s = state.settings ?? {};
   $('#set-theme').value = state.prefs.theme;
+  $('#set-content-mode').value = s.feverMode ? 'fever' : 'native';
   $('#set-default-view').value = s.defaultView ?? 'compact-thumb';
   $('#set-density').value = state.prefs.density;
   setSelectValue($('#set-thumbs'), state.prefs.thumbs ? 'yes' : 'no');
@@ -2793,6 +2800,13 @@ $('#set-default-view').addEventListener('change', async (e) => {
   pushSettings({ defaultView: e.target.value });   // сразу применяем, отправляем в очереди
   render();
 });
+$('#set-content-mode').addEventListener('change', (e) => {
+  const mode = e.target.value === 'fever' ? 'fever' : 'native';
+  state.settings.feverMode = mode === 'fever';
+  pushSettings({ feverMode: state.settings.feverMode });
+  render();
+});
+
 $('#set-density').addEventListener('change', (e) => {
   state.prefs.density = e.target.value;
   $('#list').classList.toggle('comfortable', e.target.value === 'comfortable');

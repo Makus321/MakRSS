@@ -428,6 +428,20 @@ async function dedupeFeeds() {
 /** Свежие статьи сверху, следом — то, что уже было (лента могла «сдвинуть окно»). */
 async function mergeItems(feedId, fresh) {
   const feed = feedById(feedId);
+  // Лента «только картинки»: на сервере оставляем из текста лишь изображения,
+  // иначе в списке и в статье всё равно шёл обычный текст.
+  if (feed?.imagesOnly) {
+    fresh = fresh.map((item) => {
+      const html = String(item.content ?? '');
+      const pictures = [...html.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+      return {
+        ...item,
+        excerpt: '',
+        content: pictures.join(''),
+        contentLength: 0,
+      };
+    });
+  }
   // Отфильтрованное не скачиваем вовсе: и в базе, и в Fever его быть не должно.
   const skipped = feed ? fresh.filter((item) => !passesFilters(feed, toMeta(item))) : [];
   if (skipped.length) {
@@ -1485,6 +1499,9 @@ function settingsView(req) {
       configured: Boolean(envAuth() || s.auth?.apiKey),
     } : { path: '/fever/', configured: Boolean(envAuth() || s.auth?.apiKey) },
     fetchFull: fetchFullEnabled(),
+    // Режим работы «как клиент Fever»: список берём один раз за синхронизацию,
+    // тексты храним на устройстве, отметки отправляем сразу.
+    feverMode: Boolean(db.settings?.feverMode),
     defaultView: s.defaultView,
     defaultLines: Number(s.defaultLines) || 4,
     defaultWidth: clampTextWidth(s.defaultWidth ?? MAX_TEXT_WIDTH),
@@ -1937,6 +1954,7 @@ async function api(req, res, url) {
   if (route === 'POST /api/settings') {
     const body = await readJson(req);
     const s = settings();
+    if (typeof body.feverMode === 'boolean') db.settings.feverMode = body.feverMode;
     if (typeof body.fetchFull === 'boolean') {
       s.fetchFull = body.fetchFull;
       if (body.fetchFull) { enqueueAllFullText(); pumpQueue(); }
