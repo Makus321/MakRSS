@@ -901,8 +901,16 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Действия ленты: на сенсорных экранах открываются долгим тапом. */
 .row.actions-open { background: var(--panel-2); }
 @media (pointer: coarse) {
-  /* Кнопки действий ленты вдвое крупнее: пальцем в мелкие не попасть. */
-  .row-actions { width: auto; gap: 4px; }
+  /* Кнопки действий ленты крупные и лежат ПОВЕРХ строки: названия лент при этом
+     не сжимаются до «X» и «i…», а налезание на соседнюю строку допустимо —
+     панель видна только пока открыта. */
+  .row { position: relative; }
+  .row-actions {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    gap: 4px; padding: 3px 4px; border-radius: 10px;
+    background: var(--panel); box-shadow: 0 6px 16px -10px rgba(0, 0, 0, .6);
+  }
+  .row.actions-open { padding-right: 4px; }
   .row-actions button {
     min-width: 44px; min-height: 40px; border-radius: 9px;
     font-size: calc(16px * var(--ui-scale, 1));

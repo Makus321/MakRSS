@@ -1884,6 +1884,27 @@ async function saveTree() {
 }
 
 /** Сдвигает ленту на одну позицию внутри её папки: -1 вверх, +1 вниз. */
+/** Переименование ленты (используется и кнопкой, и долгим тапом). */
+async function renameFeedPrompt(feedId) {
+  const feed = feedById(feedId);
+  const name = prompt('Название ленты:', feed?.title ?? '');
+  if (!name?.trim()) return;
+  try { applyPayload(await api('/api/feeds/rename', { id: feed.id, title: name.trim() })); }
+  catch (err) { toast(err.message, true); }
+}
+
+/** Отписка от ленты. */
+async function removeFeedPrompt(feedId) {
+  const feed = feedById(feedId);
+  if (!confirm(`Отписаться от «${feed?.title ?? ''}»?`)) return;
+  try {
+    applyPayload(await api('/api/feeds/remove', { id: feed.id }));
+    if (state.view.type === 'feed' && state.view.id === feed.id) state.view = { type: 'unread', id: null };
+    state.bodies.clear();
+    render();
+  } catch (err) { toast(err.message, true); }
+}
+
 function moveFeedBy(feedId, delta) {
   const feed = state.data.feeds.find((f) => f.id === feedId);
   if (!feed) return;
@@ -2068,8 +2089,20 @@ const closeRowActions = () => {
   for (const row of document.querySelectorAll('.row.actions-open')) row.classList.remove('actions-open');
 };
 $('#tree').addEventListener('pointerdown', (event) => {
+  // Кнопки действий срабатывают прямо на нажатие: на телефоне клик после
+  // долгого тапа иногда не доходит до обработчика клика.
+  const action = event.target.closest('[data-feed-up], [data-feed-down], [data-feed-rename], [data-feed-del]');
+  if (action) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (action.dataset.feedUp) moveFeedBy(action.dataset.feedUp, -1);
+    else if (action.dataset.feedDown) moveFeedBy(action.dataset.feedDown, 1);
+    else if (action.dataset.feedRename) renameFeedPrompt(action.dataset.feedRename);
+    else if (action.dataset.feedDel) removeFeedPrompt(action.dataset.feedDel);
+    return;
+  }
   const row = event.target.closest('.row[data-feed]');
-  if (!row || event.target.closest('.row-actions button')) return;
+  if (!row) return;
   longPressStart = { x: event.clientX, y: event.clientY };
   clearTimeout(longPressTimer);
   longPressTimer = setTimeout(() => {
@@ -2112,27 +2145,9 @@ $('#tree').addEventListener('click', async (event) => {
     return;
   }
   const renameFeed = event.target.closest('[data-feed-rename]');
-  if (renameFeed) {
-    const feed = feedById(renameFeed.dataset.feedRename);
-    const name = prompt('Название ленты:', feed?.title ?? '');
-    if (name?.trim()) {
-      try { applyPayload(await api('/api/feeds/rename', { id: feed.id, title: name.trim() })); } catch (err) { toast(err.message, true); }
-    }
-    return;
-  }
+  if (renameFeed) { renameFeedPrompt(renameFeed.dataset.feedRename); return; }
   const delFeed = event.target.closest('[data-feed-del]');
-  if (delFeed) {
-    const feed = feedById(delFeed.dataset.feedDel);
-    if (confirm(`Отписаться от «${feed?.title ?? ''}»?`)) {
-      try {
-        applyPayload(await api('/api/feeds/remove', { id: feed.id }));
-        if (state.view.type === 'feed' && state.view.id === feed.id) state.view = { type: 'unread', id: null };
-        state.bodies.clear();
-        render();
-      } catch (err) { toast(err.message, true); }
-    }
-    return;
-  }
+  if (delFeed) { removeFeedPrompt(delFeed.dataset.feedDel); return; }
   const renameFolder = event.target.closest('[data-folder-rename]');
   if (renameFolder) {
     const folder = state.data.folders.find((f) => f.id === renameFolder.dataset.folderRename);
