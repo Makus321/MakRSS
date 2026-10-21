@@ -116,7 +116,7 @@ async function refreshVersion() {
 const PARSER_VERSION = 17;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
-const BODY_VERSION = 9;
+const BODY_VERSION = 10;
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -333,13 +333,22 @@ async function httpGet(url, opts = {}) {
 
 // ------------------------------------------------------------- структура
 
+// Анонс в списке: карточке хватает 4–10 строк. Раньше сюда уходило до 1500
+// символов на статью, и /api/data весил мегабайты при каждом опросе.
+const EXCERPT_LIMIT = Number(process.env.EXCERPT_LIMIT || 300);
+
+const shortExcerpt = (text) => {
+  const value = String(text ?? '');
+  return value.length > EXCERPT_LIMIT ? `${value.slice(0, EXCERPT_LIMIT).trimEnd()}…` : value;
+};
+
 const toMeta = (item) => ({
   id: item.id,
   title: item.title,
   link: item.link,
   date: item.date,
   author: item.author,
-  excerpt: item.excerpt,
+  excerpt: shortExcerpt(item.excerpt),
   image: item.image,
   categories: item.categories ?? [],
   hasFull: Boolean(item.hasFull),
