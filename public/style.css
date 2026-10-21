@@ -327,7 +327,10 @@ body.dragging .drop-hint.over { border-color: var(--accent); color: var(--accent
    шапке: во время чтения она появлялась и сдвигала весь список вниз. */
 .new-row {
   position: fixed; z-index: 45; top: 10px; left: 50%; transform: translateX(-50%);
-  width: max-content; max-width: calc(100vw - 24px); margin: 0;
+  /* Ширина подстраивается под экран: на телефоне почти вся ширина, на
+     компьютере — заметная плашка, а не крошечная полоска. */
+  width: min(560px, calc(100vw - 24px)); margin: 0;
+  justify-content: space-between;
   /* Непрозрачный фон: полупрозрачная плашка сливалась с текстом под ней. */
   background: var(--panel); border: 1px solid var(--accent);
   box-shadow: 0 14px 30px -14px rgba(0, 0, 0, .7);
@@ -851,7 +854,11 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .comment-body .img-row > *:not(:has(img, video)) { display: none; }
 
 /* Плашка новых статей: крестик справа. */
-.new-row .new-close { width: 28px; height: 28px; flex: 0 0 auto; }
+.new-row .new-close {
+  width: 30px; height: 30px; flex: 0 0 auto; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+}
+.new-row .new-close:hover { border-color: var(--accent); color: var(--accent); }
 
 /* «Прочитано» в подписи карточки больше не нужно: то же показывает кнопка. */
 .a-meta .read-mark { display: none; }

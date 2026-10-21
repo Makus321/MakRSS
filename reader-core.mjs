@@ -35,6 +35,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { parseFeed, looksLikeFeed, discoverFeedLinks, htmlToText, itemId, stripFeedNoise } from './lib/feed.mjs';
 import { parseXml, localName, elementChildren } from './lib/xml.mjs';
 import { extractArticle, looksLikePageChrome } from './lib/readability.mjs';
@@ -1719,6 +1720,44 @@ function isPublicUrl(parsed) {
   return true;
 }
 
+// Крупные картинки пережимаем в WebP: экономия в 3–10 раз, страница легче,
+// особенно на мобильном интернете. Инструмент cwebp (пакет webp) необязателен:
+// если его нет, отдаём оригинал.
+const IMG_RECOMPRESS_ABOVE = Number(process.env.IMG_RECOMPRESS_ABOVE || 200 * 1024);
+const IMG_WEBP_QUALITY = Number(process.env.IMG_WEBP_QUALITY || 78);
+const IMG_WEBP_WIDTH = Number(process.env.IMG_WEBP_WIDTH || 1000);
+let webpAvailable = null;
+
+async function runCwebp(args) {
+  return new Promise((resolve) => {
+    const child = spawn('cwebp', args, { stdio: 'ignore' });
+    child.on('error', () => resolve(false));
+    child.on('close', (code) => resolve(code === 0));
+  });
+}
+
+/** Пережимает картинку в WebP. Возвращает буфер или null, если не вышло. */
+async function compressToWebp(buffer, baseFile) {
+  if (webpAvailable === false) return null;
+  if (buffer.length < IMG_RECOMPRESS_ABOVE) return null;
+  const source = `${baseFile}.src`;
+  const target = `${baseFile}.webp`;
+  try {
+    await mkdir(MEDIA_DIR, { recursive: true });
+    await writeFile(source, buffer);
+    const ok = await runCwebp(['-quiet', '-q', String(IMG_WEBP_QUALITY), '-resize', String(IMG_WEBP_WIDTH), '0', '-o', target, source]);
+    webpAvailable = ok;
+    if (!ok) return null;
+    const out = await readFile(target);
+    return out.length && out.length < buffer.length ? out : null;
+  } catch {
+    return null;
+  } finally {
+    unlink(source).catch(() => {});
+  }
+}
+
+
 async function serveImage(req, res, url) {
   const source = String(url.searchParams.get('u') ?? '');
   let parsed;
@@ -1728,6 +1767,12 @@ async function serveImage(req, res, url) {
     return;
   }
   const file = imageFileFor(source);
+  try {
+    const webp = await readFile(`${file}.webp`);
+    res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800' });
+    res.end(webp);
+    return;
+  } catch { /* webp ещё нет */ }
   try {
     const data = await readFile(file);
     res.writeHead(200, { 'content-type': MEDIA_TYPES[path.extname(file).toLowerCase()] ?? 'image/jpeg', 'cache-control': 'private, max-age=604800' });
@@ -1746,6 +1791,13 @@ async function serveImage(req, res, url) {
     if (buffer.length > IMG_MAX_BYTES) throw new Error('слишком большая');
     await mkdir(MEDIA_DIR, { recursive: true });
     await writeFile(file, buffer).catch(() => {});
+    const webp = await compressToWebp(buffer, file);
+    if (webp) {
+      await writeFile(`${file}.webp`, webp).catch(() => {});
+      res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800' });
+      res.end(webp);
+      return;
+    }
     res.writeHead(200, { 'content-type': type, 'cache-control': 'private, max-age=604800' });
     res.end(buffer);
   } catch {
