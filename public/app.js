@@ -1937,6 +1937,7 @@ function moveFeed(feedId, folderId, beforeFeedId = null) {
     rest.push(feed);
   }
   state.data.feeds = rest;
+  renderSidebar();                      // сразу показываем новый порядок
   saveTree().catch((err) => toast(err.message, true));
 }
 
