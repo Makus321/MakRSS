@@ -1938,6 +1938,13 @@ function moveFeed(feedId, folderId, beforeFeedId = null) {
   }
   state.data.feeds = rest;
   renderSidebar();                      // сразу показываем новый порядок
+  // Перерисовка сбрасывает открытую панель — возвращаем её для этой же ленты,
+  // иначе после первого нажатия приходилось снова открывать действия.
+  const movedRow = document.querySelector(`.row[data-feed-row="${feedId}"]`);
+  if (movedRow) {
+    movedRow.classList.add('actions-open');
+    movedRow.scrollIntoView({ block: 'nearest' });
+  }
   saveTree().catch((err) => toast(err.message, true));
 }
 
