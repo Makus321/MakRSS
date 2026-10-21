@@ -645,14 +645,20 @@ function renderNewRow() {
   const row = $('#new-row');
   if (!row) return;
   const count = pendingNewCount();
-  // Закрытая плашка не появляется до следующей синхронизации лент.
-  row.hidden = count === 0 || state.newRowClosedFor === state.revision;
+  const totals = JSON.stringify(state.data.addedByFeed ?? {});
+  if (state.newRowClosedTotals && state.newRowClosedTotals !== totals) {
+    state.newRowClosedTotals = null;        // пришла синхронизация — снова можно показать
+  }
+  // Закрытая плашка не появляется, пока данные о новых статьях не изменились.
+  row.hidden = count === 0 || Boolean(state.newRowClosedTotals);
   if (!count) return;
   $('#new-text').textContent = `Новых статей: ${count}`;
 }
 
 $('#new-close').addEventListener('click', () => {
-  state.newRowClosedFor = state.revision;   // запомнили, на какой ревизии закрыли
+  // Запоминаем не ревизию (она меняется от любой отметки «прочитано»), а состав
+  // данных о новых статьях: плашка вернётся только после следующей синхронизации.
+  state.newRowClosedTotals = JSON.stringify(state.data.addedByFeed ?? {});
   $('#new-row').hidden = true;
 });
 
