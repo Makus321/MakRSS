@@ -254,6 +254,40 @@ async function api(path, body, options = {}) {
 /** Годится ли ответ в состояние: в нём обязательно должен быть массив статей. */
 const looksLikeData = (data) => Boolean(data) && Array.isArray(data.items) && Array.isArray(data.feeds);
 
+/**
+ * Настройки внешнего вида применяются сразу, а на сервер уходят в очереди:
+ * при плохой связи интерфейс не ждёт ответа, но изменения не теряются.
+ */
+const pendingSettings = { patch: {}, timer: null, busy: false };
+
+function pushSettings(patch) {
+  Object.assign(pendingSettings.patch, patch);
+  clearTimeout(pendingSettings.timer);
+  pendingSettings.timer = setTimeout(flushSettings, 400);
+}
+
+async function flushSettings() {
+  if (pendingSettings.busy) return;
+  const patch = pendingSettings.patch;
+  if (!Object.keys(patch).length) return;
+  if (!navigator.onLine) { pendingSettings.timer = setTimeout(flushSettings, 5000); return; }
+  pendingSettings.patch = {};
+  pendingSettings.busy = true;
+  try {
+    for (const [key, value] of Object.entries(patch)) {
+      await api('/api/settings', { [key]: value });
+    }
+  } catch {
+    // не получилось — вернём в очередь и попробуем позже
+    Object.assign(pendingSettings.patch, patch);
+    pendingSettings.timer = setTimeout(flushSettings, 8000);
+  } finally {
+    pendingSettings.busy = false;
+  }
+}
+
+window.addEventListener('online', () => flushSettings());
+
 const rememberData = (data) => {
   if (!looksLikeData(data)) return false;         // ответ без данных (нет сети, кэш) — не трогаем состояние
   // Отметки о прочтении, сделанные без сети, важнее того, что пришло с сервера.
@@ -1799,7 +1833,7 @@ async function setViewMode(mode) {
     } catch (err) { toast(err.message, true); }
   } else {
     state.settings.defaultView = mode;
-    await api('/api/settings', { defaultView: mode }).catch(() => {});
+    pushSettings({ defaultView: mode });
     render();
     toast(`Режим по умолчанию: ${modeLabel(mode)}`);
   }
@@ -1964,7 +1998,13 @@ $('#list').addEventListener('scroll', (event) => {
   clearTimeout(scrollSettleTimer);
   scrollSettleTimer = setTimeout(() => {
     updateActiveArticle();
+    // Кнопки проявляются, когда прокрутка затихла, но через полторы секунды
+    // снова становятся полупрозрачными: они не должны закрывать текст.
     for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.add('settled');
+    clearTimeout(state.settleFadeTimer);
+    state.settleFadeTimer = setTimeout(() => {
+      for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.remove('settled');
+    }, 1500);
   }, 260);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {
@@ -2207,7 +2247,7 @@ $('#sort-select').addEventListener('change', async (event) => {
     try { applyPayload(await api('/api/feeds/view', { id: state.view.id, sort })); } catch (err) { toast(err.message, true); }
   } else {
     state.settings.defaultSort = sort;
-    await api('/api/settings', { defaultSort: sort }).catch(() => {});
+    pushSettings({ defaultSort: sort });
     render();
     toast(sort === 'asc' ? 'Порядок: старые сверху' : 'Порядок: новые сверху');
   }
@@ -2508,7 +2548,7 @@ $('#lines-select').addEventListener('change', async (event) => {
     try { applyPayload(await api('/api/feeds/view', { id: state.view.id, lines })); } catch (err) { toast(err.message, true); }
   } else {
     state.settings.defaultLines = lines;
-    await api('/api/settings', { defaultLines: lines }).catch(() => {});
+    pushSettings({ defaultLines: lines });
     render();
     toast(`Показывать строк: ${lines}`);
   }
@@ -2696,7 +2736,7 @@ $('#set-background').addEventListener('change', (e) => {
 });
 $('#set-default-view').addEventListener('change', async (e) => {
   state.settings.defaultView = e.target.value;
-  await api('/api/settings', { defaultView: e.target.value }).catch((err) => toast(err.message, true));
+  pushSettings({ defaultView: e.target.value });   // сразу применяем, отправляем в очереди
   render();
 });
 $('#set-density').addEventListener('change', (e) => {
@@ -3080,7 +3120,7 @@ function setupMobile() {
       try { applyPayload(await api('/api/feeds/view', { id: state.view.id, lines })); } catch (err) { toast(err.message, true); }
     } else {
       state.settings.defaultLines = lines;
-      try { await api('/api/settings', { defaultLines: lines }); } catch { /* не критично */ }
+      pushSettings({ defaultLines: lines });
       render();
     }
   });
