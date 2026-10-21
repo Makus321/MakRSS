@@ -585,8 +585,9 @@ function renderToolbar() {
     ? 'Как показывать статьи этого канала'
     : 'Режим по умолчанию (выберите канал, чтобы задать ему отдельно)';
 
-  const fetching = state.data.fetching ?? {};
-  $('#store-info').textContent = fetching.pending ? `докачка: ${fetching.pending}` : '';
+  // Счётчик «докачка: N» убран из интерфейса: он обновлялся постоянно и
+  // перерисовывал панель, из-за чего сворачивалось видео и мигала рамка.
+  // Прогресс по-прежнему виден в настройках, где он нужен для контроля.
   // «Только картинки» — настройка отдельной ленты, в общих видах её не показываем.
   const feedNow = state.view.type === 'feed' ? viewFeed() : null;
   $('#images-only-wrap').hidden = !feedNow;
@@ -3215,7 +3216,13 @@ function setupMobile() {
  * вручную через «Поделиться» → «На экран „Домой“», поэтому там показываем подсказку.
  */
 // Версия приложения: показывается на экране входа и в настройках.
-const APP_VERSION = '2.1.1';
+// Версия приложения: 1.0.<номер сборки ресурсов>. Номер берётся из запроса
+// к самому app.js (app.js?v=NNN), поэтому версия всегда совпадает со сборкой.
+const BUILD = (() => {
+  const source = document.currentScript?.src ?? '';
+  return Number.parseInt(/v=(\d+)/.exec(source)?.[1] ?? '0', 10) || 131;
+})();
+const APP_VERSION = `1.0.${BUILD}`;
 
 function setupPwa() {
   const versionLabel = 'Версия ' + APP_VERSION + ' · обновляется автоматически';
