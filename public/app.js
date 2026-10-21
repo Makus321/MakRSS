@@ -1086,7 +1086,9 @@ async function warmArticles(force = false) {
   try {
     await api('/api/queue', { action: 'start' });     // сервер качает полные тексты
   } catch { /* сервер ответит позже */ }
-  const ids = visibleItems().slice(0, 30).map((item) => item.id);
+  // Прогреваем только то, что вот-вот откроют: 30 статей по 100–200 КБ
+  // превращались в несколько мегабайт фонового трафика.
+  const ids = visibleItems().slice(0, 8).map((item) => item.id);
   if (!ids.length) return;
   try {
     const res = await fetch('/api/bodies', {
