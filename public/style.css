@@ -879,3 +879,10 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Панель меню «⋯» привязана к шапке на любой ширине экрана. */
 .head-row { position: relative; }
 .head-menu { z-index: 60; }
+
+/* Миниатюра всегда занимает своё место, даже пока грузится: иначе при подгрузке
+   новых карточек список «прыгает» вниз. */
+.a-thumb { background: var(--panel-2); }
+@media (max-width: 560px) {
+  .a-thumb { width: 92px; height: 68px; flex: none; }
+}

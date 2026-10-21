@@ -584,12 +584,14 @@ function renderNewRow() {
   const row = $('#new-row');
   if (!row) return;
   const count = pendingNewCount();
-  row.hidden = count === 0;
+  // Закрытая плашка не появляется до следующей синхронизации лент.
+  row.hidden = count === 0 || state.newRowClosedFor === state.revision;
   if (!count) return;
-  $('#new-text').textContent = `Новых статей: ${count} — в список не добавляю, пока вы здесь.`;
+  $('#new-text').textContent = `Новых статей: ${count}`;
 }
 
 $('#new-close').addEventListener('click', () => {
+  state.newRowClosedFor = state.revision;   // запомнили, на какой ревизии закрыли
   $('#new-row').hidden = true;
 });
 
@@ -3048,6 +3050,7 @@ function setupMobile() {
     sessionStorage.removeItem('rss.reloaded');
     location.reload();
   };
+  // Кнопка в меню убрана, обработчик оставлен на случай возврата.
   $('#menu-update')?.addEventListener('click', () => { closeHeadMenu(); hardReload(); });
   $('#sidebar-update')?.addEventListener('click', hardReload);
 
@@ -3144,6 +3147,14 @@ function setupPwa() {
   if (settingsVersion) settingsVersion.textContent = versionLabel;
   const sidebarVersion = $('#sidebar-version');
   if (sidebarVersion) sidebarVersion.textContent = 'Версия ' + APP_VERSION;
+
+  // Кнопка «Обновить приложение» в дереве нужна только когда на сервере лежит
+  // другая версия — иначе она сбивает с толку.
+  fetch('/api/version').then((r) => r.json()).then((data) => {
+    const server = String(data?.version ?? '');
+    const button = $('#sidebar-update');
+    if (button && server && server !== APP_VERSION) button.hidden = false;
+  }).catch(() => { /* без сети — просто не показываем */ });
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))) {
     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })

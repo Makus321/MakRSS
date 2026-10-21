@@ -93,6 +93,9 @@ const MAX_UNREAD_PER_FEED = Number(process.env.MAX_UNREAD_PER_FEED || argValue('
 const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-read', 1000));
 // Версия разборщика: когда он меняется, ленты перечитываются заново, даже если
 // сайт отвечает «не изменилось» — иначе старые записи остаются без новых полей.
+// Версия сборки: её сравнивает клиент, чтобы показать кнопку «Обновить приложение».
+const APP_VERSION = '2.1.1';
+
 const PARSER_VERSION = 12;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
@@ -2003,6 +2006,11 @@ async function api(req, res, url) {
     if (action === 'clear') { fullTextQueue.length = 0; queuedKeys.clear(); }
     if (action === 'start') { enqueueAllFullText(); pumpQueue(); }
     return json(res, 200, { ok: true, fetching: { pending: fullTextQueue.length, active: fullTextWorking, done: fullTextDone } });
+  }
+
+  // Версия сборки: клиент сравнивает её со своей и показывает кнопку обновления.
+  if (route === 'GET /api/version') {
+    return json(res, 200, { ok: true, version: APP_VERSION });
   }
 
   if (route === 'GET /api/data') {
