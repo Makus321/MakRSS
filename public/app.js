@@ -609,6 +609,14 @@ function pendingNewForFeed(feedId) {
   }).length;
 }
 
+/** Сумма серверных счётчиков «добавлено» по лентам текущего вида. */
+function pendingNewTotal() {
+  const added = state.data.addedByFeed ?? {};
+  const ids = Object.keys(added);
+  if (state.view.type === 'feed') return Number(added[state.view.id]) || 0;
+  return ids.reduce((sum, id) => sum + (Number(added[id]) || 0), 0);
+}
+
 function pendingNewCount() {
   // Считаем ровно те статьи, что сервер добавил при синхронизации — тем же
   // числом, что и «(+N)» у лент. Иначе в плашку попадали все статьи, которых
@@ -646,12 +654,14 @@ function renderNewRow() {
   const row = $('#new-row');
   if (!row) return;
   const count = pendingNewCount();
-  const totals = JSON.stringify(state.data.addedByFeed ?? {});
-  if (state.newRowClosedTotals && state.newRowClosedTotals !== totals) {
-    state.newRowClosedTotals = null;        // пришла синхронизация — снова можно показать
+  const total = pendingNewTotal();
+  // Плашка возвращается только когда сервер добавил новые статьи — то есть
+  // когда суммарный счётчик вырос. Закрытие остаётся в силе до этого момента.
+  if (state.newRowClosedTotal !== null && total > state.newRowClosedTotal) {
+    state.newRowClosedTotal = null;
   }
-  // Закрытая плашка не появляется, пока данные о новых статьях не изменились.
-  row.hidden = count === 0 || Boolean(state.newRowClosedTotals);
+  row.hidden = count === 0
+    || (state.newRowClosedTotal !== null && total <= state.newRowClosedTotal);
   if (!count) return;
   $('#new-text').textContent = `Новых статей: ${count}`;
 }
@@ -659,7 +669,9 @@ function renderNewRow() {
 $('#new-close').addEventListener('click', () => {
   // Запоминаем не ревизию (она меняется от любой отметки «прочитано»), а состав
   // данных о новых статьях: плашка вернётся только после следующей синхронизации.
-  state.newRowClosedTotals = JSON.stringify(state.data.addedByFeed ?? {});
+  // Запоминаем суммарное число новых статей: пока сервер не добавит больше,
+  // плашка не возвращается (отметки «прочитано» и раскрытие её не оживляют).
+  state.newRowClosedTotal = pendingNewTotal();
   $('#new-row').hidden = true;
 });
 
@@ -837,7 +849,7 @@ function switchView(view) {
   state.collapsedItems.clear();
   state.selectedId = null;
   // Перешли в другую ленту — плашка «новые статьи» больше не актуальна.
-  state.newRowClosedTotals = JSON.stringify(state.data.addedByFeed ?? {});
+  state.newRowClosedTotal = pendingNewTotal();
   if ($('#new-row')) $('#new-row').hidden = true;
   manualRead.clear();                   // в другой ленте ручные отметки больше не приоритет
   pendingUnstar.clear();                // и снятые в избранном карточки больше не держим
