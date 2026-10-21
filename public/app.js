@@ -2060,6 +2060,38 @@ $('#list').addEventListener('scroll', (event) => {
 
 $('#view-switch').addEventListener('change', (event) => setViewMode(event.target.value));
 
+// Долгий тап по ленте открывает её действия (переименовать, удалить,
+// переместить): на телефоне наведения мыши нет, и кнопки были недоступны.
+let longPressTimer = null;
+let longPressStart = null;
+const closeRowActions = () => {
+  for (const row of document.querySelectorAll('.row.actions-open')) row.classList.remove('actions-open');
+};
+$('#tree').addEventListener('pointerdown', (event) => {
+  const row = event.target.closest('.row[data-feed]');
+  if (!row || event.target.closest('.row-actions button')) return;
+  longPressStart = { x: event.clientX, y: event.clientY };
+  clearTimeout(longPressTimer);
+  longPressTimer = setTimeout(() => {
+    closeRowActions();
+    row.classList.add('actions-open');
+  }, 500);
+});
+$('#tree').addEventListener('pointermove', (event) => {
+  if (!longPressStart) return;
+  if (Math.abs(event.clientX - longPressStart.x) > 12 || Math.abs(event.clientY - longPressStart.y) > 12) {
+    clearTimeout(longPressTimer);
+    longPressStart = null;
+  }
+});
+const endLongPress = () => { clearTimeout(longPressTimer); longPressStart = null; };
+$('#tree').addEventListener('pointerup', endLongPress);
+$('#tree').addEventListener('pointercancel', endLongPress);
+document.addEventListener('pointerdown', (event) => {
+  if (event.target.closest('.row.actions-open')) return;
+  closeRowActions();
+}, true);
+
 $('#tree').addEventListener('click', async (event) => {
   const toggle = event.target.closest('[data-toggle]');
   // Долгий тап по ленте показывает её действия: на телефоне наведения нет.
