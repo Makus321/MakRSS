@@ -95,7 +95,16 @@ const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-
 // Версия разборщика: когда он меняется, ленты перечитываются заново, даже если
 // сайт отвечает «не изменилось» — иначе старые записи остаются без новых полей.
 // Версия сборки: её сравнивает клиент, чтобы показать кнопку «Обновить приложение».
-const APP_VERSION = '1.0.134';
+// Версия берётся из номера сборки в public/index.html (app.js?v=NNN), поэтому
+// сервер и клиент всегда сообщают одинаковую версию.
+let APP_VERSION = '1.0.0';
+async function loadVersion() {
+  try {
+    const html = await readFile(path.join(__dirname, 'public', 'index.html'), 'utf8');
+    const build = Number.parseInt(/app\.js\?v=(\d+)/.exec(html)?.[1] ?? '0', 10) || 0;
+    if (build) APP_VERSION = `1.0.${build}`;
+  } catch { /* останется версия по умолчанию */ }
+}
 
 const PARSER_VERSION = 16;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
