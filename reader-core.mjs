@@ -106,8 +106,12 @@ async function loadVersion() {
   } catch { /* останется версия по умолчанию */ }
 }
 
-// Версию определяем сразу при загрузке модуля: клиент сравнивает её со своей.
-await loadVersion();
+// Версию читаем заново на каждый запрос: после обновления файлов (без
+// перезапуска службы) сервер не должен сообщать устаревшую версию.
+async function refreshVersion() {
+  await loadVersion();
+  return APP_VERSION;
+}
 
 const PARSER_VERSION = 16;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
@@ -2106,7 +2110,9 @@ async function api(req, res, url) {
 
   // Версия сборки: клиент сравнивает её со своей и показывает кнопку обновления.
   if (route === 'GET /api/version') {
-    return json(res, 200, { ok: true, version: APP_VERSION });
+    const version = await refreshVersion();
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify({ ok: true, version }));
   }
 
   if (route === 'GET /api/data') {
