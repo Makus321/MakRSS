@@ -330,7 +330,8 @@ body.dragging .drop-hint.over { border-color: var(--accent); color: var(--accent
   /* Ширина подстраивается под экран: на телефоне почти вся ширина, на
      компьютере — заметная плашка, а не крошечная полоска. */
   width: min(560px, calc(100vw - 24px)); margin: 0;
-  justify-content: space-between;
+  /* Текст слева, кнопки «Показать» и «✕» — рядом друг с другом справа. */
+  justify-content: flex-start; gap: 8px;
   /* Непрозрачный фон: полупрозрачная плашка сливалась с текстом под ней. */
   background: var(--panel); border: 1px solid var(--accent);
   box-shadow: 0 14px 30px -14px rgba(0, 0, 0, .7);
@@ -893,3 +894,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 @media (max-width: 560px) {
   .a-thumb { width: 92px; height: 68px; flex: none; }
 }
+
+.new-row .note { flex: 1 1 auto; min-width: 0; }
+.new-row #new-show { margin-left: auto; }
