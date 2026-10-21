@@ -1883,7 +1883,7 @@ async function saveTree() {
     feeds: state.data.feeds.map((f, i) => ({ id: f.id, folderId: f.folderId, order: i })),
   });
   if (payload.data) rememberData(payload.data);
-  render();
+  // Интерфейс уже перерисован локально — ждать ответа сервера не нужно.
 }
 
 /** Сдвигает ленту на одну позицию внутри её папки: -1 вверх, +1 вниз. */
