@@ -1038,12 +1038,13 @@ function markWideRow(row, images) {
 }
 
 function holdImageSpace(root) {
+  // Картинкам статьи НЕ ставим заглушку с принудительными пропорциями: вокруг
+  // реального изображения она создавала блок, который после загрузки схлопывался,
+  // и картинка «исчезала». Место резервирует сам <img> (у него задана высота).
   for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
     if (img.dataset.hold === '1' || img.complete) continue;
     img.dataset.hold = '1';
-    img.classList.add('pending');
-    img.addEventListener('load', () => { img.classList.remove('pending'); layoutCardThumbs(); });
-    img.addEventListener('error', () => { img.classList.remove('pending'); });
+    img.addEventListener('load', () => layoutCardThumbs());
   }
   for (const row of root.querySelectorAll('.img-row')) {
     const images = [...row.querySelectorAll('img')];
