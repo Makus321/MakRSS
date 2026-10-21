@@ -2094,9 +2094,6 @@ document.addEventListener('pointerdown', (event) => {
 
 $('#tree').addEventListener('click', async (event) => {
   const toggle = event.target.closest('[data-toggle]');
-  // Долгий тап по ленте показывает её действия: на телефоне наведения нет.
-  if (event.target.closest('[data-feed-up], [data-feed-down], [data-feed-rename], [data-feed-del]')) return;
-
   if (toggle) {
     const id = toggle.dataset.toggle;
     if (state.collapsed.has(id)) state.collapsed.delete(id); else state.collapsed.add(id);

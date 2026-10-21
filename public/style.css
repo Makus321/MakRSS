@@ -901,6 +901,10 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Действия ленты: на сенсорных экранах открываются долгим тапом. */
 .row.actions-open { background: var(--panel-2); }
 @media (pointer: coarse) {
-  .row-actions { width: auto; }
-  .row-actions button { min-width: 26px; min-height: 26px; }
+  /* Кнопки действий ленты вдвое крупнее: пальцем в мелкие не попасть. */
+  .row-actions { width: auto; gap: 4px; }
+  .row-actions button {
+    min-width: 44px; min-height: 40px; border-radius: 9px;
+    font-size: calc(16px * var(--ui-scale, 1));
+  }
 }
