@@ -295,13 +295,8 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
 /* Кнопки в дереве показываются при наведении на строку, размер у них фиксированный. */
 /* Кнопки правки/удаления не сдвигают счётчик: место под них занято всегда,
    а сами они появляются слева от счётчика при наведении. */
-.row-actions { display: flex; gap: 2px; flex: 0 0 auto; visibility: hidden; width: auto; justify-content: flex-end; }
-/* На устройствах с мышью — по наведению; на сенсорных только по долгому тапу:
-   иначе кнопки появлялись от любого касания (тап включает «hover»). */
-@media (hover: hover) {
-  .row:hover .row-actions, .row:focus-within .row-actions { visibility: visible; }
-}
-.row.actions-open .row-actions { visibility: visible; }
+.row-actions { display: flex; gap: 2px; flex: 0 0 auto; visibility: hidden; width: 34px; justify-content: flex-end; }
+.row:hover .row-actions, .row:focus-within .row-actions { visibility: visible; }
 .badge-new { color: var(--muted); font-weight: 500; }
 .row-actions button {
   width: 20px; height: 18px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
@@ -902,28 +897,3 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 
 .new-row .note { flex: 1 1 auto; min-width: 0; }
 .new-row #new-show { margin-left: auto; }
-
-/* Действия ленты: на сенсорных экранах открываются долгим тапом. */
-.row.actions-open { background: var(--panel-2); }
-@media (pointer: coarse) {
-  /* Кнопки действий ленты крупные и лежат ПОВЕРХ строки: названия лент при этом
-     не сжимаются до «X» и «i…», а налезание на соседнюю строку допустимо —
-     панель видна только пока открыта. */
-  .row { position: relative; }
-  .row-actions {
-    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-    gap: 4px; padding: 3px 4px; border-radius: 10px;
-    background: var(--panel); box-shadow: 0 6px 16px -10px rgba(0, 0, 0, .6);
-  }
-  .row.actions-open { padding-right: 4px; }
-  .row-actions button {
-    min-width: 44px; min-height: 40px; border-radius: 9px;
-    font-size: calc(16px * var(--ui-scale, 1));
-  }
-}
-
-/* Значок ленты — кнопка действий: на телефоне это единственный способ
-   добраться до переименования и перемещения. */
-.fav[data-feed-icon] { cursor: pointer; border-radius: 6px; }
-.fav[data-feed-icon]:hover { outline: 1px solid var(--accent); }
-.row.actions-open .fav[data-feed-icon] { outline: 1px solid var(--accent); }

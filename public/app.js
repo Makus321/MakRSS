@@ -481,14 +481,12 @@ function renderSidebar() {
     const letter = (feed.title || '?').trim().charAt(0).toUpperCase();
     return `<li><div class="row feed-row${active ? ' active' : ''}${feed.lastError ? ' warn' : ''}"
         data-feed-row="${esc(feed.id)}" draggable="true" title="${esc(feed.lastError || feed.url)}">
-      <span class="fav" data-feed-icon="${esc(feed.id)}" role="button" tabindex="0" title="Действия с лентой">
+      <span class="fav" aria-hidden="true">
         <span class="fav-letter">${esc(letter)}</span>
         <img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy" onerror="this.remove()">
       </span>
       <span class="row-name${feed.unread ? ' unread' : ''}">${esc(feed.title)}</span>
       <span class="row-actions">
-        <button data-feed-up="${esc(feed.id)}" title="Выше">↑</button>
-        <button data-feed-down="${esc(feed.id)}" title="Ниже">↓</button>
         <button data-feed-rename="${esc(feed.id)}" title="Переименовать">✎</button>
         <button class="del" data-feed-del="${esc(feed.id)}" title="Отписаться">×</button>
       </span>
@@ -1908,19 +1906,6 @@ async function removeFeedPrompt(feedId) {
   } catch (err) { toast(err.message, true); }
 }
 
-function moveFeedBy(feedId, delta) {
-  const feed = state.data.feeds.find((f) => f.id === feedId);
-  if (!feed) return;
-  const siblings = state.data.feeds.filter((f) => (f.folderId ?? null) === (feed.folderId ?? null));
-  const index = siblings.findIndex((f) => f.id === feedId);
-  const targetIndex = index + delta;
-  if (targetIndex < 0 || targetIndex >= siblings.length) return;
-  // Опускаем — ставим перед следующим за соседом; поднимаем — перед соседом.
-  const beforeFeedId = delta > 0
-    ? (siblings[targetIndex + 1]?.id ?? null)
-    : siblings[targetIndex].id;
-  moveFeed(feedId, feed.folderId ?? null, beforeFeedId);
-}
 
 function moveFeed(feedId, folderId, beforeFeedId = null) {
   const feed = state.data.feeds.find((f) => f.id === feedId);
@@ -1938,13 +1923,6 @@ function moveFeed(feedId, folderId, beforeFeedId = null) {
   }
   state.data.feeds = rest;
   renderSidebar();                      // сразу показываем новый порядок
-  // Перерисовка сбрасывает открытую панель — возвращаем её для этой же ленты,
-  // иначе после первого нажатия приходилось снова открывать действия.
-  const movedRow = document.querySelector(`.row[data-feed-row="${feedId}"]`);
-  if (movedRow) {
-    movedRow.classList.add('actions-open');
-    movedRow.scrollIntoView({ block: 'nearest' });
-  }
   saveTree().catch((err) => toast(err.message, true));
 }
 
@@ -2092,88 +2070,14 @@ $('#list').addEventListener('scroll', (event) => {
 
 $('#view-switch').addEventListener('change', (event) => setViewMode(event.target.value));
 
-// Долгий тап по ленте открывает её действия (переименовать, удалить,
-// переместить): на телефоне наведения мыши нет, и кнопки были недоступны.
-let longPressTimer = null;
-let longPressStart = null;
-const closeRowActions = () => {
-  for (const row of document.querySelectorAll('.row.actions-open')) row.classList.remove('actions-open');
-};
-$('#tree').addEventListener('pointerdown', (event) => {
-  // Кнопки действий срабатывают прямо на нажатие: на телефоне клик после
-  // долгого тапа иногда не доходит до обработчика клика.
-  const action = event.target.closest('[data-feed-up], [data-feed-down], [data-feed-rename], [data-feed-del]');
-  if (action) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (action.dataset.feedUp) moveFeedBy(action.dataset.feedUp, -1);
-    else if (action.dataset.feedDown) moveFeedBy(action.dataset.feedDown, 1);
-    else if (action.dataset.feedRename) renameFeedPrompt(action.dataset.feedRename);
-    else if (action.dataset.feedDel) removeFeedPrompt(action.dataset.feedDel);
-    return;
-  }
-  const row = event.target.closest('.row[data-feed]');
-  if (!row) return;
-  longPressStart = { x: event.clientX, y: event.clientY };
-  clearTimeout(longPressTimer);
-  longPressTimer = setTimeout(() => {
-    closeRowActions();
-    row.classList.add('actions-open');
-  }, 500);
-});
-$('#tree').addEventListener('pointermove', (event) => {
-  if (!longPressStart) return;
-  if (Math.abs(event.clientX - longPressStart.x) > 12 || Math.abs(event.clientY - longPressStart.y) > 12) {
-    clearTimeout(longPressTimer);
-    longPressStart = null;
-  }
-});
-const endLongPress = () => { clearTimeout(longPressTimer); longPressStart = null; };
-$('#tree').addEventListener('pointerup', endLongPress);
-$('#tree').addEventListener('pointercancel', endLongPress);
-document.addEventListener('pointerdown', (event) => {
-  if (event.target.closest('.row.actions-open')) return;
-  closeRowActions();
-}, true);
 
 $('#tree').addEventListener('click', async (event) => {
-  // Кнопки действий уже обработаны на pointerdown: клик по ним не должен
-  // заодно переключать ленту (иначе на телефоне закрывалось дерево).
-  if (event.target.closest('.row-actions button')) {
-    event.preventDefault();
-    event.stopPropagation();
-    return;
-  }
-
-  // Клик по значку ленты открывает панель действий (переименовать, удалить,
-  // переместить): на телефоне наведения мыши нет, а значок есть всегда.
-  const feedIcon = event.target.closest('[data-feed-icon]');
-  if (feedIcon) {
-    event.preventDefault();
-    event.stopPropagation();
-    const iconRow = feedIcon.closest('.row');
-    const wasOpen = iconRow?.classList.contains('actions-open');
-    for (const other of document.querySelectorAll('.row.actions-open')) other.classList.remove('actions-open');
-    if (iconRow && !wasOpen) iconRow.classList.add('actions-open');
-    return;
-  }
-
   const toggle = event.target.closest('[data-toggle]');
   if (toggle) {
     const id = toggle.dataset.toggle;
     if (state.collapsed.has(id)) state.collapsed.delete(id); else state.collapsed.add(id);
     saveCollapsed();
     renderSidebar();
-    return;
-  }
-  const moveUp = event.target.closest('[data-feed-up]');
-  if (moveUp) {
-    moveFeedBy(moveUp.dataset.feedUp, -1);
-    return;
-  }
-  const moveDown = event.target.closest('[data-feed-down]');
-  if (moveDown) {
-    moveFeedBy(moveDown.dataset.feedDown, 1);
     return;
   }
   const renameFeed = event.target.closest('[data-feed-rename]');
