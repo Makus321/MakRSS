@@ -97,10 +97,10 @@ const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-
 // Версия сборки: её сравнивает клиент, чтобы показать кнопку «Обновить приложение».
 const APP_VERSION = '1.0.134';
 
-const PARSER_VERSION = 15;
+const PARSER_VERSION = 16;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
-const BODY_VERSION = 8;
+const BODY_VERSION = 9;
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -586,7 +586,8 @@ async function enrichTelegramMedia(channel, items, limit = 8) {
       if (!media) continue;
       const pictures = [...(media.content ?? '').matchAll(/<img[^>]+src="([^"]+)"/gi)].map((m) => m[1]);
       if (pictures.length) {
-        item.content = `${item.content ?? ''}\n${pictures.map((url) => `<p><img src="${url}" alt=""></p>`).join('\n')}`;
+        // Медиа ставим в начало поста, чтобы оно не «уезжало» в конец карточки.
+        item.content = `${pictures.map((url) => `<p><img src="${url}" alt=""></p>`).join('\n')}\n${item.content ?? ''}`;
         if (!item.image) item.image = pictures[0];
       }
       if (media.video && !item.video) item.video = media.video;
