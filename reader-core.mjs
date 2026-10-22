@@ -335,7 +335,7 @@ async function httpGet(url, opts = {}) {
 
 // Анонс в списке: карточке хватает 4–10 строк. Раньше сюда уходило до 1500
 // символов на статью, и /api/data весил мегабайты при каждом опросе.
-const EXCERPT_LIMIT = Number(process.env.EXCERPT_LIMIT || 300);
+const EXCERPT_LIMIT = Number(process.env.EXCERPT_LIMIT || 180);
 
 const shortExcerpt = (text) => {
   const value = String(text ?? '');
@@ -1219,28 +1219,52 @@ function feedView(feed) {
   };
 }
 
+/** Один элемент списка в том виде, в каком он уходит клиенту. */
+function payloadItem(feed, item) {
+  return {
+    id: item.id,
+    title: item.title,
+    link: item.link,
+    date: item.date,
+    author: item.author || undefined,
+    excerpt: shortExcerpt(item.excerpt),
+    image: item.image || undefined,
+    video: item.video || undefined,
+    categories: item.categories?.length ? item.categories : undefined,
+    hasFull: Boolean(item.hasFull) || undefined,
+    comments: Boolean(commentsProviderFor(feed, item)) || undefined,
+    commentsCount: Number.isFinite(item.commentsCount) ? item.commentsCount : null,
+    feedId: feed.id,
+    feedTitle: feed.title,
+    read: Boolean(db.read[item.id]) || undefined,
+    starred: Boolean(db.starred[item.id]) || undefined,
+  };
+}
+
 function buildPayload() {
   const feeds = [...db.feeds].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const items = [];
   for (const feed of feeds) {
     for (const item of db.items[feed.id] ?? []) {
+      // Анонс обрезаем здесь же: в базе он может быть длиннее, а списку
+      // хватает пары строк. Это главный вес ответа /api/data.
       items.push({
         id: item.id,
         title: item.title,
         link: item.link,
         date: item.date,
-        author: item.author,
-        excerpt: item.excerpt,
-        image: item.image,
-        video: item.video ?? '',
-        categories: item.categories ?? [],
-        hasFull: Boolean(item.hasFull),
-        comments: Boolean(commentsProviderFor(feed, item)),
-        commentsCount: Number.isFinite(item.commentsCount) ? item.commentsCount : null,
+        author: item.author || undefined,
+        excerpt: shortExcerpt(item.excerpt),
+        image: item.image || undefined,
+        video: item.video || undefined,
+        categories: item.categories?.length ? item.categories : undefined,
+        hasFull: Boolean(item.hasFull) || undefined,
+        comments: Boolean(commentsProviderFor(feed, item)) || undefined,
+        commentsCount: Number.isFinite(item.commentsCount) ? item.commentsCount : undefined,
         feedId: feed.id,
         feedTitle: feed.title,
-        read: Boolean(db.read[item.id]),
-        starred: Boolean(db.starred[item.id]),
+        read: Boolean(db.read[item.id]) || undefined,
+        starred: Boolean(db.starred[item.id]) || undefined,
       });
     }
   }
@@ -2149,6 +2173,51 @@ async function api(req, res, url) {
   }
 
   if (route === 'GET /api/data') {
+    // Постраничная выдача статей одного вида: клиенту не нужно тянуть все
+    // 4000+ статей, чтобы показать первые 40 карточек.
+    const viewParam = url.searchParams.get('view');
+    if (viewParam) {
+      const [type, id = ''] = String(viewParam).split(':');
+      const limit = Math.min(200, Math.max(1, Number.parseInt(url.searchParams.get('limit') ?? '40', 10) || 40));
+      const offset = Math.max(0, Number.parseInt(url.searchParams.get('offset') ?? '0', 10) || 0);
+      const feedIds = new Set();
+      if (type === 'feed') feedIds.add(id);
+      else if (type === 'folder') for (const f of db.feeds) if (f.folderId === id) feedIds.add(f.id);
+      else for (const f of db.feeds) feedIds.add(f.id);
+
+      const viewItems = [];
+      for (const feed of db.feeds) {
+        if (!feedIds.has(feed.id)) continue;
+        for (const item of db.items[feed.id] ?? []) {
+          if (type === 'unread' && db.read[item.id]) continue;
+          if (type === 'starred' && !db.starred[item.id]) continue;
+          viewItems.push({ feed, item });
+        }
+      }
+      viewItems.sort((a, b) => Date.parse(b.item.date ?? 0) - Date.parse(a.item.date ?? 0));
+      const page = viewItems.slice(offset, offset + limit).map(({ feed, item }) => payloadItem(feed, item));
+      return json(res, 200, {
+        ok: true,
+        revision: db.revision,
+        view: { type, id: id || null },
+        total: viewItems.length,
+        offset,
+        limit,
+        items: page,
+        counts: {
+          all: db.feeds.reduce((n, f) => n + (db.items[f.id] ?? []).length, 0),
+          unread: db.feeds.reduce((n, f) => n + (db.items[f.id] ?? []).filter((i) => !db.read[i.id]).length, 0),
+          starred: Object.keys(db.starred ?? {}).length,
+        },
+        feeds: [...db.feeds].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(feedView),
+        addedByFeed: lastAddedByFeed,
+        lastRefresh: db.lastRefresh,
+        refreshing,
+        fetching: { pending: fullTextQueue.length, active: fullTextWorking, done: fullTextDone, enabled: fetchFullEnabled() },
+        nextRefreshAt,
+      });
+    }
+
     // Дешёвый опрос: если клиент уже видел эту ревизию, статьи не отправляем.
     const rev = Number.parseInt(url.searchParams.get('rev') ?? '', 10);
     if (Number.isFinite(rev) && rev === Number(db.revision)) {

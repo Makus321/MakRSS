@@ -6,6 +6,7 @@
 // что общее: HTTP-порт, вход, список пользователей и админка /admin.
 
 import { createServer } from 'node:http';
+import { trackTraffic } from './lib/traffic.mjs';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFile, mkdir, rename, readdir, cp, rm, stat } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -413,6 +414,8 @@ const httpsServer = HTTPS_ENABLED ? createHttpsServer({ key: readFileSync(TLS_KE
 async function onRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
   const route = `${req.method} ${url.pathname}`;
+  // Считаем отданные байты по маршрутам (см. lib/traffic.mjs).
+  trackTraffic(req, res, path.join(DATA_DIR, 'traffic.json'));
   try {
     // --- проверка владения доменом для Let's Encrypt ---
     if (url.pathname.startsWith('/.well-known/acme-challenge/')) {
