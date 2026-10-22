@@ -683,7 +683,9 @@ body.dragging .tree-tail { display: flex; }
   /* Четвёртая кнопка — переход к следующей статье — только на телефоне, где панель
      со стрелками свёрнута, и только у плавающих кнопок открытой статьи. */
   .article.expanded.selected .a-actions .a-next { display: inline-flex; }
-  .list { padding: 6px 8px 70vh; touch-action: pan-y; }
+  /* Зазор между краем экрана и карточкой — 2 пикселя (это правило идёт
+     последним, поэтому перекрывает более раннее). */
+  .list { padding: 2px 2px 70vh; touch-action: pan-y; }
   .tree { padding-bottom: 70px; }
 
   .modal { padding: 10px 8px 40px; }
