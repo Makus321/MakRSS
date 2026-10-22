@@ -305,7 +305,7 @@ const applyPayload = (payload) => { if (payload?.data && rememberData(payload.da
  * (тысячи статей, ~1 МБ), хотя показывал первые 40 карточек.
  */
 const PAGED_DATA = true;
-const PAGE_SIZE = 40;
+const PAGE_SIZE = 20;
 
 function viewParam() {
   const { type, id } = state.view ?? {};

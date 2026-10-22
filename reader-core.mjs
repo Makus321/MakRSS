@@ -1445,6 +1445,20 @@ async function serveFavicon(req, res, url) {
   if (icon.status !== 'ok') { res.writeHead(404, { 'cache-control': 'public, max-age=3600' }).end('иконки нет'); return; }
   try {
     const data = await readFile(icon.file);
+    // Значки бывают по 100–300 КБ (логотипы сайтов). Список подписок от этого
+    // тяжелеет на мегабайты, поэтому крупные иконки уменьшаем в WebP и отдаём
+    // маленькими; совсем большие без возможности сжатия не отдаём.
+    const limit = Number(process.env.FAVICON_MAX_BYTES || 24576);
+    if (data.length > limit) {
+      const webp = await compressToWebp(data, `${icon.file}.icon`, { quality: 70, width: 64 });
+      if (webp) {
+        res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=86400' });
+        res.end(webp);
+        return;
+      }
+      res.writeHead(404, { 'cache-control': 'private, max-age=86400' }).end('иконка слишком большая');
+      return;
+    }
     res.writeHead(200, { 'content-type': icon.type, 'cache-control': 'private, max-age=86400' });
     res.end(data);
   } catch {
@@ -1842,15 +1856,16 @@ async function runCwebp(args) {
 }
 
 /** Пережимает картинку в WebP. Возвращает буфер или null, если не вышло. */
-async function compressToWebp(buffer, baseFile) {
+async function compressToWebp(buffer, baseFile, { quality, width } = {}) {
   if (webpAvailable === false) return null;
-  if (buffer.length < IMG_RECOMPRESS_ABOVE) return null;
+  // Если параметры заданы явно (например, для иконок), порог не применяем.
+  if (!quality && buffer.length < IMG_RECOMPRESS_ABOVE) return null;
   const source = `${baseFile}.src`;
   const target = `${baseFile}.webp`;
   try {
     await mkdir(MEDIA_DIR, { recursive: true });
     await writeFile(source, buffer);
-    const ok = await runCwebp(['-quiet', '-q', String(IMG_WEBP_QUALITY), '-resize', String(IMG_WEBP_WIDTH), '0', '-o', target, source]);
+    const ok = await runCwebp(['-quiet', '-q', String(quality ?? IMG_WEBP_QUALITY), '-resize', String(width ?? IMG_WEBP_WIDTH), '0', '-o', target, source]);
     webpAvailable = ok;
     if (!ok) return null;
     const out = await readFile(target);
@@ -2244,17 +2259,21 @@ async function api(req, res, url) {
         offset,
         limit,
         items: page,
-        counts: {
-          all: db.feeds.reduce((n, f) => n + (db.items[f.id] ?? []).length, 0),
-          unread: db.feeds.reduce((n, f) => n + (db.items[f.id] ?? []).filter((i) => !db.read[i.id]).length, 0),
-          starred: Object.keys(db.starred ?? {}).length,
-        },
-        feeds: [...db.feeds].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(feedView),
-        addedByFeed: lastAddedByFeed,
-        lastRefresh: db.lastRefresh,
-        refreshing,
-        fetching: { pending: fullTextQueue.length, active: fullTextWorking, done: fullTextDone, enabled: fetchFullEnabled() },
-        nextRefreshAt,
+        // Постоянные части состояния (дерево, счётчики) отдаём только с первой
+        // страницей: в следующих это лишние десятки килобайт на каждую прокрутку.
+        ...(offset === 0 ? {
+          counts: {
+            all: db.feeds.reduce((n, f) => n + (db.items[f.id] ?? []).length, 0),
+            unread: db.feeds.reduce((n, f) => n + (db.items[f.id] ?? []).filter((i) => !db.read[i.id]).length, 0),
+            starred: Object.keys(db.starred ?? {}).length,
+          },
+          feeds: [...db.feeds].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(feedView),
+          addedByFeed: lastAddedByFeed,
+          lastRefresh: db.lastRefresh,
+          refreshing,
+          fetching: { pending: fullTextQueue.length, active: fullTextWorking, done: fullTextDone, enabled: fetchFullEnabled() },
+          nextRefreshAt,
+        } : {}),
       });
     }
 
