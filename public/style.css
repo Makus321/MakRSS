@@ -944,8 +944,13 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Кнопки в шапке окна: фон шапки совпадал с фоном кнопки (.btn = --panel-2),
    поэтому «Выйти из аккаунта» сливалась с заголовком. */
 .modal-head .head-actions .btn {
-  background: var(--bg);
-  border-color: var(--line);
+  /* Светлее фона шапки: в тёмной теме это заметная «плашка», в светлой тоже. */
+  background: rgba(255, 255, 255, .12);
+  border-color: rgba(255, 255, 255, .18);
+}
+:root[data-theme="light"] .modal-head .head-actions .btn {
+  background: rgba(0, 0, 0, .06);
+  border-color: rgba(0, 0, 0, .14);
 }
 .modal-head .head-actions .btn:hover { background: var(--panel); border-color: var(--accent); }
 

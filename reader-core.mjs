@@ -819,6 +819,11 @@ async function fetchFullText(feedId, itemId) {
   if (body.fullHtml) {
     // Текст уже лежит в хранилище — помечаем статью, чтобы не ставить её в очередь снова.
     if (!target.hasFull) { target.hasFull = true; store.saveStateSoon(400, { bump: false }); }
+    // У старых избранных статей не было превью — берём картинку из текста.
+    if (!target.image) {
+      const firstImage = /<img[^>]+src="([^"]+)"/i.exec(body.fullHtml ?? '')?.[1];
+      if (firstImage) { target.image = firstImage; store.saveStateSoon(400, { bump: false }); }
+    }
     return { ok: true, cached: true };
   }
 
@@ -1525,6 +1530,33 @@ async function serveFavicon(req, res, url) {
  * Заодно исправляет расхождение «скачан, а текста нет» — оно возникает, если процесс
  * прервали между записью состояния и записью файла с текстом.
  */
+/**
+ * Разово подставляет превью избранным статьям, у которых картинки не было, но
+ * текст уже скачан. Без этого старые избранные так и оставались без картинок.
+ */
+let backfillDone = false;
+
+async function backfillStarredImages(limit = 200) {
+  let fixed = 0;
+  for (const feed of db.feeds) {
+    if (fixed >= limit) break;
+    for (const item of db.items[feed.id] ?? []) {
+      if (fixed >= limit) break;
+      if (!db.starred[item.id] || item.image) continue;
+      const body = (await store.body(feed.id, item.id)) ?? {};
+      const firstImage = /<img[^>]+src="([^"]+)"/i.exec(body.fullHtml ?? body.content ?? '')?.[1];
+      if (!firstImage) continue;
+      item.image = firstImage;
+      fixed += 1;
+    }
+  }
+  if (fixed) {
+    store.saveStateSoon(400, { bump: false });
+    log(`превью избранного: подставлено картинок ${fixed}`);
+  }
+  return fixed;
+}
+
 async function bodiesFor(ids) {
   const out = {};
   const byFeed = new Map();
@@ -2313,6 +2345,8 @@ async function api(req, res, url) {
   }
 
   if (route === 'GET /api/data') {
+    // Один раз за запуск: подставляем превью старым избранным статьям из их текста.
+    if (!backfillDone) { backfillDone = true; await backfillStarredImages().catch(() => 0); }
     // Постраничная выдача статей одного вида: клиенту не нужно тянуть все
     // 4000+ статей, чтобы показать первые 40 карточек.
     const viewParam = url.searchParams.get('view');
