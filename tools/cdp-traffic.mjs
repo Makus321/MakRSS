@@ -302,6 +302,19 @@ const fullProbe = await evaluate(`(() => {
 })()`);
 console.log('  полный вид:', JSON.stringify(fullProbe));
 
+// Проверка масштаба: ставим 60% и смотрим ширину карточки.
+const zoomProbe = await evaluate(`(async () => {
+  const card = () => document.querySelector('.article');
+  if (!card()) return null;
+  const before = Math.round(card().getBoundingClientRect().width);
+  const minus = document.querySelector('.width-controls button, [data-width-dec], #width-dec');
+  for (let i = 0; i < 12 && minus; i += 1) minus.click();
+  await new Promise((r) => setTimeout(r, 500));
+  const after = Math.round(card().getBoundingClientRect().width);
+  return { before, after, value: document.querySelector('#width-value')?.textContent || '' };
+})()`);
+console.log('  масштаб:', JSON.stringify(zoomProbe));
+
 // Замер геометрии после загрузки списка.
 const geometryFinal = await evaluate(`(() => {
   const list = document.querySelector('#list');
