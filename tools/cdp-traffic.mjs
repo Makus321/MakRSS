@@ -302,6 +302,32 @@ const fullProbe = await evaluate(`(() => {
 })()`);
 console.log('  полный вид:', JSON.stringify(fullProbe));
 
+const hitProbe = await evaluate(`(() => {
+  const btn = document.querySelector('.article [data-star]');
+  if (!btn) return 'нет кнопки';
+  const r = btn.getBoundingClientRect();
+  const cx = Math.round(r.left + r.width / 2);
+  const cy = Math.round(r.top + r.height / 2);
+  const top = document.elementFromPoint(cx, cy);
+  return {
+    rect: { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) },
+    point: { cx, cy },
+    topTag: top ? top.tagName + '.' + (top.className || '') : 'нет',
+    isButton: top === btn || btn.contains(top),
+    pointerEvents: getComputedStyle(btn).pointerEvents,
+    display: getComputedStyle(btn.parentElement).position,
+  };
+})()`);
+console.log('  что под курсором у звезды:', JSON.stringify(hitProbe));
+
+// Проверка кнопки «в избранное»: считаем бейдж до и после, ждём ответа сервера.
+const starBefore = Number((await evaluate("document.querySelector('#badge-starred')?.textContent ?? '0'")).trim() || 0);
+await realClick('.article [data-star]');
+await sleep(3000);
+const starAfter = Number((await evaluate("document.querySelector('#badge-starred')?.textContent ?? '0'")).trim() || 0);
+const starServer = await evaluate("fetch('/api/data', { cache: 'no-store' }).then((r) => r.json()).then((d) => (d.data || d).counts?.starred ?? -1)");
+console.log('  избранное: бейдж', starBefore, '→', starAfter, '| на сервере:', starServer);
+
 // Проверка масштаба: ставим 60% и смотрим ширину карточки.
 const zoomProbe = await evaluate(`(async () => {
   const card = () => document.querySelector('.article');

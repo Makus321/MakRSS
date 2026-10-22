@@ -1926,9 +1926,19 @@ async function toggleStar(id, event) {
   const item = state.data.items.find((i) => i.id === id);
   if (!item) return;
   const next = !item.starred;
+  // Сначала показываем результат, потом отправляем: иначе при медленной сети
+  // нажатие выглядело как «ничего не произошло».
+  item.starred = next;
+  if (state.data?.counts) {
+    state.data.counts.starred = Math.max(0, Number(state.data.counts.starred ?? 0) + (next ? 1 : -1));
+  }
+  // В «Избранном» новая статья должна появляться сразу.
+  if (next && state.view.type === 'starred' && state.snapshot?.ids) state.snapshot.ids.add(item.id);
+  renderSidebar();
+  renderList();
   try {
     const payload = await api('/api/star', { id, starred: next, light: true });
-    rememberData(payload.data);
+    if (payload?.data) rememberData(payload.data);
     // В «Избранном» снятие звезды не перерисовываем сразу: нажатие могло быть
     // случайным, и статья не должна исчезать из-под пальца. Список пересоберётся
     // при переходе в другую ленту или после перезагрузки страницы.
