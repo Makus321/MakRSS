@@ -657,7 +657,8 @@ body.dragging .tree-tail { display: flex; }
   .a-actions button { width: 30px; height: 30px; font-size: calc(14px * var(--ui-scale, 1)); }
   /* Минимальные поля: текст должен доходить до края карточки. */
   .a-head { padding: 6px 40px 6px 8px; row-gap: 4px; }
-  .list { padding: 4px 4px 80vh; }
+  /* Зазор между краем экрана и карточкой — 2 пикселя. */
+  .list { padding: 2px 2px 80vh; }
   .article { border-radius: 8px; margin-bottom: 4px; }
   .a-body { padding: 2px 8px 10px; }
   .article.expanded:not(.selected) .a-body { padding-right: 40px; }
