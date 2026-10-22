@@ -3511,7 +3511,10 @@ start();
     if (state.scrolling) { state.deferredPoll = true; return; }
     if (document.hidden) return;
     loadData({ poll: true });
-  }, feverMode() ? 600_000 : 120_000);
+    // Опрос чаще: отметки о прочтении, сделанные в другом клиенте (Fever),
+  // должны появляться здесь за считанные секунды. Ответ «не изменилось»
+  // весит пару сотен байт, так что это дёшево.
+  }, feverMode() ? 60_000 : 20_000);
   setInterval(() => {
     if (feverMode()) return;                       // в Fever очередь не опрашиваем
     if (state.scrolling || document.hidden) return;

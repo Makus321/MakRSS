@@ -363,6 +363,19 @@ const geometryFinal = await evaluate(`(() => {
 })()`);
 console.log('  геометрия карточки:', JSON.stringify(geometryFinal));
 
+// Проверка живых событий: открыт ли /api/events и приходят ли изменения.
+const sseProbe = await evaluate(`(async () => {
+  const before = (document.querySelector('#badge-starred')?.textContent ?? '').trim();
+  // Помечаем первую статью избранной «извне» (как это сделал бы Fever-клиент).
+  const id = document.querySelector('.article')?.dataset.item;
+  if (!id) return { error: 'нет статьи' };
+  await fetch('/api/star', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, starred: true, light: true }) });
+  await new Promise((r) => setTimeout(r, 4000));
+  const after = (document.querySelector('#badge-starred')?.textContent ?? '').trim();
+  return { before, after, eventsOpen: performance.getEntriesByType('resource').some((e) => e.name.includes('/api/events')) };
+})()`);
+console.log('  события:', JSON.stringify(sseProbe));
+
 // Ищем элементы с «0:00» — что это за время.
 const findZero = await evaluate(`(() => {
   const hits = [];
