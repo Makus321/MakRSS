@@ -939,7 +939,10 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 }
 
 /* Шапка настроек: «Выйти из аккаунта» слева от «Закрыть». */
-.modal-head .head-actions { display: flex; align-items: center; gap: 8px; }
+/* Кнопки шапки лежат внутри .head-actions, поэтому поднимаем их над sticky-шапкой:
+   раньше нижняя часть кнопки «Закрыть» перекрывалась телом окна и не нажималась. */
+.modal-head .head-actions { display: flex; align-items: center; gap: 8px; position: relative; z-index: 5; }
+.modal-head .head-actions .btn { position: relative; z-index: 5; }
 
 /* Кнопки в шапке окна: фон шапки совпадал с фоном кнопки (.btn = --panel-2),
    поэтому «Выйти из аккаунта» сливалась с заголовком. */
