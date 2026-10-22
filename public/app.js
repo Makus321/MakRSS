@@ -314,14 +314,14 @@ function viewParam() {
 
 const viewRequests = new Map();      // ключ → время последнего запроса
 
-async function fetchView({ reset = false } = {}) {
+async function fetchView({ reset = false, force = false } = {}) {
   const offset = reset ? 0 : Number(state.viewOffset ?? 0);
   // Один и тот же запрос мог уйти несколько раз за кадр (перерисовка, прокрутка,
   // смена вида). Повторяем не чаще раза в 1,5 с и никогда — параллельно.
   const key = `${viewParam()}:${offset}`;
   const last = viewRequests.get(key) ?? 0;
-  if (!reset && Date.now() - last < 1500) return false;
-  if (state.viewLoading && !reset) return false;
+  if (!reset && !force && Date.now() - last < 1500) return false;
+  if (state.viewLoading && !reset && !force) return false;
   viewRequests.set(key, Date.now());
   state.viewLoading = true;
   try {
@@ -2159,8 +2159,15 @@ $('#list').addEventListener('scroll', (event) => {
         // уходило до сотни запросов вместо десятка.
         if (!PAGED_DATA) return;
         if ((state.viewOffset ?? 0) >= (state.viewTotal ?? 0)) return;
-        if (Date.now() - (state.lastPageAt ?? 0) < 800) return;
+        // Пока в списке есть непоказанные карточки — страницу не просим.
+        if (state.limit + 5 < visibleItems().length) return;
+        const el = $('#list');
+        const atBottom = el && el.scrollTop + el.clientHeight > el.scrollHeight - 120;
+        state.bottomHits = atBottom ? (state.bottomHits ?? 0) + 1 : 0;
+        if ((state.bottomHits ?? 0) < 2) return;
+        if (Date.now() - (state.lastPageAt ?? 0) < 1500) return;
         state.lastPageAt = Date.now();
+        state.bottomHits = 0;
         const ok = await fetchView();
         if (ok) renderList();
       }, 200);
@@ -3115,7 +3122,10 @@ async function loadData({ poll = false } = {}) {
           return;
         }
       }
-      const ok = await fetchView({ reset: true });
+      // Дополняем список, а не перезагружаем первую страницу: при каждом
+      // изменении ревизии (а её меняют и докачки текстов) клиент заново тянул
+      // первую страницу с деревом — это и давало десятки крупных запросов.
+      const ok = state.data?.items?.length ? await fetchView({ force: true }) : await fetchView({ reset: true });
       if (!ok) return;
       render();
       flushPendingReads();
