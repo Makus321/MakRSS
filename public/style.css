@@ -941,6 +941,14 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Шапка настроек: «Выйти из аккаунта» слева от «Закрыть». */
 .modal-head .head-actions { display: flex; align-items: center; gap: 8px; }
 
+/* Кнопки в шапке окна: фон шапки совпадал с фоном кнопки (.btn = --panel-2),
+   поэтому «Выйти из аккаунта» сливалась с заголовком. */
+.modal-head .head-actions .btn {
+  background: var(--bg);
+  border-color: var(--line);
+}
+.modal-head .head-actions .btn:hover { background: var(--panel); border-color: var(--accent); }
+
 /* Поля пароля и кнопка «Сменить пароль» — в одной строке. */
 /* Поля пароля и кнопка «Сменить пароль» — в одной строке, по нижнему краю полей. */
 .pass-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
