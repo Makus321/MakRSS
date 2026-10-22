@@ -771,11 +771,11 @@ async function fetchFullText(feedId, itemId) {
   if (body.fullHtml && Number(body.bodyVersion ?? 1) < BODY_VERSION) {
     body = {};
     // статья считалась «текст есть» — снимаем метку, иначе клиент не попросит заново
-    if (target.hasFull) { target.hasFull = false; store.saveStateSoon(); }
+    if (target.hasFull) { target.hasFull = false; store.saveStateSoon(400, { bump: false }); }
   }
   if (body.fullHtml) {
     // Текст уже лежит в хранилище — помечаем статью, чтобы не ставить её в очередь снова.
-    if (!target.hasFull) { target.hasFull = true; store.saveStateSoon(); }
+    if (!target.hasFull) { target.hasFull = true; store.saveStateSoon(400, { bump: false }); }
     return { ok: true, cached: true };
   }
 
@@ -788,7 +788,7 @@ async function fetchFullText(feedId, itemId) {
     if (article.textLength < FULLTEXT_MIN_ARTICLE_CHARS || looksLikePageChrome(article.html)) {
       // Либо текста нет, либо это шапка/меню сайта — тогда остаётся текст из ленты.
       target.fullTriedAt = new Date().toISOString();
-      store.saveStateSoon();
+      store.saveStateSoon(400, { bump: false });
       return { ok: false, error: 'основной текст на странице не найден' };
     }
     await store.setBody(feedId, itemId, {
@@ -803,12 +803,12 @@ async function fetchFullText(feedId, itemId) {
     target.fullTriedAt = new Date().toISOString();
     if (!target.image && article.image) target.image = article.image;
     if (!target.excerpt) target.excerpt = htmlToText(article.html).slice(0, 400);
-    store.saveStateSoon();
+    store.saveStateSoon(400, { bump: false });
     fullTextDone += 1;
     return { ok: true, chars: article.textLength };
   } catch (err) {
     target.fullTriedAt = new Date().toISOString();
-    store.saveStateSoon();
+    store.saveStateSoon(400, { bump: false });
     return { ok: false, error: err.name === 'AbortError' ? 'таймаут запроса' : err.message };
   }
 }
@@ -2310,27 +2310,30 @@ async function api(req, res, url) {
       return json(res, 200, { ok: true, changed: true, revision: db.revision });
     }
     if (Number.isFinite(rev) && rev === Number(db.revision)) {
-      const feeds = [...db.feeds].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(feedView);
-      const items = db.feeds.flatMap((f) => db.items[f.id] ?? []);
+      // Ответ «ничего не изменилось» должен быть крошечным: только счётчики и
+      // непрочитанные по лентам (46 чисел вместо полного дерева на 22 КБ).
+      const items = [];
+      const feedUnread = {};
+      for (const feed of db.feeds) {
+        const list = db.items[feed.id] ?? [];
+        items.push(...list);
+        feedUnread[feed.id] = list.filter((i) => !db.read[i.id]).length;
+      }
       return json(res, 200, {
         ok: true,
         unchanged: true,
         revision: db.revision,
-        feeds,
         counts: {
           all: items.length,
           unread: items.filter((i) => !db.read[i.id]).length,
-          starred: items.filter((i) => db.starred[i.id]).length,
+          starred: Object.keys(db.starred ?? {}).length,
         },
+        feedUnread,
         refreshing,
         fetching: { pending: fullTextQueue.length, active: fullTextWorking, done: fullTextDone, enabled: fetchFullEnabled() },
-        lastRefresh: db.lastRefresh,
-        lastRefreshAdded,
-        lastRefreshFeeds,
-    addedByFeed: lastAddedByFeed,
-        nextRefreshAt,
       });
     }
+
     return sendPayload(req, res);
   }
 

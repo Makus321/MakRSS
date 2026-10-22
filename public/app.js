@@ -304,7 +304,10 @@ const applyPayload = (payload) => { if (payload?.data && rememberData(payload.da
  * Постраничная загрузка статей текущего вида. Раньше клиент забирал весь список
  * (тысячи статей, ~1 МБ), хотя показывал первые 40 карточек.
  */
-const PAGED_DATA = true;
+// Постраничная загрузка временно выключена: при выборе ленты и после
+// синхронизации список и дерево теряли данные. Включать обратно только после
+// проверки кликов по дереву и синхронизации в браузере.
+const PAGED_DATA = false;
 const PAGE_SIZE = 20;
 
 function viewParam() {
@@ -3129,6 +3132,13 @@ async function loadData({ poll = false } = {}) {
       // Ничего не изменилось: обновляем только счётчики и статус докачки.
       if (!Array.isArray(state.data.items)) return;     // состояние ещё не загружено
       if (Array.isArray(payload.feeds)) state.data.feeds = payload.feeds;
+      // Сервер присылает непрочитанные по лентам компактно (46 чисел вместо дерева).
+      if (payload.feedUnread && Array.isArray(state.data.feeds)) {
+        for (const feed of state.data.feeds) {
+          const unread = payload.feedUnread[feed.id];
+          if (Number.isFinite(unread)) feed.unread = unread;
+        }
+      }
       state.data.counts = payload.counts;
       state.data.fetching = payload.fetching;
       state.data.refreshing = payload.refreshing;
