@@ -363,6 +363,20 @@ const geometryFinal = await evaluate(`(() => {
 })()`);
 console.log('  геометрия карточки:', JSON.stringify(geometryFinal));
 
+// Ищем элементы с «0:00» — что это за время.
+const findZero = await evaluate(`(() => {
+  const hits = [];
+  for (const el of document.querySelectorAll('*')) {
+    const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
+    if (!own.includes('0:00')) continue;
+    hits.push({ tag: el.tagName + '.' + (el.className || ''), id: el.id || '', text: own.slice(0, 60) });
+  }
+  return hits.slice(0, 6);
+})()`);
+console.log('  элементы с 0:00:', JSON.stringify(findZero));
+const headText = await evaluate("(document.querySelector('.pane-head')?.innerText ?? '').replace(/\\s+/g, ' ').slice(0, 200)");
+console.log('  шапка списка:', headText);
+
 // Геометрия строки пароля: где поля и где кнопка.
 const passRowProbe = await evaluate(`(() => {
   const input = document.querySelector('#set-pass-current');

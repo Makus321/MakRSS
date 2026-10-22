@@ -3175,6 +3175,14 @@ async function loadData({ poll = false } = {}) {
       state.data.counts = payload.counts;
       state.data.fetching = payload.fetching;
       state.data.refreshing = payload.refreshing;
+      // Время последней синхронизации и отсчёт до следующей: без них счётчик
+      // в шапке замирал на «0:00» и казалось, что обновление не идёт.
+      if (payload.lastRefresh !== undefined) state.data.lastRefresh = payload.lastRefresh;
+      if (payload.nextRefreshAt !== undefined) state.data.nextRefreshAt = payload.nextRefreshAt;
+      if (payload.lastRefreshAdded !== undefined) state.data.lastRefreshAdded = payload.lastRefreshAdded;
+      if (payload.lastRefreshFeeds !== undefined) state.data.lastRefreshFeeds = payload.lastRefreshFeeds;
+      updateCountdown();
+      refreshTimes();
       renderSidebar();
       renderToolbar();
       return;

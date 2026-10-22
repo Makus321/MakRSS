@@ -2429,6 +2429,12 @@ async function api(req, res, url) {
         ok: true,
         unchanged: true,
         revision: db.revision,
+      // Обратный отсчёт до автобновления и время последней синхронизации:
+      // без них в компактном ответе счётчик замирал на 0:00.
+      lastRefresh: db.lastRefresh ?? null,
+      nextRefreshAt,
+      lastRefreshAdded,
+      lastRefreshFeeds,
         counts: {
           all: items.length,
           unread: items.filter((i) => !db.read[i.id]).length,
