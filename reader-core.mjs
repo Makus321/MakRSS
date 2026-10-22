@@ -335,7 +335,9 @@ async function httpGet(url, opts = {}) {
 
 // Анонс в списке: карточке хватает 4–10 строк. Раньше сюда уходило до 1500
 // символов на статью, и /api/data весил мегабайты при каждом опросе.
-const EXCERPT_LIMIT = Number(process.env.EXCERPT_LIMIT || 140);
+// Анонс должен покрывать все строки из настройки (до 12): при коротком анонсе
+// карточка показывала 1–2 строки, сколько ни выбирай.
+const EXCERPT_LIMIT = Number(process.env.EXCERPT_LIMIT || 900);
 
 const shortExcerpt = (text) => {
   const value = String(text ?? '');

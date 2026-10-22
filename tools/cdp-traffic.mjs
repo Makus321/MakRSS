@@ -119,6 +119,15 @@ cdp.on((message) => {
   }
 });
 
+// Точный размер окна: headless игнорирует --window-size для узких значений.
+const viewWidth = Number(args.get('width') ?? 0);
+const viewHeight = Number(args.get('height') ?? 0);
+if (viewWidth && viewHeight) {
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: viewWidth, height: viewHeight, deviceScaleFactor: 1, mobile: viewWidth < 700,
+  });
+}
+
 await cdp.send('Network.enable');
 await cdp.send('Runtime.enable');
 await cdp.send('Page.enable');
