@@ -937,7 +937,9 @@ function switchView(view) {
     // Догружаем первую страницу нового вида: раньше здесь был уже весь список.
     fetchView({ reset: true }).then((ok) => { if (ok) render(); });
   }
-  openTree(false);                      // на телефоне панель подписок закрываем
+  // Панель подписок закрываем только на сенсорных экранах (там это выдвижное
+  // меню). На компьютере с узким окном дерево должно оставаться на месте.
+  if (window.matchMedia('(pointer: coarse)').matches) openTree(false);
   userScrolled = false;                 // без прокрутки мышь ещё не трогали
   userScrollAt = 0;
   ignoreScrollUntil = Date.now() + 900;

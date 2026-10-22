@@ -175,6 +175,14 @@ for (let step = 0; step < scrollSteps; step += 1) {
 await sleep(1500);
 
 // --- проверки, что функциональность не сломалась (пишутся в отчёт) ---
+const beforeTree = await evaluate("document.querySelectorAll('#tree .row').length");
+await realClick('#tree .row[data-feed-row]');
+await sleep(2500);
+const afterTree = await evaluate("document.querySelectorAll('#tree .row').length");
+const feedCards = await evaluate("document.querySelectorAll('.article').length");
+const treeText = await evaluate("(document.querySelector('#tree')?.innerText ?? '').slice(0, 60)");
+console.log('  дерево до клика по ленте:', beforeTree);
+console.log('  дерево после клика:', afterTree, '| карточек:', feedCards, '| текст дерева:', JSON.stringify(treeText));
 const checks = [];
 checks.push(['карточек на экране', await evaluate("document.querySelectorAll('.article').length")]);
 
