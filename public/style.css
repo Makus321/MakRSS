@@ -381,7 +381,8 @@ select:focus-visible { outline: none; }
 .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 /* Запас снизу в целый экран: любая статья может уйти выше середины и стать прочитанной. */
-.list { flex: 1; overflow-y: auto; min-height: 0; padding: 8px 12px 90vh; }
+/* Минимальные поля списка: карточка занимает почти всю ширину панели. */
+.list { flex: 1; overflow-y: auto; min-height: 0; padding: 6px 2px 90vh; }
 .list.comfortable .a-body { font-size: calc(15px * var(--ui-scale, 1)); }
 
 .article {

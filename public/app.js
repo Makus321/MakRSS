@@ -807,7 +807,14 @@ function bodyHtml(item) {
   // Колонка текста внутри карточки: сама ширина задана карточке (--read-width).
   const column = (inner) => `<div class="read-text">${inner}</div>`;
   const note = body.note ? `<div class="a-note">${esc(body.note)}</div>` : '';
-  let html = sanitize(body.fullHtml || body.content, item.link);
+  // Если «тело» статьи — это тот же текст, что в анонсе (так бывает у Telegram
+  // и коротких новостей), в полном виде он выглядел дублем. Сравниваем начало.
+  const normalise = (text) => String(text ?? '').replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase();
+  const bodySource = body.fullHtml || body.content || '';
+  const bodyHead = normalise(bodySource).slice(0, 80);
+  const excerptHead = normalise(item.excerpt).slice(0, 80);
+  const sameAsExcerpt = Boolean(bodyHead && excerptHead) && (bodyHead.startsWith(excerptHead) || excerptHead.startsWith(bodyHead));
+  let html = sameAsExcerpt && !body.fullHtml ? '' : sanitize(bodySource, item.link);
   // Бывает, что от сайта пришёл только текст без разметки (или одна разметка без
   // текста). Тогда карточка выглядела пустой — подставляем текст как абзац.
   if (!String(html ?? '').replace(/<[^>]*>/g, ' ').trim()) {
