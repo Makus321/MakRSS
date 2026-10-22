@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MAK RSS Reader</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f97316'/><circle cx='10' cy='22' r='3' fill='white'/><path d='M7 14a11 11 0 0 1 11 11' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/><path d='M7 7a18 18 0 0 1 18 18' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="/style.css?v=112">
+<link rel="stylesheet" href="/style.css?v=113">
 <!-- Установка на домашний экран телефона (PWA) -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -357,11 +357,9 @@
           приложениям (Reeder, Unread, Fiery Feeds и подобным) — те подключаются по протоколу Fever.
           Новых пользователей заводит администратор в админке.</p>
         <div class="fever-info" id="account-info"></div>
-        <div class="grid2">
+        <div class="pass-row">
           <label class="row-line">Текущий пароль <input id="set-pass-current" type="password" autocomplete="current-password"></label>
           <label class="row-line">Новый пароль <input id="set-pass" type="password" autocomplete="new-password" placeholder="не короче 4 символов"></label>
-        </div>
-        <div class="btn-row">
           <button class="btn primary" id="save-credentials">Сменить пароль</button>
         </div>
         <div class="fever-info" id="fever-info"></div>

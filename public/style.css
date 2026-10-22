@@ -940,3 +940,8 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 
 /* Шапка настроек: «Выйти из аккаунта» слева от «Закрыть». */
 .modal-head .head-actions { display: flex; align-items: center; gap: 8px; }
+
+/* Поля пароля и кнопка «Сменить пароль» — в одной строке. */
+.pass-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.pass-row .row-line { flex: 1 1 220px; min-width: 180px; }
+.pass-row #save-credentials { flex: none; }
