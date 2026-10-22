@@ -250,6 +250,21 @@ console.log('  текст списка:', await evaluate("(document.querySelecto
 console.log('  тост:', await evaluate("(document.querySelector('#toast')?.textContent ?? '').slice(0, 90)"));
 console.log('  статей в состоянии:', await evaluate("(window.__rssState && window.__rssState.data && window.__rssState.data.items || []).length"));
 
+const clampProbe = await evaluate(`(() => {
+  const el = document.querySelector('.article .a-excerpt');
+  if (!el) return null;
+  const cs = getComputedStyle(el);
+  return {
+    inlineClamp: el.style.webkitLineClamp,
+    computedClamp: cs.webkitLineClamp,
+    display: cs.display,
+    height: Math.round(el.getBoundingClientRect().height),
+    lineHeight: cs.lineHeight,
+    settingsLines: (window.__lines ?? 'нет'),
+  };
+})()`);
+console.log('  строки анонса:', JSON.stringify(clampProbe));
+
 // Замер геометрии после загрузки списка.
 const geometryFinal = await evaluate(`(() => {
   const list = document.querySelector('#list');

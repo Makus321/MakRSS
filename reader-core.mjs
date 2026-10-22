@@ -2072,6 +2072,9 @@ async function api(req, res, url) {
     if (body.defaultLines !== undefined) {
       const lines = Math.min(12, Math.max(1, Math.round(Number(body.defaultLines)) || 2));
       s.defaultLines = lines;
+      // Меняя «строки по умолчанию», пользователь ожидает увидеть это во всех
+      // лентах: снимаем прежние персональные значения, которые перекрывали настройку.
+      for (const feed of db.feeds) if (feed.lines !== undefined) delete feed.lines;
     }
     if (body.defaultWidth !== undefined) s.defaultWidth = clampTextWidth(body.defaultWidth);
     if (body.keepReadDays !== undefined) {

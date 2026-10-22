@@ -1051,7 +1051,7 @@ function articleHtml(item) {
             ? `<button class="flag comment-chip${item.commentsCount ? '' : ' empty'}" data-comments="${esc(item.id)}" data-comments-only="1" title="Показать комментарии, не раскрывая статью">💬 ${item.commentsCount}</button>` : ''}
         </div>
       </div>
-      <p class="a-excerpt" style="-webkit-line-clamp:${lines}">${esc(item.excerpt || 'Нажмите, чтобы раскрыть статью')}</p>
+      <p class="a-excerpt" style="-webkit-line-clamp:${lines};--excerpt-lines:${lines}">${esc(item.excerpt || 'Нажмите, чтобы раскрыть статью')}</p>
     </div>
     <div class="a-body">${expanded
       ? (commentsOnly
