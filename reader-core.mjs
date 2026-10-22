@@ -2311,7 +2311,9 @@ async function api(req, res, url) {
     else if (sort === null) feed.sort = null;
     if (imagesOnly !== undefined) feed.imagesOnly = Boolean(imagesOnly);
     store.saveStateSoon();
-    return json(res, 200, { ok: true, data: buildPayload() });
+    // Настройка вида ленты: списком статей отвечать не нужно (это мегабайты),
+    // достаточно новой ревизии — клиент применил настройку у себя.
+    return json(res, 200, { ok: true, revision: db.revision });
   }
 
   // Фильтры ленты: «скрывать с таким словом» и «показывать только с таким».
@@ -2351,6 +2353,29 @@ async function api(req, res, url) {
     const version = await refreshVersion();
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ ok: true, version }));
+  }
+
+  // Состояние видимых статей: счётчики, прочитано и избранное. Дешевле, чем
+  // тянуть весь список, когда изменились только отметки.
+  if (route === 'POST /api/state') {
+    const body = await readJson(req);
+    const ids = Array.isArray(body.ids) ? body.ids.slice(0, 500) : [];
+    const items = {};
+    for (const id of ids) items[id] = { r: Boolean(db.read[id]), s: Boolean(db.starred[id]) };
+    const allItems = Object.values(db.items ?? {}).reduce((sum, list) => sum + list.length, 0);
+    const feedUnread = {};
+    for (const feed of db.feeds) {
+      feedUnread[feed.id] = (db.items[feed.id] ?? []).filter((i) => !db.read[i.id]).length;
+    }
+    return json(res, 200, {
+      ok: true,
+      revision: db.revision,
+      counts: { all: allItems, unread: allItems - Object.keys(db.read ?? {}).length, starred: Object.keys(db.starred ?? {}).length },
+      feedUnread,
+      items,
+      lastRefresh: db.lastRefresh ?? null,
+      nextRefreshAt,
+    });
   }
 
   if (route === 'GET /api/data') {
@@ -2632,7 +2657,7 @@ async function api(req, res, url) {
     else db.starred[id] = Date.now();
     pruneState();
     store.saveStateSoon();
-    if (light) return json(res, 200, { ok: true });
+    if (light) return json(res, 200, { ok: true, revision: db.revision });
     return json(res, 200, { ok: true, data: buildPayload() });
   }
 

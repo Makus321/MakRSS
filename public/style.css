@@ -530,7 +530,8 @@ body.dragging .tree-tail { display: flex; }
 .a-comments-list { margin-top: 10px; }
 .comment { border-left: 2px solid var(--line); padding: 6px 0 6px 10px; margin: 8px 0; }
 .comment:hover { border-left-color: var(--accent); }
-.comment-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: calc(11.5px * var(--ui-scale, 1)); color: var(--muted); margin-bottom: 2px; }
+/* Имя и время комментария масштабируются вместе с текстом статьи, а не с интерфейсом. */
+.comment-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: calc(var(--font-article, 16px) * 0.78); color: var(--muted); margin-bottom: 2px; }
 .comment-author { color: var(--accent); font-weight: 600; }
 .comment-score { border: 1px solid var(--line); border-radius: 6px; padding: 0 4px; }
 .comment-body { font-size: calc(var(--font-article) - 1px); line-height: calc(1.55 * var(--lh-scale, 1)); overflow-wrap: anywhere; text-align: justify; hyphens: auto; }
@@ -968,3 +969,16 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .refresh-btn { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; }
 .refresh-btn svg { display: block; }
 .refresh-btn:active svg { transform: translateY(1px); transition: transform .15s ease; }
+
+/* Узкая картинка в статье: текст обтекает её слева (включается в настройках). */
+.a-body img.wrap-left,
+.comment-body img.wrap-left {
+  float: left;
+  max-width: 45%;
+  height: auto;
+  margin: 4px 14px 8px 0;
+  border-radius: 8px;
+}
+/* Обтекание не должно вылезать за пределы статьи. */
+.a-body::after,
+.comment-body::after { content: ""; display: block; clear: both; }

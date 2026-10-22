@@ -36,6 +36,7 @@ const state = {
     theme: 'dark', paletteDark: 'graphite', paletteLight: 'day', background: 'palette', density: 'compact', thumbs: true,
     fontTree: '13px', fontArticle: '14.5px', fontExcerpt: '14.5px', fontFamily: 'system', lineHeight: 'normal',
     borders: true,
+    imageWrap: false,                      // узкие картинки в статье обтекаются текстом
     readOnExpand: true, readOnScroll: true, readOnFinish: false,
     treeFilter: 'all',
     unreadOnly: true,
@@ -800,6 +801,29 @@ function textWidth() {
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : max;
 }
 
+/**
+ * Узкие картинки в тексте статьи пускаем в обтекание: текст идёт рядом, а не
+ * ждёт под картинкой. Широкие оставляем как есть — им нужна вся строка.
+ * Решение принимаем по реальной ширине файла после загрузки.
+ */
+function layoutArticleImages(root = document) {
+  const wrap = Boolean(state.prefs.imageWrap);
+  for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
+    const apply = () => {
+      if (!wrap) { img.classList.remove('wrap-left'); return; }
+      const container = img.closest('.a-body, .comment-body');
+      if (!container) return;
+      const containerWidth = container.clientWidth || 1;
+      const natural = img.naturalWidth || 0;
+      // Меньше 60% ширины колонки — можно обтекать текстом.
+      if (natural && natural < containerWidth * 0.6) img.classList.add('wrap-left');
+      else img.classList.remove('wrap-left');
+    };
+    if (img.complete) apply();
+    else img.addEventListener('load', apply, { once: true });
+  }
+}
+
 function bodyHtml(item) {
   const body = state.bodies.get(item.id);
   if (!body) {
@@ -1309,6 +1333,8 @@ function renderList() {
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
   layoutCardThumbs(listEl); // текст под картинкой, если шапка ниже неё
   updateActiveArticle();
+
+  layoutArticleImages();
 }
 
 /** Обновляет только отметки времени, не трогая остальной список. */
@@ -1817,6 +1843,7 @@ async function flushPendingReads() {
     if (!ids.length) continue;
     try {
       const payload = await api('/api/read', { ids, read, light: true });
+    if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
       if (payload?.ok === false) continue;
       for (const id of ids) pendingReads.delete(id);
       savePendingReads();
@@ -1943,6 +1970,7 @@ async function toggleStar(id, event) {
   renderList();
   try {
     const payload = await api('/api/star', { id, starred: next, light: true });
+    if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
     if (payload?.data) rememberData(payload.data);
     // В «Избранном» снятие звезды не перерисовываем сразу: нажатие могло быть
     // случайным, и статья не должна исчезать из-под пальца. Список пересоберётся
@@ -2793,6 +2821,7 @@ function fillSettingsForm() {
   $('#set-default-view').value = s.defaultView ?? 'compact-thumb';
   $('#set-density').value = state.prefs.density;
   setSelectValue($('#set-thumbs'), state.prefs.thumbs ? 'yes' : 'no');
+  setSelectValue($('#set-image-wrap'), state.prefs.imageWrap ? 'yes' : 'no');
   setSelectValue($('#set-borders'), state.prefs.borders !== false ? 'yes' : 'no');
   setSelectValue($('#set-fetch-full'), s.fetchFull !== false ? 'yes' : 'no');
   $('#set-pass').value = '';
@@ -2934,6 +2963,11 @@ $('#set-density').addEventListener('change', (e) => {
   savePrefs();
 });
 $('#set-thumbs').addEventListener('change', (e) => { state.prefs.thumbs = e.target.value !== 'no'; savePrefs(); renderList(); });
+  $('#set-image-wrap').addEventListener('change', (e) => {
+    state.prefs.imageWrap = e.target.value !== 'no';
+    savePrefs();
+    renderList();
+  });
 $('#set-borders').addEventListener('change', (e) => {
   state.prefs.borders = e.target.value !== 'no';
   savePrefs();
@@ -3169,7 +3203,32 @@ async function loadData({ poll = false } = {}) {
     // Сервер отвечает «изменилось» без данных: тогда грузим список целиком.
     // Без этой ветки клиент навсегда оставался со старой копией состояния —
     // именно поэтому отметки из Fever и новые статьи не доходили.
-    if (payload.changed) return loadData({ poll: false });
+    if (payload.changed) {
+      // Изменились отметки или счётчики: тянем только состояние видимых статей,
+      // а не весь список (это в десятки раз дешевле).
+      const ids = (state.data.items ?? []).map((item) => item.id);
+      if (!ids.length) return loadData({ poll: false });
+      const state_ = await api('/api/state', { ids });
+      if (!state_?.items) return loadData({ poll: false });
+      if (Number.isFinite(state_.revision)) state.revision = state_.revision;
+      for (const item of state.data.items ?? []) {
+        const flags = state_.items[item.id];
+        if (!flags) continue;
+        if (flags.r !== Boolean(item.read)) item.read = flags.r;
+        if (flags.s !== Boolean(item.starred)) item.starred = flags.s;
+      }
+      if (state_.counts) state.data.counts = state_.counts;
+      if (state_.feedUnread && Array.isArray(state.data.feeds)) {
+        for (const feed of state.data.feeds) {
+          const unread = state_.feedUnread[feed.id];
+          if (Number.isFinite(unread)) feed.unread = unread;
+        }
+      }
+      if (state_.lastRefresh !== undefined) state.data.lastRefresh = state_.lastRefresh;
+      if (state_.nextRefreshAt !== undefined) state.data.nextRefreshAt = state_.nextRefreshAt;
+      render();
+      return;
+    }
     if (payload.unchanged) {
       // Ничего не изменилось: обновляем только счётчики и статус докачки.
       if (!Array.isArray(state.data.items)) return;     // состояние ещё не загружено
