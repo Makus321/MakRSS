@@ -964,4 +964,4 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .version-row { display: flex; align-items: center; gap: 8px; }
 .refresh-btn { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; }
 .refresh-btn svg { display: block; }
-.refresh-btn:active svg { transform: rotate(180deg); transition: transform .3s ease; }
+.refresh-btn:active svg { transform: translateY(1px); transition: transform .15s ease; }
