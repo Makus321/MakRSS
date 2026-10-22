@@ -8,8 +8,8 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v168';
-const DATA_CACHE = 'rss-data-v151';
+const CACHE = 'rss-shell-v170';
+const DATA_CACHE = 'rss-data-v170';
 const MEDIA_CACHE = 'rss-media-v151';
 
 const SHELL = [
@@ -110,7 +110,23 @@ self.addEventListener('fetch', (event) => {
   if (isData(url.pathname)) {
     // Если ни кэша, ни сети — отдаём ошибку сети, а не пустой JSON: иначе клиент
     // принимал «{}» за настоящие данные и падал на state.data.items.
-    event.respondWith(staleWhileRevalidate(request, DATA_CACHE).catch(() => Response.error()));
+    // Данные читалки — «сначала сеть, кэш только как запасной вариант».
+    // stale-while-revalidate удваивал запросы: каждый вызов ещё раз ходил
+    // в сеть за обновлением, даже если ответ только что получен.
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(request);
+        if (fresh && fresh.ok) {
+          const cache = await caches.open(DATA_CACHE);
+          cache.put(request, fresh.clone()).catch(() => {});
+        }
+        return fresh;
+      } catch {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        return Response.error();
+      }
+    })());
     return;
   }
 

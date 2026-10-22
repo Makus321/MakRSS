@@ -312,14 +312,34 @@ function viewParam() {
   return id ? `${type}:${id}` : String(type ?? 'unread');
 }
 
+const viewRequests = new Map();      // ключ → время последнего запроса
+
 async function fetchView({ reset = false } = {}) {
   const offset = reset ? 0 : Number(state.viewOffset ?? 0);
+  // Один и тот же запрос мог уйти несколько раз за кадр (перерисовка, прокрутка,
+  // смена вида). Повторяем не чаще раза в 1,5 с и никогда — параллельно.
+  const key = `${viewParam()}:${offset}`;
+  const last = viewRequests.get(key) ?? 0;
+  if (!reset && Date.now() - last < 1500) return false;
+  if (state.viewLoading && !reset) return false;
+  viewRequests.set(key, Date.now());
+  state.viewLoading = true;
+  try {
+    return await fetchViewInner(offset, reset);
+  } finally {
+    state.viewLoading = false;
+  }
+}
+
+async function fetchViewInner(offset, reset) {
   const query = new URLSearchParams({
     view: viewParam(),
     limit: String(PAGE_SIZE),
     offset: String(offset),
   });
   if (unreadModeFor()) query.set('unread', '1');
+  // Дерево и счётчики уже есть — не тянем их с каждой страницей.
+  if (state.data?.feeds?.length) query.set('meta', '0');
   let payload;
   try {
     payload = await api(`/api/data?${query}`);
@@ -2134,11 +2154,15 @@ $('#list').addEventListener('scroll', (event) => {
         state.growTimer = null;
         const total = visibleItems().length;
         if (state.limit < total) { state.limit = Math.min(total, state.limit + 10); renderList(); return; }
-        // Локальные карточки кончились — просим следующую страницу с сервера.
-        if (PAGED_DATA && (state.viewOffset ?? 0) < (state.viewTotal ?? 0)) {
-          const ok = await fetchView();
-          if (ok) renderList();
-        }
+        // Локальные карточки кончились — просим ОДНУ следующую страницу.
+        // Раньше каждая перерисовка снова вызывала догрузку и за сессию
+        // уходило до сотни запросов вместо десятка.
+        if (!PAGED_DATA) return;
+        if ((state.viewOffset ?? 0) >= (state.viewTotal ?? 0)) return;
+        if (Date.now() - (state.lastPageAt ?? 0) < 800) return;
+        state.lastPageAt = Date.now();
+        const ok = await fetchView();
+        if (ok) renderList();
       }, 200);
     }
   }

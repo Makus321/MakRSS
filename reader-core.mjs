@@ -1784,6 +1784,12 @@ async function serveThumb(req, res, url) {
   }
   const file = thumbFileFor(source);
   try {
+    const webp = await readFile(file + '.webp');
+    res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800' });
+    res.end(webp);
+    return;
+  } catch { /* ещё не сжимали */ }
+  try {
     const data = await readFile(file);
     res.writeHead(200, { 'content-type': MEDIA_TYPES[path.extname(file).toLowerCase()] ?? 'image/jpeg', 'cache-control': 'private, max-age=604800' });
     res.end(data);
@@ -1801,9 +1807,19 @@ async function serveThumb(req, res, url) {
     if (buffer.length > THUMB_MAX_BYTES) throw new Error('слишком большая');
     // Анимированный GIF превращаем в статичную картинку — первый кадр.
     if (/gif/i.test(type)) buffer = firstGifFrame(buffer) ?? buffer;
+
+    // Миниатюра карточки должна быть маленькой: уменьшаем до 320 px и сжимаем
+    // в WebP. Иначе при листании уходили сотни килобайт на каждую карточку.
+    const small = await compressToWebp(buffer, file, { quality: 65, width: 320 });
     await mkdir(MEDIA_DIR, { recursive: true });
-    await writeFile(file, buffer).catch(() => {});
     pruneMediaCache().catch(() => {});
+    if (small) {
+      await writeFile(file + '.webp', small).catch(() => {});
+      res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800' });
+      res.end(small);
+      return;
+    }
+    await writeFile(file, buffer).catch(() => {});
     res.writeHead(200, { 'content-type': /gif/i.test(type) ? 'image/gif' : type, 'cache-control': 'private, max-age=604800' });
     res.end(buffer);
   } catch {
@@ -1850,8 +1866,10 @@ let webpAvailable = null;
 async function runCwebp(args) {
   return new Promise((resolve) => {
     const child = spawn('cwebp', args, { stdio: 'ignore' });
-    child.on('error', () => resolve(false));
-    child.on('close', (code) => resolve(code === 0));
+    // 'missing' — инструмента нет вовсе: тогда сжатие больше не пытаемся.
+    // 'failed' — не сжался конкретный файл (например, SVG): остальные пробуем.
+    child.on('error', () => resolve('missing'));
+    child.on('close', (code) => resolve(code === 0 ? 'ok' : 'failed'));
   });
 }
 
@@ -1866,8 +1884,16 @@ async function compressToWebp(buffer, baseFile, { quality, width } = {}) {
     await mkdir(MEDIA_DIR, { recursive: true });
     await writeFile(source, buffer);
     const ok = await runCwebp(['-quiet', '-q', String(quality ?? IMG_WEBP_QUALITY), '-resize', String(width ?? IMG_WEBP_WIDTH), '0', '-o', target, source]);
-    webpAvailable = ok;
-    if (!ok) return null;
+    if (ok === 'missing') {
+      webpAvailable = false;
+      log('cwebp не найден — картинки отдаём как есть');
+      return null;
+    }
+    if (ok !== 'ok') {
+      // Формат не подошёл (SVG, анимированный GIF): не выключаем сжатие целиком.
+      log(`файл ${path.basename(baseFile)} не сжался (${Math.round(buffer.length / 1024)} КБ)`);
+      return null;
+    }
     const out = await readFile(target);
     return out.length && out.length < buffer.length ? out : null;
   } catch {
@@ -2261,7 +2287,7 @@ async function api(req, res, url) {
         items: page,
         // Постоянные части состояния (дерево, счётчики) отдаём только с первой
         // страницей: в следующих это лишние десятки килобайт на каждую прокрутку.
-        ...(offset === 0 ? {
+        ...(offset === 0 && url.searchParams.get('meta') !== '0' ? {
           counts: {
             all: db.feeds.reduce((n, f) => n + (db.items[f.id] ?? []).length, 0),
             unread: db.feeds.reduce((n, f) => n + (db.items[f.id] ?? []).filter((i) => !db.read[i.id]).length, 0),
