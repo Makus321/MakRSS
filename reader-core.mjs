@@ -113,7 +113,7 @@ async function refreshVersion() {
   return APP_VERSION;
 }
 
-const PARSER_VERSION = 17;
+const PARSER_VERSION = 18;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
 const BODY_VERSION = 10;
@@ -609,12 +609,14 @@ async function telegramHistory(channel, feedId, startItems, startMinId, pages) {
  * а страница встраивания (?embed=1) содержит фото и обложки видео. Для постов
  * без картинок забираем медиа со страницы встраивания.
  */
-async function enrichTelegramMedia(channel, items, limit = 8, pageHasMedia = true) {
+async function enrichTelegramMedia(channel, items, limit = 24, pageHasMedia = true) {
   // Если сама страница канала отдаёт посты без медиа, дозагружаем каждый пост:
   // у таких каналов даже обложка видео есть, а фото альбома — нет.
   const targets = items
     .filter((item) => item.messageId && (pageHasMedia ? !/<img\b/i.test(item.content ?? '') : true))
     .slice(0, limit);
+  let added = 0;
+  const summary = () => log(`telegram: постов без медиа ${targets.length}, добавлено фото ${added}`);
   for (const item of targets) {
     try {
       await sleep(400);
@@ -632,11 +634,13 @@ async function enrichTelegramMedia(channel, items, limit = 8, pageHasMedia = tru
       if (pictures.length) {
         // Медиа ставим в начало поста, чтобы оно не «уезжало» в конец карточки.
         item.content = `${pictures.map((url) => `<p><img src="${url}" alt=""></p>`).join('\n')}\n${item.content ?? ''}`;
+        added += pictures.length;
         if (!item.image) item.image = pictures[0];
       }
       if (media.video && !item.video) item.video = media.video;
     } catch { /* медиа необязательно */ }
   }
+  if (targets.length) summary();
   return items;
 }
 
@@ -669,7 +673,7 @@ async function refreshFeed(feed, { force = false } = {}) {
     if (isTelegram) {
       parsed = parseTelegramChannel(res.text, feed.url, feed.id, itemId);
       const pageHasMedia = /tgme_widget_message_photo_wrap|tgme_widget_message_video_thumb/i.test(res.text);
-      parsed = { ...parsed, items: await enrichTelegramMedia(channel, parsed.items, 8, pageHasMedia) };
+      parsed = { ...parsed, items: await enrichTelegramMedia(channel, parsed.items, 24, pageHasMedia) };
       if (!feed.historyFilled) {
         parsed = { ...parsed, items: await telegramHistory(channel, feed.id, parsed.items, parsed.minMessageId, 3) };
         feed.historyFilled = true;
