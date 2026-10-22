@@ -304,10 +304,10 @@ const applyPayload = (payload) => { if (payload?.data && rememberData(payload.da
  * Постраничная загрузка статей текущего вида. Раньше клиент забирал весь список
  * (тысячи статей, ~1 МБ), хотя показывал первые 40 карточек.
  */
-// Постраничная загрузка: статьи текущего вида лежат отдельно от дерева и
-// счётчиков (state.viewItems), поэтому выбор ленты и синхронизация больше не
-// могут «съесть» подписки.
-const PAGED_DATA = true;
+// Постраничная загрузка временно выключена: при выборе ленты и после
+// синхронизации список и дерево теряли данные. Включать обратно только после
+// проверки кликов по дереву и синхронизации в браузере.
+const PAGED_DATA = false;
 const PAGE_SIZE = 20;
 
 function viewParam() {
@@ -341,9 +341,8 @@ async function fetchViewInner(offset, reset) {
     offset: String(offset),
   });
   if (unreadModeFor()) query.set('unread', '1');
-  // Дерево нужно при первой загрузке и при смене вида; для догрузки страниц —
-  // не нужно (там оно весит больше самих статей).
-  if (offset > 0 && state.data?.feeds?.length) query.set('meta', '0');
+  // Дерево и счётчики уже есть — не тянем их с каждой страницей.
+  if (state.data?.feeds?.length) query.set('meta', '0');
   let payload;
   try {
     payload = await api(`/api/data?${query}`);
@@ -352,31 +351,30 @@ async function fetchViewInner(offset, reset) {
   }
   if (!payload || !Array.isArray(payload.items)) return false;
 
-  const items = reset ? [] : [...(state.viewItems ?? [])];
+  const items = reset ? [] : [...(state.data.items ?? [])];
   const seen = new Set(items.map((item) => item.id));
   for (const item of payload.items) if (!seen.has(item.id)) items.push(item);
 
   state.viewOffset = offset + payload.items.length;
   state.viewTotal = Number(payload.total) || items.length;
-  state.viewItems = items;                        // статьи только текущего вида
-  // Многие места ищут статью по id в state.data.items — держим его тем же
-  // списком, что и текущий вид, иначе раскрытие статьи «не находит» запись.
-  state.data.items = items;
-
-  // Дерево и счётчики обновляем ТОЛЬКО если сервер их прислал: иначе выбор
-  // ленты затирал подписки неполным ответом (из-за этого дерево исчезало).
-  if (Array.isArray(payload.feeds)) state.data.feeds = payload.feeds;
-  if (payload.counts) state.data.counts = payload.counts;
-  if (payload.fetching) state.data.fetching = payload.fetching;
-  if (payload.addedByFeed) state.data.addedByFeed = payload.addedByFeed;
-  if (payload.refreshing !== undefined) state.data.refreshing = payload.refreshing;
-  if (payload.lastRefresh) state.data.lastRefresh = payload.lastRefresh;
-  if (payload.lastRefreshAdded !== undefined) state.data.lastRefreshAdded = payload.lastRefreshAdded;
-  if (payload.lastRefreshFeeds !== undefined) state.data.lastRefreshFeeds = payload.lastRefreshFeeds;
-  if (payload.revision !== undefined) state.data.revision = payload.revision;
+  state.data = {
+    ...state.data,
+    items,
+    feeds: payload.feeds ?? state.data.feeds,
+    counts: payload.counts ?? state.data.counts,
+    fetching: payload.fetching ?? state.data.fetching,
+    addedByFeed: payload.addedByFeed ?? state.data.addedByFeed,
+    refreshing: payload.refreshing ?? state.data.refreshing,
+    lastRefresh: payload.lastRefresh ?? state.data.lastRefresh,
+    lastRefreshAdded: payload.lastRefreshAdded ?? state.data.lastRefreshAdded,
+    lastRefreshFeeds: payload.lastRefreshFeeds ?? state.data.lastRefreshFeeds,
+    revision: payload.revision ?? state.data.revision,
+  };
   state.revision = payload.revision ?? state.revision;
   applyPendingReads(state.data.items);
-
+  // Снимок видимых статей пересобираем: он мог быть построен до прихода страницы
+  // (тогда в нём не было ни одной статьи, и список оставался пустым).
+  if (reset) state.snapshot = null;
   return true;
 }
 
@@ -480,8 +478,7 @@ function passesFeedFilters(item) {
 /** Статьи вида без учёта прочитанного — из них собирается снимок. */
 function itemsOfView() {
   const q = state.query.trim().toLowerCase();
-  const source = PAGED_DATA ? (state.viewItems ?? []) : state.data.items;
-  return source.filter((item) => {
+  return state.data.items.filter((item) => {
     if (state.view.type === 'feed' && item.feedId !== state.view.id) return false;
     if (state.view.type === 'folder' && feedById(item.feedId)?.folderId !== state.view.id) return false;
     if (state.view.type === 'starred' && !item.starred && !pendingUnstar.has(item.id)) return false;
@@ -501,11 +498,6 @@ function itemsOfView() {
 function visibleItems() {
   const key = viewKey();
   const onlyUnread = unreadModeFor();
-  const currentCount = itemsOfView().length;
-  if (state.snapshot && state.snapshot.key === key && state.snapshot.ids.size === 0 && currentCount > 0) {
-    // Снимок собрался до прихода статей — пересобираем, иначе список пустой.
-    state.snapshot = null;
-  }
   if (!state.snapshot || state.snapshot.key !== key) {
     state.snapshot = {
       key,
@@ -944,7 +936,6 @@ function switchView(view) {
   resetSnapshot();                      // в новой ленте список собирается заново
   state.viewOffset = 0;
   state.viewTotal = 0;
-  state.viewItems = [];
   if (PAGED_DATA) {
     // Догружаем первую страницу нового вида: раньше здесь был уже весь список.
     fetchView({ reset: true }).then((ok) => { if (ok) render(); });
