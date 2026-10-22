@@ -1598,7 +1598,14 @@ async function bodiesFor(ids) {
 
 const itemHtml = async (feed, item) => {
   const body = (await store.body(feed.id, item.id)) ?? {};
-  return body.fullHtml || body.content || (item.excerpt ? `<p>${item.excerpt}</p>` : '');
+  const html = body.fullHtml || body.content || (item.excerpt ? `<p>${item.excerpt}</p>` : '');
+  // Лента «только картинки»: внешние приложения (Fever) должны получать то же,
+  // что видно на сайте — без текста статьи.
+  if (feed?.imagesOnly && html) {
+    const pictures = [...String(html).matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+    return pictures.join('');
+  }
+  return html;
 };
 
 const feverContext = {
