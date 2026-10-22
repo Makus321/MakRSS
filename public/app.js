@@ -816,7 +816,13 @@ function bodyHtml(item) {
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    if (plain) html = `<p>${plain.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</p>`;
+    // Не подставляем тот же текст, что уже показан в кратком виде: в полной
+    // статье он выглядел дублем.
+    const head = String(item.excerpt ?? '').slice(0, 60).trim();
+    const duplicate = head && plain.startsWith(head);
+    if (plain && !duplicate) {
+      html = `<p>${plain.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</p>`;
+    }
   }
   // Лента «только картинки»: разметка сайта не нужна, оставляем сами изображения.
   if (feedById(item.feedId)?.imagesOnly && html) {
