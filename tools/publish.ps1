@@ -15,7 +15,7 @@
 [CmdletBinding()]
 param(
     [string]$Message = '',
-    [string]$Stage = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'rss-mirror'),
+    [string]$Stage = (Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))) 'rss-mirror'),
     [string]$Remote = 'https://github.com/Makus321/MakRSS.git',
     [string]$Branch = 'main',
     [string]$AuthorName = 'Makus321',
