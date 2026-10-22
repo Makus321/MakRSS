@@ -3376,21 +3376,6 @@ function setupPwa() {
   // Кнопка «Обновить приложение» нужна только когда браузер уже скачал новую
   // версию, но ещё не переключился на неё. Сравнение версий по сети давало
   // ложные срабатывания, поэтому ориентируемся на состояние service worker.
-  const updateButton = $('#sidebar-update');
-  if (updateButton) {
-    updateButton.hidden = true;
-    navigator.serviceWorker?.getRegistration?.().then((registration) => {
-      if (!registration) return;
-      const check = () => {
-        updateButton.hidden = !(registration.waiting || registration.installing);
-      };
-      check();
-      registration.addEventListener?.('updatefound', () => {
-        const worker = registration.installing;
-        worker?.addEventListener?.('statechange', check);
-      });
-    }).catch(() => { /* без воркера кнопка не нужна */ });
-  }
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))) {
     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
