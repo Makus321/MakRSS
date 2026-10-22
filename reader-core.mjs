@@ -2224,8 +2224,12 @@ async function api(req, res, url) {
       });
     }
 
-    // Дешёвый опрос: если клиент уже видел эту ревизию, статьи не отправляем.
+    // Опрос по ревизии: клиенту нужен только ответ «изменилось или нет».
+    // Сами статьи он забирает страницами, поэтому полный список здесь не отдаём.
     const rev = Number.parseInt(url.searchParams.get('rev') ?? '', 10);
+    if (Number.isFinite(rev) && rev !== Number(db.revision)) {
+      return json(res, 200, { ok: true, changed: true, revision: db.revision });
+    }
     if (Number.isFinite(rev) && rev === Number(db.revision)) {
       const feeds = [...db.feeds].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(feedView);
       const items = db.feeds.flatMap((f) => db.items[f.id] ?? []);
