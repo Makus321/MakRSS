@@ -7,7 +7,10 @@ const $ = (sel) => document.querySelector(sel);
  * функции, которые вызываются при старте, — раньше объявления ниже приводили
  * к ошибке «Cannot access before initialization» и скрипт не запускался.
  */
-const manualRead = new Map();        // id → прочитано/непрочитано (приоритет над автоматикой)
+const manualRead = new Map();
+/** Фавиконы, которые сервер не отдал: повторно не запрашиваем. */
+const faviconFailed = new Set();
+window.__faviconFailed = (feedId) => { faviconFailed.add(feedId); };        // id → прочитано/непрочитано (приоритет над автоматикой)
 const pendingUnstar = new Set();     // снятые в «Избранном», но показываемые до смены раздела
 
 const PREF_KEY = 'rss.prefs';
@@ -297,6 +300,61 @@ const rememberData = (data) => {
 
 const applyPayload = (payload) => { if (payload?.data && rememberData(payload.data)) render(); };
 
+/**
+ * Постраничная загрузка статей текущего вида. Раньше клиент забирал весь список
+ * (тысячи статей, ~1 МБ), хотя показывал первые 40 карточек.
+ */
+const PAGED_DATA = true;
+const PAGE_SIZE = 40;
+
+function viewParam() {
+  const { type, id } = state.view ?? {};
+  return id ? `${type}:${id}` : String(type ?? 'unread');
+}
+
+async function fetchView({ reset = false } = {}) {
+  const offset = reset ? 0 : Number(state.viewOffset ?? 0);
+  const query = new URLSearchParams({
+    view: viewParam(),
+    limit: String(PAGE_SIZE),
+    offset: String(offset),
+  });
+  if (unreadModeFor()) query.set('unread', '1');
+  let payload;
+  try {
+    payload = await api(`/api/data?${query}`);
+  } catch {
+    return false;
+  }
+  if (!payload || !Array.isArray(payload.items)) return false;
+
+  const items = reset ? [] : [...(state.data.items ?? [])];
+  const seen = new Set(items.map((item) => item.id));
+  for (const item of payload.items) if (!seen.has(item.id)) items.push(item);
+
+  state.viewOffset = offset + payload.items.length;
+  state.viewTotal = Number(payload.total) || items.length;
+  state.data = {
+    ...state.data,
+    items,
+    feeds: payload.feeds ?? state.data.feeds,
+    counts: payload.counts ?? state.data.counts,
+    fetching: payload.fetching ?? state.data.fetching,
+    addedByFeed: payload.addedByFeed ?? state.data.addedByFeed,
+    refreshing: payload.refreshing ?? state.data.refreshing,
+    lastRefresh: payload.lastRefresh ?? state.data.lastRefresh,
+    lastRefreshAdded: payload.lastRefreshAdded ?? state.data.lastRefreshAdded,
+    lastRefreshFeeds: payload.lastRefreshFeeds ?? state.data.lastRefreshFeeds,
+    revision: payload.revision ?? state.data.revision,
+  };
+  state.revision = payload.revision ?? state.revision;
+  applyPendingReads(state.data.items);
+  // Снимок видимых статей пересобираем: он мог быть построен до прихода страницы
+  // (тогда в нём не было ни одной статьи, и список оставался пустым).
+  if (reset) state.snapshot = null;
+  return true;
+}
+
 // -------------------------------------------------------------------- время
 
 function timeAgo(iso) {
@@ -481,7 +539,7 @@ function renderSidebar() {
         data-feed-row="${esc(feed.id)}" draggable="true" title="${esc(feed.lastError || feed.url)}">
       <span class="fav" aria-hidden="true">
         <span class="fav-letter">${esc(letter)}</span>
-        <img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy" onerror="this.remove()">
+        ${faviconFailed.has(feed.id) ? '' : `<img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy" onerror="window.__faviconFailed('${esc(feed.id)}'); this.remove()">`}
       </span>
       <span class="row-name${feed.unread ? ' unread' : ''}">${esc(feed.title)}</span>
       <span class="row-actions">
@@ -853,6 +911,12 @@ function switchView(view) {
   pendingUnstar.clear();                // и снятые в избранном карточки больше не держим
   state.framedIds.clear();              // в новом разделе рамка ещё ни на чём не была
   resetSnapshot();                      // в новой ленте список собирается заново
+  state.viewOffset = 0;
+  state.viewTotal = 0;
+  if (PAGED_DATA) {
+    // Догружаем первую страницу нового вида: раньше здесь был уже весь список.
+    fetchView({ reset: true }).then((ok) => { if (ok) render(); });
+  }
   openTree(false);                      // на телефоне панель подписок закрываем
   userScrolled = false;                 // без прокрутки мышь ещё не трогали
   userScrollAt = 0;
@@ -2066,10 +2130,15 @@ $('#list').addEventListener('scroll', (event) => {
     // Событий прокрутки десятки в секунду: без паузы каждое вызывало полную
     // перерисовку списка. Догружаем не чаще, чем раз в 200 мс.
     if (!state.growTimer) {
-      state.growTimer = setTimeout(() => {
+      state.growTimer = setTimeout(async () => {
         state.growTimer = null;
         const total = visibleItems().length;
-        if (state.limit < total) { state.limit = Math.min(total, state.limit + 10); renderList(); }
+        if (state.limit < total) { state.limit = Math.min(total, state.limit + 10); renderList(); return; }
+        // Локальные карточки кончились — просим следующую страницу с сервера.
+        if (PAGED_DATA && (state.viewOffset ?? 0) < (state.viewTotal ?? 0)) {
+          const ok = await fetchView();
+          if (ok) renderList();
+        }
       }, 200);
     }
   }
@@ -3009,6 +3078,25 @@ async function loadSettings() {
 
 async function loadData({ poll = false } = {}) {
   try {
+    if (PAGED_DATA) {
+      if (poll && state.revision) {
+        const small = await api(`/api/data?rev=${state.revision}`);
+        if (small?.unchanged) {
+          if (Array.isArray(small.feeds)) state.data.feeds = small.feeds;
+          state.data.counts = small.counts ?? state.data.counts;
+          state.data.fetching = small.fetching ?? state.data.fetching;
+          state.data.refreshing = small.refreshing ?? state.data.refreshing;
+          renderSidebar();
+          renderToolbar();
+          return;
+        }
+      }
+      const ok = await fetchView({ reset: true });
+      if (!ok) return;
+      render();
+      flushPendingReads();
+      return;
+    }
     const query = poll && state.revision ? `?rev=${state.revision}` : '';
     const payload = await api(`/api/data${query}`);
     if (payload.unchanged) {

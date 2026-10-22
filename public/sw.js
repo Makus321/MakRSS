@@ -8,7 +8,7 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v164';
+const CACHE = 'rss-shell-v166';
 const DATA_CACHE = 'rss-data-v151';
 const MEDIA_CACHE = 'rss-media-v151';
 
@@ -51,6 +51,20 @@ const isMedia = (path) => path === '/api/img' || path === '/api/thumb' || path =
 const isStatic = (path) => /\.(css|js|png|svg|ico|webmanifest|woff2?|ttf)$/.test(path);
 
 /** Сразу отдаём из кэша, а свежее подтягиваем в фоне. */
+/** Неудачную картинку запоминаем, чтобы не запрашивать её снова и снова. */
+async function negativeCache(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const stored = await cache.match(request);
+  if (stored) return stored;
+  const response = await fetch(request);
+  if (response.status === 404) {
+    await cache.put(request, new Response('', { status: 204 })).catch(() => {});
+    return new Response('', { status: 404 });
+  }
+  if (response.ok) await cache.put(request, response.clone()).catch(() => {});
+  return response;
+}
+
 async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);

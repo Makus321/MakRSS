@@ -2178,18 +2178,24 @@ async function api(req, res, url) {
     const viewParam = url.searchParams.get('view');
     if (viewParam) {
       const [type, id = ''] = String(viewParam).split(':');
+      const unreadOnly = url.searchParams.get('unread') === '1';
       const limit = Math.min(200, Math.max(1, Number.parseInt(url.searchParams.get('limit') ?? '40', 10) || 40));
       const offset = Math.max(0, Number.parseInt(url.searchParams.get('offset') ?? '0', 10) || 0);
       const feedIds = new Set();
-      if (type === 'feed') feedIds.add(id);
-      else if (type === 'folder') for (const f of db.feeds) if (f.folderId === id) feedIds.add(f.id);
-      else for (const f of db.feeds) feedIds.add(f.id);
+      if (type === 'feed') {
+        feedIds.add(id);
+      } else if (type === 'folder') {
+        for (const f of db.feeds) if (f.folderId === id) feedIds.add(f.id);
+      } else {
+        for (const f of db.feeds) feedIds.add(f.id);
+      }
 
       const viewItems = [];
       for (const feed of db.feeds) {
         if (!feedIds.has(feed.id)) continue;
         for (const item of db.items[feed.id] ?? []) {
           if (type === 'unread' && db.read[item.id]) continue;
+          if (unreadOnly && db.read[item.id]) continue;
           if (type === 'starred' && !db.starred[item.id]) continue;
           viewItems.push({ feed, item });
         }
