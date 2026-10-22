@@ -808,6 +808,16 @@ function bodyHtml(item) {
   const column = (inner) => `<div class="read-text">${inner}</div>`;
   const note = body.note ? `<div class="a-note">${esc(body.note)}</div>` : '';
   let html = sanitize(body.fullHtml || body.content, item.link);
+  // Бывает, что от сайта пришёл только текст без разметки (или одна разметка без
+  // текста). Тогда карточка выглядела пустой — подставляем текст как абзац.
+  if (!String(html ?? '').replace(/<[^>]*>/g, ' ').trim()) {
+    const plain = String(body.fullHtml || body.content || '')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (plain) html = `<p>${plain.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</p>`;
+  }
   // Лента «только картинки»: разметка сайта не нужна, оставляем сами изображения.
   if (feedById(item.feedId)?.imagesOnly && html) {
     const sources = [...new Set([...html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]))];

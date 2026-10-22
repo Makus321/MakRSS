@@ -265,6 +265,34 @@ const clampProbe = await evaluate(`(() => {
 })()`);
 console.log('  строки анонса:', JSON.stringify(clampProbe));
 
+// Проверка «полного вида»: включаем его для ленты и смотрим, есть ли текст и кнопки.
+const fullModeCheck = await evaluate(`(async () => {
+  const feedRow = document.querySelector('#tree .row[data-feed-row]');
+  const feedId = feedRow?.dataset.feedRow;
+  if (!feedId) return 'нет ленты';
+  await fetch('/api/feeds/view', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: feedId, view: 'full' }) });
+  location.reload();
+  return feedId;
+})()`);
+console.log('  full-режим включён для ленты:', fullModeCheck);
+await sleep(6000);
+const fullProbe = await evaluate(`(() => {
+  const card = document.querySelector('.article');
+  const body = document.querySelector('.article .a-body');
+  const actions = document.querySelector('.article .a-actions');
+  if (!card) return null;
+  const r = (el) => el ? el.getBoundingClientRect() : null;
+  return {
+    cardHeight: Math.round(r(card).height),
+    bodyText: (body?.innerText ?? '').trim().length,
+    bodyDisplay: body ? getComputedStyle(body).display : 'нет',
+    actionsRect: r(actions) ? { top: Math.round(r(actions).top), left: Math.round(r(actions).left), w: Math.round(r(actions).width), h: Math.round(r(actions).height) } : null,
+    cardRect: { left: Math.round(r(card).left), right: Math.round(r(card).right) },
+    buttons: [...document.querySelectorAll('.article .a-actions button')].map((b) => Math.round(b.getBoundingClientRect().top)),
+  };
+})()`);
+console.log('  полный вид:', JSON.stringify(fullProbe));
+
 // Замер геометрии после загрузки списка.
 const geometryFinal = await evaluate(`(() => {
   const list = document.querySelector('#list');
