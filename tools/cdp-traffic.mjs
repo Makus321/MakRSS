@@ -160,6 +160,32 @@ for (let step = 0; step < scrollSteps; step += 1) {
 
 await sleep(1500);
 
+// --- проверки, что функциональность не сломалась (пишутся в отчёт) ---
+const checks = [];
+const articleCount = await evaluate("document.querySelectorAll('.article').length");
+checks.push(['карточек на экране', articleCount]);
+
+// Переключаемся на «Все статьи»: в непрочитанных карточка исчезает после прочтения.
+await evaluate("(() => { const all = document.querySelector('[data-view=\"all\"]'); if (!all) return 'нет вкладки'; all.dispatchEvent(new MouseEvent('click', { bubbles: true })); return 'ок'; })()");
+await sleep(2500);
+console.log('  карточек после переключения:', await evaluate("document.querySelectorAll('.article').length"));
+
+const clicked = await evaluate("(() => { const head = document.querySelector('.article .a-head'); if (!head) return 'нет заголовка'; head.dispatchEvent(new MouseEvent('click', { bubbles: true })); return head.className; })()");
+console.log('  клик по шапке:', clicked);
+await sleep(8000);
+console.log('  раскрытых статей:', await evaluate("document.querySelectorAll('.article.expanded').length"));
+const bodyText = await evaluate("(document.querySelector('.article .a-body')?.innerText ?? '').length");
+checks.push(['текст открытой статьи, символов', bodyText]);
+const bodyImages = await evaluate("document.querySelectorAll('.article .a-body img').length");
+checks.push(['картинок в статье', bodyImages]);
+
+await evaluate("(() => { const star = document.querySelector('.article [data-star]'); if (!star) return 'нет кнопки'; star.dispatchEvent(new MouseEvent('click', { bubbles: true })); return 'клик'; })()");
+await sleep(1500);
+const starred = await evaluate("document.querySelectorAll('.article .a-actions button.on').length");
+checks.push(['звёзд нажато', starred]);
+
+for (const [label, value] of checks) console.log('  ✓ ' + label + ': ' + value);
+
 // Диагностика: сколько карточек отрисовано и что вернул сервер.
 if (problems.length) { console.log('  проблемы:'); for (const p of problems.slice(0, 6)) console.log('   ·', p); }
 const probe = await evaluate("fetch('/api/data?view=unread&limit=5&offset=0&unread=1&nocache=' + Date.now(), { cache: 'no-store' })"
