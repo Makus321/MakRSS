@@ -335,7 +335,7 @@ async function httpGet(url, opts = {}) {
 
 // Анонс в списке: карточке хватает 4–10 строк. Раньше сюда уходило до 1500
 // символов на статью, и /api/data весил мегабайты при каждом опросе.
-const EXCERPT_LIMIT = Number(process.env.EXCERPT_LIMIT || 180);
+const EXCERPT_LIMIT = Number(process.env.EXCERPT_LIMIT || 140);
 
 const shortExcerpt = (text) => {
   const value = String(text ?? '');
@@ -1228,7 +1228,8 @@ function payloadItem(feed, item) {
     date: item.date,
     author: item.author || undefined,
     excerpt: shortExcerpt(item.excerpt),
-    image: item.image || undefined,
+    // Клиенту нужен только факт наличия картинки: превью он берёт по своему id.
+    image: item.image ? 1 : undefined,
     video: item.video || undefined,
     categories: item.categories?.length ? item.categories : undefined,
     hasFull: Boolean(item.hasFull) || undefined,
@@ -1244,10 +1245,18 @@ function payloadItem(feed, item) {
 function buildPayload() {
   const feeds = [...db.feeds].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const items = [];
+  // В списке отдаём только актуальное: непрочитанное, избранное и прочитанное
+  // за последние дни. Всё это остаётся в базе — сокращается лишь ответ.
+  const keepReadMs = Number(process.env.PAYLOAD_READ_DAYS || 7) * 24 * 60 * 60 * 1000;
+  const freshAfter = Date.now() - keepReadMs;
   for (const feed of feeds) {
     for (const item of db.items[feed.id] ?? []) {
-      // Анонс обрезаем здесь же: в базе он может быть длиннее, а списку
-      // хватает пары строк. Это главный вес ответа /api/data.
+      const isRead = Boolean(db.read[item.id]);
+      const isStarred = Boolean(db.starred[item.id]);
+      if (isRead && !isStarred) {
+        const at = Date.parse(item.date ?? '') || 0;
+        if (at && at < freshAfter) continue;     // давно прочитанное в список не шлём
+      }
       items.push({
         id: item.id,
         title: item.title,
@@ -1255,7 +1264,7 @@ function buildPayload() {
         date: item.date,
         author: item.author || undefined,
         excerpt: shortExcerpt(item.excerpt),
-        image: item.image || undefined,
+        image: item.image ? 1 : undefined,
         video: item.video || undefined,
         categories: item.categories?.length ? item.categories : undefined,
         hasFull: Boolean(item.hasFull) || undefined,
