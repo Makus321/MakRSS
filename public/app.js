@@ -922,7 +922,9 @@ function articleHtml(item) {
   const width = textWidth();
   // Если наша миниатюра не отдалась (сайт закрыл доступ, истёк токен), пробуем
   // загрузить картинку напрямую — без этого карточка оставалась совсем без картинки.
-  const thumbSource = state.prefs.thumbs && item.image ? String(item.image) : '';
+  // Миниатюра карточки идёт через /api/thumb: сервер отдаёт уменьшенный кадр,
+  // иначе при листании качались полноразмерные фотографии.
+  const thumbSource = state.prefs.thumbs && item.image ? imageSrc(item) : '';
   const thumb = thumbSource
     ? `<img class="a-thumb" src="${esc(imageSrc(item))}" alt="" loading="lazy"
          referrerpolicy="no-referrer"
@@ -1508,7 +1510,10 @@ document.addEventListener('pause', () => {
   setTimeout(() => { if (!videoPlaying()) { state.renderAfterVideo = false; renderList(); } }, 400);
 }, true);
 
-async function ensureBodiesNeeded() {
+async function ensureBodiesNeeded(force = false) {
+  // Режим Fever: при листании тексты не докачиваем вовсе — только когда
+  // пользователь сам раскрыл статью (тогда вызывается с force).
+  if (feverMode() && !state.bodiesAllowed && !force) return;
   if (state.loadingBodies) return;
   if (state.scrolling) { state.deferredBodies = true; return; }
   const items = visibleItems().slice(0, state.limit);
@@ -1580,6 +1585,7 @@ async function expandItem(id) {
   state.collapsedItems.delete(id);
   state.expandedItems.add(id);
   if (!item.read && state.prefs.readOnExpand && autoReadAllowed(id)) markRead([id], true);
+  if (feverMode()) { state.bodiesAllowed = true; ensureBodiesNeeded(true); }
   if (!isBodyLoaded(id)) {
     renderList();                       // покажет «Загрузка текста…»
     await ensureBodiesNeeded();
@@ -3333,12 +3339,14 @@ start();
 // Опрашиваем всегда: иначе при раскрытой статье список и время «замирают».
   // Опрос сервера, счётчики и время не мешают прокрутке: пока она идёт,
   // задачи откладываются и выполняются, когда список остановился.
+  // В режиме Fever работаем «по синхронизации»: опрос редкий, без лишнего фона.
   setInterval(() => {
     if (state.scrolling) { state.deferredPoll = true; return; }
     if (document.hidden) return;
     loadData({ poll: true });
-  }, 120_000);
+  }, feverMode() ? 600_000 : 120_000);
   setInterval(() => {
+    if (feverMode()) return;                       // в Fever очередь не опрашиваем
     if (state.scrolling || document.hidden) return;
     if (state.data.fetching?.pending) { loadData({ poll: true }); renderQueueInfo(); }
   }, 30_000);
