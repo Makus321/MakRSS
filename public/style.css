@@ -924,3 +924,21 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   .modal-body .row-line select { width: 100%; max-width: 100%; }
   .modal-body .hint { font-size: calc(11.5px * var(--ui-scale, 1)); }
 }
+
+/* Карточка во всю ширину на любом экране: настройка «ширина текста» сужала
+   колонку и на компьютере, из-за чего оставались большие поля по краям. */
+.article {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Анонс в кратком виде: жёстко задаём box-модель, иначе ограничение строк
+   (-webkit-line-clamp) игнорируется и видна одна строка. */
+.a-excerpt {
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: var(--excerpt-lines, 4) !important;
+  overflow: hidden;
+}
