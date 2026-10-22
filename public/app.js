@@ -3166,6 +3166,10 @@ async function loadData({ poll = false } = {}) {
     }
     const query = poll && state.revision ? `?rev=${state.revision}` : '';
     const payload = await api(`/api/data${query}`);
+    // Сервер отвечает «изменилось» без данных: тогда грузим список целиком.
+    // Без этой ветки клиент навсегда оставался со старой копией состояния —
+    // именно поэтому отметки из Fever и новые статьи не доходили.
+    if (payload.changed) return loadData({ poll: false });
     if (payload.unchanged) {
       // Ничего не изменилось: обновляем только счётчики и статус докачки.
       if (!Array.isArray(state.data.items)) return;     // состояние ещё не загружено
