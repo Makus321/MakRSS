@@ -123,6 +123,20 @@ await cdp.send('Network.enable');
 await cdp.send('Runtime.enable');
 await cdp.send('Page.enable');
 
+/** Клик настоящей мышью по элементу (CDP Input): синтетический click не всегда работает. */
+async function realClick(selector) {
+  const box = await evaluate('(() => { const el = document.querySelector(' + JSON.stringify(selector) + '); '
+    + 'if (!el) return null; const r = el.getBoundingClientRect(); '
+    + 'return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + Math.min(r.height / 2, 40)) }; })()');
+  if (!box) return false;
+  const base = { x: box.x, y: box.y, button: 'left', clickCount: 1 };
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: base.x, y: base.y });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...base });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...base });
+  return true;
+}
+
+
 async function evaluate(expression) {
   const result = await cdp.send('Runtime.evaluate', {
     expression,
@@ -162,27 +176,27 @@ await sleep(1500);
 
 // --- проверки, что функциональность не сломалась (пишутся в отчёт) ---
 const checks = [];
-const articleCount = await evaluate("document.querySelectorAll('.article').length");
-checks.push(['карточек на экране', articleCount]);
+checks.push(['карточек на экране', await evaluate("document.querySelectorAll('.article').length")]);
 
-// Переключаемся на «Все статьи»: в непрочитанных карточка исчезает после прочтения.
-await evaluate("(() => { const all = document.querySelector('[data-view=\"all\"]'); if (!all) return 'нет вкладки'; all.dispatchEvent(new MouseEvent('click', { bubbles: true })); return 'ок'; })()");
+// переключаемся на «Все статьи»: в непрочитанных карточка исчезает после прочтения
+await realClick('[data-view="all"]');
 await sleep(2500);
-console.log('  карточек после переключения:', await evaluate("document.querySelectorAll('.article').length"));
+checks.push(['карточек после переключения вида', await evaluate("document.querySelectorAll('.article').length")]);
 
-const clicked = await evaluate("(() => { const head = document.querySelector('.article .a-head'); if (!head) return 'нет заголовка'; head.dispatchEvent(new MouseEvent('click', { bubbles: true })); return head.className; })()");
-console.log('  клик по шапке:', clicked);
-await sleep(8000);
-console.log('  раскрытых статей:', await evaluate("document.querySelectorAll('.article.expanded').length"));
-const bodyText = await evaluate("(document.querySelector('.article .a-body')?.innerText ?? '').length");
-checks.push(['текст открытой статьи, символов', bodyText]);
-const bodyImages = await evaluate("document.querySelectorAll('.article .a-body img').length");
-checks.push(['картинок в статье', bodyImages]);
+await realClick('.article .a-head');
+await sleep(6000);
+checks.push(['раскрытых статей', await evaluate("document.querySelectorAll('.article.expanded').length")]);
+checks.push(['текст статьи, символов', await evaluate("(document.querySelector('.article .a-body')?.innerText ?? '').length")]);
+checks.push(['картинок в статье', await evaluate("document.querySelectorAll('.article .a-body img').length")]);
 
-await evaluate("(() => { const star = document.querySelector('.article [data-star]'); if (!star) return 'нет кнопки'; star.dispatchEvent(new MouseEvent('click', { bubbles: true })); return 'клик'; })()");
+await realClick('.article [data-star]');
 await sleep(1500);
-const starred = await evaluate("document.querySelectorAll('.article .a-actions button.on').length");
-checks.push(['звёзд нажато', starred]);
+checks.push(['звёздочка нажата', await evaluate("document.querySelectorAll('.article [data-star].on').length")]);
+
+await realClick('#search, input[type="search"]');
+await evaluate("(() => { const input = document.querySelector('#search, input[type=search]'); if (!input) return null; input.value = 'и'; input.dispatchEvent(new Event('input', { bubbles: true })); return input.value; })()");
+await sleep(1500);
+checks.push(['карточек после поиска', await evaluate("document.querySelectorAll('.article').length")]);
 
 for (const [label, value] of checks) console.log('  ✓ ' + label + ': ' + value);
 

@@ -29,7 +29,7 @@
 //   ANY  /fever/                        протокол Fever API для внешних клиентов
 
 import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir, unlink, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, stat, readdir } from 'node:fs/promises';
 import { gzip, brotliCompress, constants as zlibConstants } from 'node:zlib';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -1789,6 +1789,7 @@ async function serveThumb(req, res, url) {
     if (/gif/i.test(type)) buffer = firstGifFrame(buffer) ?? buffer;
     await mkdir(MEDIA_DIR, { recursive: true });
     await writeFile(file, buffer).catch(() => {});
+    pruneMediaCache().catch(() => {});
     res.writeHead(200, { 'content-type': /gif/i.test(type) ? 'image/gif' : type, 'cache-control': 'private, max-age=604800' });
     res.end(buffer);
   } catch {
@@ -1861,6 +1862,39 @@ async function compressToWebp(buffer, baseFile) {
   }
 }
 
+
+/**
+ * Держит кэш картинок в разумных размерах. 22.10.2026 диск сервера (30 ГБ)
+ * заполнился до 100% и запись состояния оборвалась — поэтому кэш ограничен.
+ */
+const MEDIA_CACHE_LIMIT_BYTES = Number(process.env.MEDIA_CACHE_LIMIT || 300 * 1024 * 1024);
+let mediaPruneAt = 0;
+
+async function pruneMediaCache() {
+  if (Date.now() - mediaPruneAt < 10 * 60 * 1000) return;
+  mediaPruneAt = Date.now();
+  try {
+    const names = await readdir(MEDIA_DIR).catch(() => []);
+    if (!names.length) return;
+    const entries = [];
+    let total = 0;
+    for (const name of names) {
+      const info = await stat(path.join(MEDIA_DIR, name)).catch(() => null);
+      if (!info?.isFile()) continue;
+      entries.push({ name, size: info.size, at: info.mtimeMs });
+      total += info.size;
+    }
+    if (total <= MEDIA_CACHE_LIMIT_BYTES) return;
+    entries.sort((a, b) => a.at - b.at);
+    let freed = 0;
+    for (const entry of entries) {
+      if (total - freed <= MEDIA_CACHE_LIMIT_BYTES) break;
+      await unlink(path.join(MEDIA_DIR, entry.name)).catch(() => {});
+      freed += entry.size;
+    }
+    log(`кэш картинок подчищен: освобождено ${Math.round(freed / 1024 / 1024)} МБ`);
+  } catch { /* не критично */ }
+}
 
 async function serveImage(req, res, url) {
   const source = String(url.searchParams.get('u') ?? '');
