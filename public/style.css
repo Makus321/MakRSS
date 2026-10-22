@@ -897,3 +897,13 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 
 .new-row .note { flex: 1 1 auto; min-width: 0; }
 .new-row #new-show { margin-left: auto; }
+
+/* Пояснения в настройках переносятся по словам и не вылезают за экран. */
+.hint, .modal-body .hint {
+  white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.45;
+}
+@media (max-width: 560px) {
+  .modal-body .row-line { flex-wrap: wrap; gap: 4px; }
+  .modal-body .row-line select { width: 100%; max-width: 100%; }
+  .modal-body .hint { font-size: calc(11.5px * var(--ui-scale, 1)); }
+}

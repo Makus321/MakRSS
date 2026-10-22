@@ -13,8 +13,6 @@ const pendingUnstar = new Set();     // снятые в «Избранном», 
 const PREF_KEY = 'rss.prefs';
 // Раз в час читалка в фоне просит сервер докачать полные тексты и прогревает
 // кэш статей — чтобы при плохой связи они открывались из памяти.
-const WARM_INTERVAL_MS = 60 * 60 * 1000;
-const WARM_KEY = 'rss.warmedAt';
 const WIDTH_KEY = 'rss.widths';
 const COLLAPSE_KEY = 'rss.collapsed';
 
@@ -1083,31 +1081,6 @@ function feverMode() {
   return Boolean(state.settings?.feverMode);
 }
 
-async function warmArticles(force = false) {
-  if (feverMode()) return;            // в режиме Fever фоном ничего не качаем
-  if (!navigator.onLine || state.scrolling) return;
-  const last = Number(localStorage.getItem(WARM_KEY) ?? 0);
-  if (!force && Date.now() - last < WARM_INTERVAL_MS) return;
-  localStorage.setItem(WARM_KEY, String(Date.now()));
-  try {
-    await api('/api/queue', { action: 'start' });     // сервер качает полные тексты
-  } catch { /* сервер ответит позже */ }
-  // Прогреваем только то, что вот-вот откроют: 30 статей по 100–200 КБ
-  // превращались в несколько мегабайт фонового трафика.
-  const ids = visibleItems().slice(0, 8).map((item) => item.id);
-  if (!ids.length) return;
-  try {
-    const res = await fetch('/api/bodies', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ids }),
-    });
-    if (res.ok) await res.clone().json();
-  } catch { /* нет сети — попробуем в следующий раз */ }
-  try {
-    navigator.serviceWorker?.controller?.postMessage({ type: 'warm', urls: ['/api/data'] });
-  } catch { /* service worker ещё не готов */ }
-}
 
 function fillViewport() {
   if (state.filling) return;
@@ -1214,7 +1187,6 @@ function renderList() {
   setupReadObservers();
   requestCommentCounts();
   fillViewport();          // если карточек меньше экрана — догружаем сразу
-  warmArticles();          // раз в час прогреваем кэш статей
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
   layoutCardThumbs(listEl); // текст под картинкой, если шапка ниже неё
   updateActiveArticle();
