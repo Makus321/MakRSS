@@ -959,3 +959,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .pass-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .pass-row .row-line { flex: 1 1 220px; min-width: 180px; margin: 0; }
 .pass-row #save-credentials { flex: none; margin: 0 0 1px; align-self: flex-end; }
+
+/* Кнопка «Обновить приложение» — обычная кнопка с пиктограммой. */
+.version-row { display: flex; align-items: center; gap: 8px; }
+.refresh-btn { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; }
+.refresh-btn svg { display: block; }
+.refresh-btn:active svg { transform: rotate(180deg); transition: transform .3s ease; }
