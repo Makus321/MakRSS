@@ -2438,11 +2438,13 @@ async function api(req, res, url) {
     if (force) { found.item.hasFull = false; found.item.fullTriedAt = null; await store.setBody(found.feed.id, found.item.id, { fullHtml: '' }); }
     const result = await fetchFullText(found.feed.id, found.item.id);
     const body = (await store.body(found.feed.id, found.item.id)) ?? {};
+    // Полный список здесь не отдаём: он весил мегабайты на каждую докачку,
+    // а клиенту нужен только сам текст статьи.
     return json(res, result.ok ? 200 : 502, {
       ok: result.ok,
       error: result.error,
       item: { ...found.item, content: body.content ?? '', fullHtml: body.fullHtml ?? '' },
-      data: buildPayload(),
+      hasFull: Boolean(body.fullHtml),
     });
   }
 
