@@ -363,6 +363,19 @@ const geometryFinal = await evaluate(`(() => {
 })()`);
 console.log('  геометрия карточки:', JSON.stringify(geometryFinal));
 
+// Снимок настроек, если задан --settings.
+const settingsShot = args.get('settings');
+if (settingsShot) {
+  await realClick('#settings-btn');
+  await sleep(1200);
+  const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
+  if (shot?.data) {
+    const { writeFile: write } = await import('node:fs/promises');
+    await write(settingsShot, Buffer.from(shot.data, 'base64'));
+    console.log('  снимок настроек:', settingsShot);
+  }
+}
+
 // Снимок экрана для визуальной проверки (если задан --shot).
 const shotPath = args.get('shot');
 if (shotPath) {

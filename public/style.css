@@ -937,3 +937,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   -webkit-line-clamp: var(--excerpt-lines, 4) !important;
   overflow: hidden;
 }
+
+/* Шапка настроек: «Выйти из аккаунта» слева от «Закрыть». */
+.modal-head .head-actions { display: flex; align-items: center; gap: 8px; }
