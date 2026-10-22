@@ -760,11 +760,15 @@ $('#new-close').addEventListener('click', () => {
   $('#new-row').hidden = true;
 });
 
-$('#new-show').addEventListener('click', () => {
-  resetSnapshot();                 // снимок пересобирается — новые статьи попадут в список
-  state.resetScroll = true;
-  render();
-});
+  $('#new-show').addEventListener('click', async () => {
+    // Новые статьи приходят только с полной загрузкой списка: в дешёвой
+    // ветке (только счётчики) их в данных нет. Поэтому грузим и пересобираем
+    // снимок — иначе плашка «Показать новые» ничего не добавляла.
+    await loadData();
+    resetSnapshot();
+    state.resetScroll = true;
+    render();
+  });
 
 /** Полоска под поиском: превратить запрос в фильтр текущей ленты. */
 function renderFilterRow() {
@@ -3224,6 +3228,9 @@ async function loadData({ poll = false } = {}) {
           if (Number.isFinite(unread)) feed.unread = unread;
         }
       }
+      if (state_.addedByFeed) state.data.addedByFeed = state_.addedByFeed;
+      if (state_.lastRefreshAdded !== undefined) state.data.lastRefreshAdded = state_.lastRefreshAdded;
+      if (state_.lastRefreshFeeds !== undefined) state.data.lastRefreshFeeds = state_.lastRefreshFeeds;
       if (state_.lastRefresh !== undefined) state.data.lastRefresh = state_.lastRefresh;
       if (state_.nextRefreshAt !== undefined) state.data.nextRefreshAt = state_.nextRefreshAt;
       render();

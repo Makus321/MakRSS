@@ -2373,7 +2373,12 @@ async function api(req, res, url) {
       counts: { all: allItems, unread: allItems - Object.keys(db.read ?? {}).length, starred: Object.keys(db.starred ?? {}).length },
       feedUnread,
       items,
+      // Сколько новых статей пришло при последней синхронизации по лентам:
+      // без этого не появлялась плашка «Новых статей: N».
+      addedByFeed: lastAddedByFeed,
       lastRefresh: db.lastRefresh ?? null,
+      lastRefreshAdded,
+      lastRefreshFeeds,
       nextRefreshAt,
     });
   }
