@@ -3524,6 +3524,19 @@ function updateCountdown() {
   const minutes = Math.floor(left / 60000);
   const seconds = Math.floor((left % 60000) / 1000);
   el.textContent = `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
+
+  // Отсчёт дошёл до нуля — сразу спрашиваем сервер и, если он ещё не обновил
+  // ленты, просим обновить. Иначе счётчик замирал на 0:00 и казалось, что
+  // автообновление сломалось.
+  if (left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 60_000) {
+    state.refreshKickedAt = Date.now();
+    loadData({ poll: true })
+      .then(() => {
+        if (Number(state.data.nextRefreshAt) > Date.now()) return undefined;
+        return api('/api/refresh', { force: false }).then(() => loadData({ poll: true }));
+      })
+      .catch(() => {});
+  }
 }
 setInterval(updateCountdown, 1000);
 updateCountdown();
