@@ -768,6 +768,33 @@ function enqueueFeedFullText(feedId) {
   return queued;
 }
 
+/**
+ * Достаёт медиа одного поста Telegram со страницы встраивания. Нужно для старых
+ * постов: со страницы канала они уже ушли, и обычный разбор их не видит.
+ */
+async function enrichTelegramItem(feed, item) {
+  if (!item?.link || !/t\.me\//i.test(item.link)) return false;
+  const match = /t\.me\/([A-Za-z0-9_]+)\/(\d+)/.exec(item.link);
+  if (!match) return false;
+  const [, channel, messageId] = match;
+  try {
+    const res = await httpGet(`https://t.me/${channel}/${messageId}?embed=1`, {
+      timeout: 15000, accept: 'text/html,application/xhtml+xml',
+    });
+    if (!res.ok) return false;
+    const parsed = parseTelegramChannel(res.text, `https://t.me/${channel}`, feed.id, itemId);
+    const media = parsed.items[0];
+    if (!media?.content) return false;
+    await store.setBody(feed.id, item.id, { content: media.content, contentFetchedAt: new Date().toISOString() });
+    const first = /<img[^>]+src="([^"]+)"/i.exec(media.content)?.[1];
+    if (first && !item.image) { item.image = first; store.saveStateSoon(400, { bump: false }); }
+    if (media.video && !item.video) item.video = media.video;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchFullText(feedId, itemId) {
   const feed = feedById(feedId);
   const target = feed ? (db.items[feedId] ?? []).find((i) => i.id === itemId) : null;
@@ -778,6 +805,16 @@ async function fetchFullText(feedId, itemId) {
     body = {};
     // статья считалась «текст есть» — снимаем метку, иначе клиент не попросит заново
     if (target.hasFull) { target.hasFull = false; store.saveStateSoon(400, { bump: false }); }
+  }
+  // Пост Telegram без тела: забираем медиа и текст со страницы встраивания.
+  if (!body.fullHtml && !body.content && /t\.me\//i.test(target.link ?? '')) {
+    const enriched = await enrichTelegramItem(feed, target).catch(() => false);
+    if (enriched) {
+      const fresh = (await store.body(feedId, itemId)) ?? {};
+      if (fresh.content) {
+        return { ok: true, chars: fresh.content.length, media: true };
+      }
+    }
   }
   if (body.fullHtml) {
     // Текст уже лежит в хранилище — помечаем статью, чтобы не ставить её в очередь снова.
@@ -1497,9 +1534,19 @@ async function bodiesFor(ids) {
     if (!byFeed.has(found.feed.id)) byFeed.set(found.feed.id, []);
     byFeed.get(found.feed.id).push(found.item);
   }
+  let enrichBudget = 2;      // не больше двух дозагрузок за один запрос
   for (const [feedId, items] of byFeed) {
+    const feed = feedById(feedId);
     for (const item of items) {
-      const body = (await store.body(feedId, item.id)) ?? {};
+      let body = (await store.body(feedId, item.id)) ?? {};
+      // Пост Telegram, у которого нет ни текста, ни картинок: забираем содержимое
+      // со страницы встраивания прямо при открытии (такие посты уже ушли со
+      // страницы канала, обычный разбор их не видит).
+      if (feed && !body.content && !body.fullHtml && enrichBudget > 0 && /t\.me\//i.test(item.link ?? '')) {
+        enrichBudget -= 1;
+        const ok = await enrichTelegramItem(feed, item).catch(() => false);
+        if (ok) body = (await store.body(feedId, item.id)) ?? {};
+      }
       const hasText = Boolean(body.fullHtml);
       if (item.hasFull && !hasText) {
         item.hasFull = false;
