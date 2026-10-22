@@ -2573,6 +2573,9 @@ async function api(req, res, url) {
       store.saveStateSoon();
     }
     if (!body.id) scheduleFullText();
+    // Ручное обновление перезапускает отсчёт: иначе nextRefreshAt оставался в
+    // прошлом, и таймер в клиенте замирал на 0:00 навсегда.
+    schedulePeriodicRefresh();
     // Свежие числа комментариев: в карточке должно быть актуальное значение.
     await refreshCommentCounts().catch(() => 0);
     return json(res, 200, { ok: true, results, data: buildPayload() });

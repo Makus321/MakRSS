@@ -3523,23 +3523,26 @@ start();
 function updateCountdown() {
   const el = $('#refresh-countdown');
   if (!el) return;
-  const at = Number(state.data.nextRefreshAt);
-  if (!Number.isFinite(at) || at <= 0) { el.textContent = '—'; return; }
+  // Считаем сами: время последней синхронизации + интервал из настроек.
+  // Полагаться на серверное nextRefreshAt нельзя — оно могло остаться в
+  // прошлом, и тогда счётчик замирал на 0:00.
+  const intervalMin = Number(state.settings?.refreshMinutes) || 10;
+  const last = Date.parse(state.data.lastRefresh ?? '') || 0;
+  const at = Number(state.data.nextRefreshAt) > Date.now()
+    ? Number(state.data.nextRefreshAt)
+    : (last ? last + intervalMin * 60_000 : 0);
+  if (!at) { el.textContent = '—'; return; }
   const left = Math.max(0, at - Date.now());
-  const minutes = Math.floor(left / 60000);
-  const seconds = Math.floor((left % 60000) / 1000);
+  const minutes = Math.floor(left / 60_000);
+  const seconds = Math.floor((left % 60_000) / 1000);
   el.textContent = `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
 
   // Отсчёт дошёл до нуля — сразу спрашиваем сервер и, если он ещё не обновил
-  // ленты, просим обновить. Иначе счётчик замирал на 0:00 и казалось, что
-  // автообновление сломалось.
+  // ленты, просим обновить (не чаще раза в минуту).
   if (left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 60_000) {
     state.refreshKickedAt = Date.now();
     loadData({ poll: true })
-      .then(() => {
-        if (Number(state.data.nextRefreshAt) > Date.now()) return undefined;
-        return api('/api/refresh', { force: false }).then(() => loadData({ poll: true }));
-      })
+      .then(() => api('/api/refresh', { force: false }).then(() => loadData({ poll: true })))
       .catch(() => {});
   }
 }
