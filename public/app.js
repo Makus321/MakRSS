@@ -3371,7 +3371,12 @@ function setupPwa() {
   const settingsVersion = $('#settings-version');
   if (settingsVersion) settingsVersion.textContent = versionLabel;
   const sidebarVersion = $('#sidebar-version');
-  if (sidebarVersion) sidebarVersion.textContent = 'Версия ' + APP_VERSION;
+  if (sidebarVersion) {
+    // Показываем заодно версии стилей и кэша: по ним видно, обновилось ли приложение.
+    const styleTag = document.querySelector('link[rel="stylesheet"]');
+    const styleVersion = /v=(\d+)/.exec(styleTag?.href ?? '')?.[1] ?? '?';
+    sidebarVersion.textContent = 'Версия ' + APP_VERSION + ' · стили v' + styleVersion;
+  }
 
   // Кнопка «Обновить приложение» нужна только когда браузер уже скачал новую
   // версию, но ещё не переключился на неё. Сравнение версий по сети давало

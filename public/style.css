@@ -660,6 +660,9 @@ body.dragging .tree-tail { display: flex; }
   /* Зазор между краем экрана и карточкой — 2 пикселя. */
   .list { padding: 2px 2px 80vh; }
   .article { border-radius: 8px; margin-bottom: 4px; }
+  /* На телефоне настройка «ширина текста» не должна сужать карточку: она
+     оставляла поля по краям экрана. Здесь карточка всегда во всю ширину. */
+  .article { max-width: 100%; width: 100%; margin-left: 0; margin-right: 0; }
   .a-body { padding: 2px 8px 10px; }
   .article.expanded:not(.selected) .a-body { padding-right: 40px; }
   .a-actions { top: 4px; right: 4px; }
@@ -822,7 +825,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
     width: 40px; height: 36px; border-radius: 9px;
     font-size: calc(17px * var(--ui-scale, 1));
   }
-  .a-head { padding-right: 54px; }
+  .a-head { padding-right: 46px; }
 }
 
 /* Сенсорные экраны (телефоны, планшеты, раскладные): кнопки крупные, карточка
@@ -838,7 +841,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
     font-size: calc(17px * var(--ui-scale, 1));
   }
   .article.compact { min-height: 132px; }
-  .a-head { padding-right: 54px; }
+  .a-head { padding-right: 46px; }
 }
 
 /* Ряд картинок: пустые ячейки не нужны, а «ждущая» подложка исчезает, когда

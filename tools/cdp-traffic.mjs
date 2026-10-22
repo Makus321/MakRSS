@@ -250,6 +250,28 @@ console.log('  текст списка:', await evaluate("(document.querySelecto
 console.log('  тост:', await evaluate("(document.querySelector('#toast')?.textContent ?? '').slice(0, 90)"));
 console.log('  статей в состоянии:', await evaluate("(window.__rssState && window.__rssState.data && window.__rssState.data.items || []).length"));
 
+// Замер геометрии после загрузки списка.
+const geometryFinal = await evaluate(`(() => {
+  const list = document.querySelector('#list');
+  const card = document.querySelector('.article');
+  const head = document.querySelector('.article .a-head');
+  const title = document.querySelector('.article .a-title');
+  if (!list || !card || !head) return null;
+  const r = (el) => el.getBoundingClientRect();
+  const cs = (el) => getComputedStyle(el);
+  return {
+    windowWidth: window.innerWidth,
+    listPad: cs(list).padding,
+    headPad: cs(head).padding,
+    cardLeftGap: Math.round(r(card).left),
+    cardRightGap: Math.round(window.innerWidth - r(card).right),
+    cardWidth: Math.round(r(card).width),
+    textRightGap: Math.round(r(card).right - r(title).right),
+    maxWidth: cs(card).maxWidth,
+  };
+})()`);
+console.log('  геометрия карточки:', JSON.stringify(geometryFinal));
+
 // Снимок экрана для визуальной проверки (если задан --shot).
 const shotPath = args.get('shot');
 if (shotPath) {
