@@ -363,6 +363,21 @@ const geometryFinal = await evaluate(`(() => {
 })()`);
 console.log('  геометрия карточки:', JSON.stringify(geometryFinal));
 
+// Геометрия строки пароля: где поля и где кнопка.
+const passRowProbe = await evaluate(`(() => {
+  const input = document.querySelector('#set-pass-current');
+  const button = document.querySelector('#save-credentials');
+  if (!input || !button) return null;
+  const r = (el) => el.getBoundingClientRect();
+  return {
+    input: { top: Math.round(r(input).top), bottom: Math.round(r(input).bottom), h: Math.round(r(input).height) },
+    button: { top: Math.round(r(button).top), bottom: Math.round(r(button).bottom), h: Math.round(r(button).height) },
+    deltaBottom: Math.round(r(button).bottom - r(input).bottom),
+    align: getComputedStyle(input.closest('.pass-row')).alignItems,
+  };
+})()`);
+console.log('  строка пароля:', JSON.stringify(passRowProbe));
+
 // Снимок настроек, если задан --settings.
 const settingsShot = args.get('settings');
 if (settingsShot) {
