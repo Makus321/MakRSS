@@ -79,7 +79,7 @@ function clampTextWidth(value) {
 const COMMENTS_TTL_MS = Number(process.env.COMMENTS_TTL_MINUTES || 30) * 60_000;
 const COMMENTS_COUNT_TTL_MS = 6 * 3600_000;      // счётчик комментариев обновляем раз в 6 часов
 const COMMENT_COUNT_SYNC_MS = 5 * 60_000;          // при синхронизации — не чаще раза в 5 минут
-const COMMENT_COUNT_SYNC_LIMIT = 40;               // и не больше 40 статей за прогон
+const COMMENT_COUNT_SYNC_LIMIT = 120;              // и не больше 120 статей за прогон
 const DATA_DIR_DEFAULT = path.resolve(process.env.DATA_DIR || argValue('data', path.join(ROOT, 'data')));
 let DATA_DIR = DATA_DIR_DEFAULT;
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -2558,6 +2558,8 @@ async function api(req, res, url) {
       store.saveStateSoon();
     }
     if (!body.id) scheduleFullText();
+    // Свежие числа комментариев: в карточке должно быть актуальное значение.
+    await refreshCommentCounts().catch(() => 0);
     return json(res, 200, { ok: true, results, data: buildPayload() });
   }
 
