@@ -592,7 +592,7 @@ body.dragging .tree-tail { display: flex; }
 .toast.top { bottom: auto; top: 14px; }
 
 @media (max-width: 900px) {
-  .a-head { padding-right: 8px; }
+  .a-head { padding-right: 46px; }
 }
 
 /* ---------------------------------------------------------------- телефон */
@@ -656,11 +656,8 @@ body.dragging .tree-tail { display: flex; }
   .a-actions { top: 6px; right: 6px; gap: 3px; }
   .a-actions button { width: 30px; height: 30px; font-size: calc(14px * var(--ui-scale, 1)); }
   /* Минимальные поля: текст должен доходить до края карточки. */
-  /* Кнопки стоят в нижнем ряду карточки, поэтому текст занимает всю ширину. */
-  .a-head { padding: 6px 8px 6px 8px; row-gap: 4px; padding-bottom: 6px; }
-  .a-actions { position: absolute; top: auto; bottom: 4px; right: 4px; flex-direction: row; gap: 4px; }
-  .article { padding-bottom: 44px; }
-  .a-body { padding-right: 8px; }
+  .a-head { padding: 6px 46px 6px 8px; row-gap: 4px; }
+  .a-body { padding-right: 46px; }
   /* Зазор между краем экрана и карточкой — 2 пикселя. */
   .list { padding: 2px 2px 80vh; }
   .article { border-radius: 8px; margin-bottom: 4px; }
@@ -829,7 +826,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
     width: 40px; height: 36px; border-radius: 9px;
     font-size: calc(17px * var(--ui-scale, 1));
   }
-  .a-head { padding-right: 8px; }
+  .a-head { padding-right: 46px; }
 }
 
 /* Сенсорные экраны (телефоны, планшеты, раскладные): кнопки крупные, карточка
@@ -845,7 +842,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
     font-size: calc(17px * var(--ui-scale, 1));
   }
   .article.compact { min-height: 132px; }
-  .a-head { padding-right: 8px; }
+  .a-head { padding-right: 46px; }
 }
 
 /* Ряд картинок: пустые ячейки не нужны, а «ждущая» подложка исчезает, когда
