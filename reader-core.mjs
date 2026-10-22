@@ -1287,6 +1287,7 @@ function payloadItem(feed, item) {
     feedTitle: feed.title,
     read: Boolean(db.read[item.id]) || undefined,
     starred: Boolean(db.starred[item.id]) || undefined,
+    starredAt: Number(db.starred[item.id]) || undefined,   // старые отметки без времени — в конце
   };
 }
 
@@ -1322,6 +1323,7 @@ function buildPayload() {
         feedTitle: feed.title,
         read: Boolean(db.read[item.id]) || undefined,
         starred: Boolean(db.starred[item.id]) || undefined,
+    starredAt: Number(db.starred[item.id]) || undefined,   // старые отметки без времени — в конце
       });
     }
   }

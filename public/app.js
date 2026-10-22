@@ -478,7 +478,7 @@ function passesFeedFilters(item) {
 /** Статьи вида без учёта прочитанного — из них собирается снимок. */
 function itemsOfView() {
   const q = state.query.trim().toLowerCase();
-  return state.data.items.filter((item) => {
+  const list = state.data.items.filter((item) => {
     if (state.view.type === 'feed' && item.feedId !== state.view.id) return false;
     if (state.view.type === 'folder' && feedById(item.feedId)?.folderId !== state.view.id) return false;
     if (state.view.type === 'starred' && !item.starred && !pendingUnstar.has(item.id)) return false;
@@ -486,6 +486,11 @@ function itemsOfView() {
     if (q && !searchHaystack(item).includes(q)) return false;
     return true;
   });
+  // В «Избранном» порядок — по времени добавления в избранное, а не по дате поста.
+  if (state.view.type === 'starred') {
+    return list.sort((a, b) => (Number(b.starredAt) || 0) - (Number(a.starredAt) || 0));
+  }
+  return list;
 }
 
 /**
