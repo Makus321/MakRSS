@@ -3535,7 +3535,10 @@ function updateCountdown() {
   const left = Math.max(0, at - Date.now());
   const minutes = Math.floor(left / 60_000);
   const seconds = Math.floor((left % 60_000) / 1000);
-  el.textContent = `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
+  // Ноль показываем только мгновение: дальше честно пишем, что идёт обновление.
+  el.textContent = left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 3000
+    ? '⏱ обновляю…'
+    : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
 
   // Отсчёт дошёл до нуля — сразу спрашиваем сервер и, если он ещё не обновил
   // ленты, просим обновить (не чаще раза в минуту).
