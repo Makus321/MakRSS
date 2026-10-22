@@ -2339,16 +2339,20 @@ async function api(req, res, url) {
       }
       for (const feedId of touched) await pruneFeed(feedId);
     }
+    // Полный список здесь не отдаём: при прокрутке отметок много, и каждая
+    // тянула мегабайты. Клиент обновляет состояние сам, оптимистично.
+    if (body.light) return json(res, 200, { ok: true, changed: ids.length });
     return json(res, 200, { ok: true, changed: ids.length, data: buildPayload() });
   }
 
   if (route === 'POST /api/star') {
-    const { id, starred } = await readJson(req);
+    const { id, starred, light } = await readJson(req);
     if (!id) return json(res, 400, { ok: false, error: 'нет id' });
     if (starred === false) delete db.starred[id];
     else db.starred[id] = Date.now();
     pruneState();
     store.saveStateSoon();
+    if (light) return json(res, 200, { ok: true });
     return json(res, 200, { ok: true, data: buildPayload() });
   }
 

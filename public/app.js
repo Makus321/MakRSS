@@ -1699,7 +1699,7 @@ async function flushPendingReads() {
   for (const [read, ids] of byValue) {
     if (!ids.length) continue;
     try {
-      const payload = await api('/api/read', { ids, read });
+      const payload = await api('/api/read', { ids, read, light: true });
       if (payload?.ok === false) continue;
       for (const id of ids) pendingReads.delete(id);
       savePendingReads();
@@ -1815,7 +1815,7 @@ async function toggleStar(id, event) {
   if (!item) return;
   const next = !item.starred;
   try {
-    const payload = await api('/api/star', { id, starred: next });
+    const payload = await api('/api/star', { id, starred: next, light: true });
     rememberData(payload.data);
     // В «Избранном» снятие звезды не перерисовываем сразу: нажатие могло быть
     // случайным, и статья не должна исчезать из-под пальца. Список пересоберётся
@@ -2063,8 +2063,15 @@ $('#list').addEventListener('scroll', (event) => {
   }, 260);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {
-    const total = visibleItems().length;
-    if (state.limit < total) { state.limit += 10; renderList(); }
+    // Событий прокрутки десятки в секунду: без паузы каждое вызывало полную
+    // перерисовку списка. Догружаем не чаще, чем раз в 200 мс.
+    if (!state.growTimer) {
+      state.growTimer = setTimeout(() => {
+        state.growTimer = null;
+        const total = visibleItems().length;
+        if (state.limit < total) { state.limit = Math.min(total, state.limit + 10); renderList(); }
+      }, 200);
+    }
   }
 });
 
