@@ -451,7 +451,7 @@ async function onRequest(req, res) {
       if (!watcher) return json(res, 401, { ok: false, error: 'нужен вход', authRequired: true });
       res.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
-        'cache-control': 'no-cache, no-transform',
+        'cache-control': 'no-store',
         connection: 'keep-alive',
         'x-accel-buffering': 'no',
       });
@@ -468,6 +468,37 @@ async function onRequest(req, res) {
     }
 
     // --- админка (страница отдаётся всегда: без входа она показывает форму) ---
+    // Аварийная страница: сбрасывает service worker и кэши приложения.
+    // Нужна, когда браузер держит старую версию и кнопка в интерфейсе не помогает.
+    if (url.pathname === '/reset') {
+      const page = `<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Обновление MAK RSS Reader</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;margin:0;padding:24px;background:#141414;color:#eee}
+button{font:inherit;padding:12px 18px;border-radius:10px;border:1px solid #666;background:#242424;color:#eee}
+pre{white-space:pre-wrap;font-size:13px;color:#9a9a9a}</style></head><body>
+<h2>Сброс кэша приложения</h2>
+<p id="status">Чищу кэши и service worker…</p>
+<button onclick="location.href='/'">Открыть читалку</button>
+<pre id="log"></pre>
+<script>
+(async () => {
+  const log = (text) => { document.getElementById('log').textContent += text + '\\n'; };
+  try {
+    for (const name of await caches.keys()) { await caches.delete(name); log('удалён кэш ' + name); }
+    const regs = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+    for (const reg of regs) { await reg.unregister(); log('снята регистрация воркера'); }
+    document.getElementById('status').textContent = 'Готово. Открываю читалку…';
+    setTimeout(() => location.replace('/'), 600);
+  } catch (e) {
+    document.getElementById('status').textContent = 'Не удалось очистить: ' + e.message;
+  }
+})();
+</script></body></html>`;
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(page);
+      return;
+    }
+
     if (url.pathname === '/admin' || url.pathname === '/admin/') return serveAdminFile(res, 'admin.html');
     if (url.pathname === '/admin.js') return serveAdminFile(res, 'admin.js');
 
