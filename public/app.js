@@ -1051,7 +1051,7 @@ function articleHtml(item) {
   // has-title: у карточки есть заголовок. По нему в кратком виде решается,
   // нужен ли отступ справа под плавающие кнопки.
   const hasTitle = Boolean(String(item.title ?? '').trim());
-  return `<article class="article ${item.read ? 'read' : 'unread'} ${mode}${hasTitle ? ' has-title' : ''}${hasThumb ? ' has-thumb' : ''}${expanded ? ' expanded' : ''}${item.id === state.selectedId ? ' selected' : ''}" style="--read-width:100%;max-width:100%;width:100%" data-item="${esc(item.id)}">
+  return `<article class="article ${item.read ? 'read' : 'unread'} ${mode}${hasTitle ? ' has-title' : ''}${hasThumb ? ' has-thumb' : ''}${expanded ? ' expanded' : ''}${item.id === state.selectedId ? ' selected' : ''}" style="--read-width:${width}%" data-item="${esc(item.id)}">
     <div class="a-rail">
       <div class="a-actions">
         <button data-star="${esc(item.id)}" class="${item.starred ? 'on' : ''}" title="В избранное (s)">${item.starred ? '★' : '☆'}</button>
@@ -1074,7 +1074,7 @@ function articleHtml(item) {
             ? `<button class="flag comment-chip${item.commentsCount ? '' : ' empty'}" data-comments="${esc(item.id)}" data-comments-only="1" title="Показать комментарии, не раскрывая статью">💬 ${item.commentsCount}</button>` : ''}
         </div>
       </div>
-      <p class="a-excerpt" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:${lines};--excerpt-lines:${lines};overflow:hidden">${esc(item.excerpt || 'Нажмите, чтобы раскрыть статью')}</p>
+      ${expanded ? '' : `<p class="a-excerpt" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:${lines};--excerpt-lines:${lines};overflow:hidden">${esc(item.excerpt || 'Нажмите, чтобы раскрыть статью')}</p>`}
     </div>
     <div class="a-body">${expanded
       ? (commentsOnly
