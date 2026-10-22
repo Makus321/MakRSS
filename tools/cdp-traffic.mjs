@@ -174,7 +174,34 @@ for (let step = 0; step < scrollSteps; step += 1) {
 
 await sleep(1500);
 
+
 // --- проверки, что функциональность не сломалась (пишутся в отчёт) ---
+// --- замер отступов карточки ---
+const styleProbe = await evaluate(`(() => {
+  const list = document.querySelector('#list');
+  const card = document.querySelector('.article');
+  const head = document.querySelector('.article .a-head');
+  const title = document.querySelector('.article .a-title');
+  if (!list || !card || !head) return null;
+  const cs = (el) => getComputedStyle(el);
+  const rect = (el) => el.getBoundingClientRect();
+  return {
+    listPad: cs(list).padding,
+    headPad: cs(head).padding,
+    cardRadius: cs(card).borderRadius,
+    cardMargin: cs(card).marginBottom,
+    gapToRight: Math.round(rect(card).right - rect(title).right),
+    cardWidth: Math.round(rect(card).width),
+    titleWidth: Math.round(rect(title).width),
+    textAlign: cs(title).textAlign,
+  };
+})()`);
+console.log('  отступы карточки:', JSON.stringify(styleProbe));
+
+// На узком экране дерево — выдвижная панель: сначала открываем её.
+await evaluate("(() => { const btn = document.querySelector('#menu-btn'); if (!btn) return null; const r = btn.getBoundingClientRect(); if (r.width > 0) btn.dispatchEvent(new MouseEvent('click', { bubbles: true })); return r.width; })()");
+await sleep(600);
+
 const beforeTree = await evaluate("document.querySelectorAll('#tree .row').length");
 await realClick('#tree .row[data-feed-row]');
 await sleep(2500);
@@ -222,6 +249,17 @@ console.log('  вход показан:', await evaluate("!document.querySelecto
 console.log('  текст списка:', await evaluate("(document.querySelector('#list')?.textContent ?? '').slice(0, 90)"));
 console.log('  тост:', await evaluate("(document.querySelector('#toast')?.textContent ?? '').slice(0, 90)"));
 console.log('  статей в состоянии:', await evaluate("(window.__rssState && window.__rssState.data && window.__rssState.data.items || []).length"));
+
+// Снимок экрана для визуальной проверки (если задан --shot).
+const shotPath = args.get('shot');
+if (shotPath) {
+  const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
+  if (shot?.data) {
+    const { writeFile: write } = await import('node:fs/promises');
+    await write(shotPath, Buffer.from(shot.data, 'base64'));
+    console.log('  снимок:', shotPath);
+  }
+}
 
 const byUrl = [...stats.entries()].sort((a, b) => b[1].bytes - a[1].bytes);
 const byType = new Map();

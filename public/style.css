@@ -655,13 +655,23 @@ body.dragging .tree-tail { display: flex; }
   /* Кнопки в карточке меньше и стоят столбиком: на телефоне они съедали ширину. */
   .a-actions { top: 6px; right: 6px; gap: 3px; }
   .a-actions button { width: 30px; height: 30px; font-size: calc(14px * var(--ui-scale, 1)); }
-  .a-head { padding: 8px 44px 8px 10px; row-gap: 6px; }
+  /* Минимальные поля: текст должен доходить до края карточки. */
+  .a-head { padding: 6px 40px 6px 8px; row-gap: 4px; }
+  .list { padding: 4px 4px 80vh; }
+  .article { border-radius: 8px; margin-bottom: 4px; }
+  .a-body { padding: 2px 8px 10px; }
+  .article.expanded:not(.selected) .a-body { padding-right: 40px; }
+  .a-actions { top: 4px; right: 4px; }
+  .a-title { margin-bottom: 2px; }
+  .a-excerpt { margin-top: 2px; }
+  .a-meta { gap: 6px; }
   /* На телефоне ВСЕ карточки раскладываем обычным потоком: заголовок и краткий
      текст обтекают картинку. Привязка к классу has-thumb не годилась — у части
      карточек его не было, и они оставались двухколоночными. */
   .article { display: block; }
   .a-head { display: block; }
-  .a-excerpt { grid-column: auto; max-width: 100%; overflow-wrap: anywhere; }
+  .a-excerpt { grid-column: auto; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+  .a-body { text-align: left; hyphens: none; }
   .a-thumb { float: left; margin: 2px 8px 6px 0; }
   /* Обтекание чистим в конце карточки, а не в конце шапки: иначе текст начинался
      бы ниже картинки. */
