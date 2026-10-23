@@ -860,8 +860,13 @@ function showMediaCounters() {
       badge.className = 'media-debug';
       body.append(badge);
     }
-    badge.textContent = `в тексте: картинок ${imgs}, видео ${vids}`;
-    badge.hidden = false;
+    // Показываем только ненулевые значения; если нет ни картинок, ни видео —
+    // строки не будет вовсе.
+    const parts = [];
+    if (imgs > 0) parts.push('картинок ' + imgs);
+    if (vids > 0) parts.push('видео ' + vids);
+    badge.textContent = parts.length ? 'в тексте: ' + parts.join(', ') : '';
+    badge.hidden = parts.length === 0;
   }
 }
 

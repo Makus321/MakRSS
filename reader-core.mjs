@@ -1665,7 +1665,7 @@ async function bodiesFor(ids) {
       const isTelegramFeed = (feed?.kind ?? '').startsWith('telegram');
       if (isTelegramFeed && item.hasFull) { item.hasFull = false; store.saveStateSoon(400, { bump: false }); }
       out[item.id] = {
-        content: body.content ?? '',
+        content: isTelegramFeed ? shortenPostMedia(body.content ?? '', feed.id, item.id) : (body.content ?? ''),
         fullHtml: isTelegramFeed ? '' : (body.fullHtml ?? ''),
         fullFetchedAt: body.fullFetchedAt ?? null,
         hasFull: hasText,
@@ -2164,8 +2164,62 @@ async function serveImage(req, res, url) {
   }
 }
 
+/** Заменяет длинные ссылки медиа на короткие внутренние — их не режут прокси. */
+function shortenPostMedia(html, feedId, itemId) {
+  let imageIndex = 0;
+  let videoIndex = 0;
+  return String(html)
+    .replace(/<img\b([^>]*?)\bsrc="[^"]*"/gi, (match, before) => '<img' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + (imageIndex++) + '"')
+    .replace(/<video\b([^>]*?)\bsrc="[^"]*"/gi, (match, before) => '<video' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + (videoIndex++) + '&v=1"');
+}
+
+/** Достаёт из сохранённого текста поста N-ю картинку или N-е видео. */
+async function postMediaUrl(feedId, itemId, index, kind) {
+  const body = (await store.body(feedId, itemId)) ?? {};
+  const found = [...String(body.content ?? '').matchAll(kind === 'video' ? /<video\b[^>]*\bsrc="([^"]+)"/gi : /<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]);
+  return found[index] ?? '';
+}
+
+/** Качает внешний файл поста и отдаёт его клиенту (с кэшем на диск). */
+async function proxyRemoteMedia(req, res, remote, kind) {
+  const key = createHash('sha1').update(remote).digest('hex').slice(0, 24);
+  const cached = path.join(MEDIA_DIR, key);
+  try {
+    const data = await readFile(cached);
+    res.writeHead(200, { 'content-type': kind === 'video' ? 'video/mp4' : 'image/jpeg', 'cache-control': 'private, max-age=86400' });
+    return res.end(data);
+  } catch { /* ещё не скачано */ }
+  try {
+    const response = await fetch(remote, { headers: { 'user-agent': UA, accept: '*/*' } });
+    if (!response.ok) throw new Error(String(response.status));
+    const type = response.headers.get('content-type') ?? (kind === 'video' ? 'video/mp4' : 'image/jpeg');
+    if (kind === 'video') {
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
+      for await (const chunk of response.body) res.write(chunk);
+      return res.end();
+    }
+    const bin = Buffer.from(await response.arrayBuffer());
+    await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
+    await writeFile(cached, bin).catch(() => {});
+    res.writeHead(200, { 'content-type': type, 'cache-control': 'private, max-age=86400' });
+    return res.end(bin);
+  } catch (err) {
+    res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' }).end('не удалось получить файл: ' + err.message);
+    return undefined;
+  }
+}
+
 async function serveMedia(req, res, url) {
   const feedId = url.searchParams.get('f') ?? '';
+  // Короткая ссылка на медиа поста: /api/media?f=<лента>&k=<пост>&i=<номер>.
+  const postId = url.searchParams.get('k') ?? '';
+  if (postId) {
+    const index = Math.max(0, Number.parseInt(url.searchParams.get('i') ?? '0', 10) || 0);
+    const kind = url.searchParams.get('v') === '1' ? 'video' : 'image';
+    const remote = await postMediaUrl(feedId, postId, index, kind);
+    if (!remote) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('нет файла'); return; }
+    return proxyRemoteMedia(req, res, remote, kind);
+  }
   const messageId = Number.parseInt(url.searchParams.get('m') ?? '', 10);
   const item = (db.items[feedId] ?? []).find((i) => i.messageId === messageId);
   const fileId = item?.imageFileId;
