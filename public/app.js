@@ -977,8 +977,15 @@ function bodyHtml(item) {
     // Видео: кнопка на каждый ролик поста, а не только на первый. Сами теги
     // <video> из текста убираем — вместо них кнопки, которые включают прокси.
     const bodyVideos = [...String(html).matchAll(/<video\b[^>]*\bsrc="([^"]+)"[^>]*>/gi)].map((m) => m[1]);
+    // Чистка разметки уже завернула адрес в наш прокси — снимаем обёртку,
+    // иначе кнопка завернёт его второй раз и сервер ответит «400».
+    const unwrap = (src) => {
+      const nested = /^\/api\/video\?u=([\s\S]+)$/.exec(src);
+      return nested ? decodeURIComponent(nested[1]) : src;
+    };
+    const videoList = bodyVideos.map(unwrap);
     if (bodyVideos.length) html = html.replace(/<video\b[^>]*>[\s\S]*?<\/video>|<video\b[^>]*>/gi, '');
-    const videoSources = bodyVideos.length ? bodyVideos : (item.video ? [item.video] : []);
+    const videoSources = videoList.length ? videoList : (item.video ? [unwrap(item.video)] : []);
     const video = videoSources
       .map((src) => `<div class="a-video"><button class="btn primary" data-video="${esc(src)}">▶ Просмотреть видео</button>
           <span class="note">видео проигрывается через прокси и не сохраняется</span></div>`)

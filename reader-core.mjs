@@ -1857,7 +1857,10 @@ function thumbFileFor(source) {
 // то мешает CORS. Пробуем проиграть через свой прокси — потоком, без кеша на диске.
 
 async function serveVideo(req, res, url) {
-  const source = String(url.searchParams.get('u') ?? '');
+  let source = String(url.searchParams.get('u') ?? '');
+  // На случай двойной обёртки: /api/video?u=/api/video?u=https%3A%2F%2F…
+  const nestedSource = /^\/api\/video\?u=([\s\S]+)$/.exec(source);
+  if (nestedSource) source = decodeURIComponent(nestedSource[1]);
   let parsed;
   try { parsed = new URL(source); } catch { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('плохой адрес'); return; }
   if (!/^https?:$/.test(parsed.protocol) || !isPublicUrl(parsed)) {
