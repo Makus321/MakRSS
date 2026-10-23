@@ -2200,11 +2200,13 @@ async function serveMedia(req, res, url) {
   const feedId = url.searchParams.get('f') ?? '';
   // Короткая ссылка на картинку поста: отдаём из кэша, при промахе качаем и кэшируем.
   const postId = url.searchParams.get('k') ?? '';
+  if (postId) console.log('media: f=' + feedId + ' k=' + postId + ' i=' + (url.searchParams.get('i') ?? '0'));
   if (postId) {
     const index = Math.max(0, Number.parseInt(url.searchParams.get('i') ?? '0', 10) || 0);
     const target = path.join(MEDIA_DIR, postMediaFile(feedId, postId, index));
     try {
       const data = await readFile(target);
+      console.log('media ok из кэша, байт ' + data.length);
       res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
       return res.end(data);
     } catch { /* ещё не скачано */ }
@@ -2230,8 +2232,10 @@ async function serveMedia(req, res, url) {
         'content-type': response.headers.get('content-type') ?? 'image/jpeg',
         'cache-control': 'private, max-age=86400',
       });
+      console.log('media ok скачано, байт ' + bin.length);
       return res.end(bin);
     } catch (err) {
+      console.log('media FAIL ' + String(err.message));
       // Ссылка устарела (Telegram отдаёт 404/500) — перечитываем пост в фоне,
       // чтобы получить свежие адреса картинок; сейчас честно отвечаем 404.
       const feed = feedById(feedId);

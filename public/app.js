@@ -3794,15 +3794,17 @@ function sanitize(html, baseUrl) {
       if (name.startsWith('on') || name === 'style' || name === 'srcdoc' || name === 'formaction') {
         el.removeAttribute(attr.name);
       } else if (['href', 'src', 'poster'].includes(name)) {
-        const abs = resolve(value);
-        if (/^(https?:|mailto:|data:image\/)/i.test(abs) || abs.startsWith(`${location.origin}/api/media`)) {
+        // Свои ссылки (/api/media) оставляем как есть — их не надо ни резолвить, ни проксировать.
+        const internal = value.startsWith('/api/');
+        const abs = internal ? value : resolve(value);
+        if (internal || /^(https?:|mailto:|data:image\/)/i.test(abs) || abs.startsWith(location.origin + '/api/')) {
           // Картинки по http:// на странице https браузер блокирует («смешанное
           // содержимое») — отдаём их через свой прокси. Ссылки не трогаем.
           // Картинки и видео всегда отдаём через свой прокси: он снимает проблему
           // «смешанного содержимого», запрета хотлинков и чужого референта.
           // Внутренние ссылки (/api/media) не оборачиваем повторно в прокси:
           // иначе сервер запрашивал бы сам себя без сессии и получал отказ.
-          const isMedia = name !== 'href' && /^https?:\/\//i.test(abs) && !abs.startsWith(location.origin + '/api/');
+          const isMedia = !internal && name !== 'href' && /^https?:\/\//i.test(abs) && !abs.startsWith(location.origin + '/api/');
           const isVideo = el.tagName === 'VIDEO' || el.tagName === 'AUDIO' || el.tagName === 'SOURCE';
           const proxied = isMedia
             ? (isVideo ? `/api/video?u=${encodeURIComponent(abs)}` : `/api/img?u=${encodeURIComponent(abs)}`)
