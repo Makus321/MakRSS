@@ -728,6 +728,7 @@ async function refreshMany(feeds, opts = {}) {
   for (const r of results) if (r.id) lastAddedByFeed[r.id] = r.added ?? 0;
   // Счётчики комментариев обновляем после каждого обновления лент, в фоне.
   refreshCommentCounts().catch(() => {});
+  refreshStarredMedia().catch(() => {});
   store.saveStateSoon();
   return results;
 }
@@ -1570,6 +1571,40 @@ async function serveFavicon(req, res, url) {
  */
 let backfillDone = false;
 
+/**
+ * Перечитывает избранные посты Telegram, разобранные старой версией: медиа
+ * (видео, фотографии) должно появляться без ручных действий.
+ */
+let starredMediaBusy = false;
+async function refreshStarredMedia(limit = 10) {
+  if (starredMediaBusy) return 0;
+  starredMediaBusy = true;
+  let fixed = 0;
+  try {
+    const queue = [];
+    for (const feed of db.feeds) {
+      if (feed.kind !== 'telegram' && feed.kind !== 'telegram-bot') continue;
+      for (const item of db.items[feed.id] ?? []) {
+        if (!db.starred[item.id]) continue;
+        queue.push({ feed, item });
+      }
+    }
+    queue.sort((a, b) => (Number(db.starred[b.item.id]) || 0) - (Number(db.starred[a.item.id]) || 0));
+    for (const job of queue) {
+      if (fixed >= limit) break;
+      const body = (await store.body(job.feed.id, job.item.id)) ?? {};
+      if (body.tgVersion === TG_CONTENT_VERSION) continue;
+      const ok = await enrichTelegramItem(job.feed, job.item).catch(() => false);
+      if (ok) fixed += 1;
+      await sleep(300);
+    }
+    if (fixed) log(`избранное: перечитано постов с медиа ${fixed}`);
+  } finally {
+    starredMediaBusy = false;
+  }
+  return fixed;
+}
+
 async function backfillStarredImages(limit = 200) {
   let fixed = 0;
   for (const feed of db.feeds) {
@@ -1594,7 +1629,9 @@ async function backfillStarredImages(limit = 200) {
 async function bodiesFor(ids) {
   const out = {};
   const byFeed = new Map();
-  for (const id of ids) {
+  // Избранные — вперёд: новая версия разбора должна доходить до них в первую очередь.
+  const ordered = [...ids].sort((a, b) => Number(Boolean(db.starred[b])) - Number(Boolean(db.starred[a])));
+  for (const id of ordered) {
     const found = findItem(id);
     if (!found) continue;
     if (!byFeed.has(found.feed.id)) byFeed.set(found.feed.id, []);
@@ -2421,7 +2458,11 @@ async function api(req, res, url) {
 
   if (route === 'GET /api/data') {
     // Один раз за запуск: подставляем превью старым избранным статьям из их текста.
-    if (!backfillDone) { backfillDone = true; await backfillStarredImages().catch(() => 0); }
+    if (!backfillDone) {
+      backfillDone = true;
+      await backfillStarredImages().catch(() => 0);
+      refreshStarredMedia().catch(() => {});      // избранные посты — в первую очередь
+    }
     // Постраничная выдача статей одного вида: клиенту не нужно тянуть все
     // 4000+ статей, чтобы показать первые 40 карточек.
     const viewParam = url.searchParams.get('view');
