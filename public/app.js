@@ -613,7 +613,9 @@ function renderSidebar() {
 
   let html = '';
   const visibleFeeds = (list) => (state.prefs.treeFilter === 'unread'
-    ? list.filter((f) => f.unread > 0 || f.id === state.view.id)
+    // Оставляем ленты с непрочитанным, текущую и те, у которых выбрано «показывать
+    // все»: иначе лента с нулём непрочитанных пропадала из дерева.
+    ? list.filter((f) => f.unread > 0 || f.id === state.view.id || state.prefs.feedUnread?.[f.id] === false)
     : list);
 
   for (const folder of folders) {
