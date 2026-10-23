@@ -38,6 +38,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { parseFeed, looksLikeFeed, discoverFeedLinks, htmlToText, itemId, stripFeedNoise } from './lib/feed.mjs';
 import { parseXml, localName, elementChildren } from './lib/xml.mjs';
+import { imageSize } from './lib/imagesize.mjs';
 import { extractArticle, looksLikePageChrome } from './lib/readability.mjs';
 import {
   telegramChannelFromUrl, telegramPreviewUrl, parseTelegramChannel,
@@ -2160,6 +2161,8 @@ async function cachePostMedia(feedId, itemId, html, limit = 12) {
       const bin = Buffer.from(await response.arrayBuffer());
       if (bin.length < 200) continue;
       await writeFile(target, bin);
+      const size = imageSize(bin);
+      if (size) await writeFile(target + ".json", JSON.stringify(size)).catch(() => {});
       saved += 1;
     } catch { /* пропускаем картинку */ }
   }
@@ -2181,6 +2184,8 @@ async function ensureCachedMedia(feedId, itemId, index, remoteUrl) {
     if (bin.length < 200) return false;
     await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
     await writeFile(target, bin).catch(() => {});
+    const size = imageSize(bin);
+    if (size) await writeFile(target + '.json', JSON.stringify(size)).catch(() => {});
     return true;
   } catch {
     return false;
@@ -2188,6 +2193,27 @@ async function ensureCachedMedia(feedId, itemId, index, remoteUrl) {
 }
 
 /** Каждая картинка — отдельным абзацем; отдаём только то, что удалось закэшировать. */
+/** Размер картинки из кэша: нужен, чтобы место под неё резервировалось сразу. */
+async function cachedMediaSize(feedId, itemId, index) {
+  const file = path.join(MEDIA_DIR, postMediaFile(feedId, itemId, index));
+  try {
+    const parsed = JSON.parse(await readFile(file + '.json', 'utf8'));
+    if (Number(parsed?.width) > 0 && Number(parsed?.height) > 0) {
+      return { width: Number(parsed.width), height: Number(parsed.height) };
+    }
+  } catch { /* размера ещё нет — посчитаем по самому файлу */ }
+  try {
+    // Файлы, скачанные раньше, размера не знают: считаем один раз и запоминаем.
+    const bin = await readFile(file);
+    const size = imageSize(bin);
+    if (size) {
+      await writeFile(file + '.json', JSON.stringify(size)).catch(() => {});
+      return size;
+    }
+  } catch { /* файла нет */ }
+  return null;
+}
+
 async function postHtmlForClient(feedId, itemId, html) {
   let out = String(html ?? '');
   const urls = [...out.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]);
@@ -2210,7 +2236,9 @@ async function postHtmlForClient(feedId, itemId, html) {
       // при первом обращении. Скачивание внутри запроса делало ответ слишком медленным.
       void ensureCachedMedia(feedId, itemId, current, urls[current]).catch(() => false);
       const before = match[1] ?? '';
-      pieces.push('<img' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + current + '">');
+      const known = await cachedMediaSize(feedId, itemId, current);
+      const dimension = known ? ' width="' + known.width + '" height="' + known.height + '"' : '';
+      pieces.push('<img' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + current + '"' + dimension + '>');
     } else {
       pieces.push(chunk);
     }

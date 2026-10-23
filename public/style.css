@@ -1076,3 +1076,6 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 /* Якорь прокрутки по умолчанию включён: браузер сам удерживает позицию. */
 .list { overflow-anchor: auto; }
 .article { overflow-anchor: auto; }
+/* Картинки с известными размерами: высота считается по пропорции, поэтому место
+   под ними занято сразу и лента не прыгает при загрузке. */
+.a-body img[width][height] { height: auto; }

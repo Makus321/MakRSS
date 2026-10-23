@@ -1382,43 +1382,6 @@ function flushScrollWork() {
   if (state.deferredPoll) { state.deferredPoll = false; loadData({ poll: true }); }
 }
 
-/**
- * Сторож высоты карточек: если карточка ВЫШЕ видимой области изменила высоту
- * (подгрузилась картинка, пришёл текст), прокрутка компенсируется — иначе вся
- * лента «прыгает» на эту разницу.
- */
-const cardHeightGuard = {
-  observer: null,
-  heights: new WeakMap(),
-  ensure() {
-    if (this.observer || typeof ResizeObserver === 'undefined') return this.observer;
-    this.observer = new ResizeObserver((entries) => {
-      const listEl = document.querySelector('#list');
-      if (!listEl) return;
-      const listTop = listEl.getBoundingClientRect().top;
-      for (const entry of entries) {
-        const card = entry.target;
-        const before = this.heights.get(card) ?? entry.contentRect.height;
-        this.heights.set(card, entry.contentRect.height);
-        const delta = entry.contentRect.height - before;
-        if (!delta) continue;
-        const rect = card.getBoundingClientRect();
-        // Меняется только то, что выше видимой области: то, что ниже, прыжка не даёт.
-        if (rect.bottom <= listTop + 4) listEl.scrollTop += delta;
-      }
-    });
-    return this.observer;
-  },
-  watch(root) {
-    const observer = this.ensure();
-    if (!observer) return;
-    for (const card of root.querySelectorAll('.article[data-item]')) {
-      if (!this.heights.has(card)) this.heights.set(card, card.getBoundingClientRect().height);
-      observer.observe(card);
-    }
-  },
-};
-
 function renderList() {
   if (pointerDown) { renderPending = true; return; }
   if (state.scrolling) { state.deferredRender = true; return; }
@@ -1490,7 +1453,6 @@ function renderList() {
   fillViewport();          // если карточек меньше экрана — догружаем сразу
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
   layoutCardThumbs(listEl); // текст под картинкой, если шапка ниже неё
-  cardHeightGuard.watch(listEl); // не даём ленте прыгать при подгрузке картинок
   updateActiveArticle();
 
   layoutArticleImages();
