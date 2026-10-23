@@ -1197,8 +1197,8 @@ function articleHtml(item) {
     <div class="a-rail">
       <div class="a-actions">
         <button data-star="${esc(item.id)}" class="${item.starred ? 'on' : ''}" title="В избранное (s)">${item.starred ? '★' : '☆'}</button>
-        <button data-read="${esc(item.id)}" data-value="${item.read ? '0' : '1'}" title="Прочитано/непрочитано (m)">${item.read ? '◌' : '✓'}</button>
-        <button data-share="${esc(item.id)}" title="Поделиться ссылкой">⇪</button>
+        <button data-read="${esc(item.id)}" data-value="${item.read ? '0' : '1'}" title="Прочитано/непрочитано (m)">${item.read ? '●' : '○'}</button>
+        <button data-share="${esc(item.id)}" class="a-share" title="Поделиться ссылкой"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="6" cy="12" r="2.5"/><circle cx="17" cy="5.5" r="2.5"/><circle cx="17" cy="18.5" r="2.5"/><path d="M8.2 10.8 L14.8 6.8 M8.2 13.2 L14.8 17.2" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg></button>
         <button data-next="${esc(item.id)}" class="a-next" title="Следующая статья">↓</button>
       </div>
     </div>

@@ -1070,3 +1070,6 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
   .list.comfortable .a-excerpt { margin-top: 4px; }
   .list.comfortable .a-body { padding: 4px 12px 14px; }
 }
+
+/* Иконка «поделиться» — обычный узел из трёх точек, а не стрелка вверх. */
+.a-actions button.a-share svg { display: block; pointer-events: none; }
