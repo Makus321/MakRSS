@@ -844,32 +844,6 @@ function textWidth() {
  * ждёт под картинкой. Широкие оставляем как есть — им нужна вся строка.
  * Решение принимаем по реальной ширине файла после загрузки.
  */
-/**
- * Диагностика медиа в статье: показывает, сколько картинок и видео реально
- * попало в текст. Видно в карточке, помогает понять, где теряется медиа.
- */
-function showMediaCounters() {
-  for (const card of document.querySelectorAll('.article[data-item]')) {
-    const body = card.querySelector('.a-body');
-    if (!body) continue;
-    const imgs = body.querySelectorAll('img').length;
-    const vids = body.querySelectorAll('video').length;
-    let badge = card.querySelector('.media-debug');
-    if (!badge) {
-      badge = document.createElement('div');
-      badge.className = 'media-debug';
-      body.append(badge);
-    }
-    // Показываем только ненулевые значения; если нет ни картинок, ни видео —
-    // строки не будет вовсе.
-    const parts = [];
-    if (imgs > 0) parts.push('картинок ' + imgs);
-    if (vids > 0) parts.push('видео ' + vids);
-    badge.textContent = parts.length ? 'в тексте: ' + parts.join(', ') : '';
-    badge.hidden = parts.length === 0;
-  }
-}
-
 function layoutArticleImages(root = document) {
   const wrap = Boolean(state.prefs.imageWrap);
   for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
@@ -926,25 +900,11 @@ function bodyHtml(item) {
   // Если «тело» статьи — это тот же текст, что в анонсе (так бывает у Telegram
   // и коротких новостей), в полном виде он выглядел дублем. Сравниваем начало.
   const normalise = (text) => String(text ?? '').replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase();
-  // Пост Telegram: единственный правильный текст — из самого поста. «Полный текст
-  // со страницы» для таких постов не нужен и мог быть мусором.
-  const telegramPost = String(feedById(item.feedId)?.kind ?? '').startsWith('telegram');
-  const bodySource = telegramPost ? (body.content ?? '') : (body.fullHtml || body.content || '');
+  const bodySource = body.fullHtml || body.content || '';
   const bodyHead = normalise(bodySource).slice(0, 80);
   const excerptHead = normalise(item.excerpt).slice(0, 80);
   const sameAsExcerpt = Boolean(bodyHead && excerptHead) && (bodyHead.startsWith(excerptHead) || excerptHead.startsWith(bodyHead));
-  let html = sameAsExcerpt && !body.fullHtml && !telegramPost ? '' : sanitize(bodySource, item.link);
-  // Пост Telegram: если чистка почему-то выбросила медиа, добавляем его из
-  // исходного текста поста — картинки и ролики должны быть видны всегда.
-  if (telegramPost) {
-    const raw = String(body.content ?? '');
-    if (!/<img\b/i.test(html) && /<img\b/i.test(raw)) {
-      const pictures = [...raw.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]);
-      if (pictures.length) {
-        html += pictures.map((src) => `<p><img src="${esc(src)}" alt=""></p>`).join('\n');
-      }
-    }
-  }
+  let html = sameAsExcerpt && !body.fullHtml ? '' : sanitize(bodySource, item.link);
   // Бывает, что от сайта пришёл только текст без разметки (или одна разметка без
   // текста). Тогда карточка выглядела пустой — подставляем текст как абзац.
   if (!String(html ?? '').replace(/<[^>]*>/g, ' ').trim()) {
@@ -1435,7 +1395,6 @@ function renderList() {
 
   layoutArticleImages();
   setupEmbeds();
-  showMediaCounters();
 }
 
 /** Обновляет только отметки времени, не трогая остальной список. */
@@ -2052,17 +2011,7 @@ function playVideo(button) {
   player.preload = 'metadata';
   player.className = 'a-video-player';
   player.src = `/api/video?u=${encodeURIComponent(source)}`;
-  // Прокси не смог отдать поток — пробуем напрямую с сервера Telegram,
-  // браузер часто может это сам; если и тут не выйдет, покажем подсказку.
-  let triedDirect = false;
   player.addEventListener('error', () => {
-    if (!triedDirect && /^https?:/i.test(source)) {
-      triedDirect = true;
-      player.src = source;
-      player.load();
-      player.play().catch(() => {});
-      return;
-    }
     block.innerHTML = '<div class="a-note">Видео не открылось — посмотрите его в самом канале.</div>';
   });
   if (block) block.replaceChildren(player);
@@ -3770,9 +3719,6 @@ updateCountdown();
 /** Убирает из HTML статьи всё опасное и починяет относительные ссылки. */
 function sanitize(html, baseUrl) {
   if (!html) return '';
-  // Телеграм-посты: картинки берём прямо с сервера Telegram. Прокси не нужен —
-  // он и был причиной пустых мест вместо фотографий.
-
   const allowed = new Set(['A', 'P', 'BR', 'HR', 'DIV', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'DEL', 'INS', 'CODE', 'PRE',
     'BLOCKQUOTE', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'FIGURE', 'FIGCAPTION', 'PICTURE', 'SOURCE',
     'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'CAPTION', 'VIDEO', 'AUDIO', 'SUB', 'SUP', 'SMALL', 'MARK',
@@ -3814,9 +3760,7 @@ function sanitize(html, baseUrl) {
           // содержимое») — отдаём их через свой прокси. Ссылки не трогаем.
           // Картинки и видео всегда отдаём через свой прокси: он снимает проблему
           // «смешанного содержимого», запрета хотлинков и чужого референта.
-          // Свои внутренние ссылки (/api/media, /api/img) не проксируем повторно:
-          // иначе получался запрос /api/img?u=<наш же /api/media>, который требует сессии.
-          const isMedia = name !== 'href' && /^https?:\/\//i.test(abs) && !abs.startsWith(`${location.origin}/api/`);
+          const isMedia = name !== 'href' && /^https?:\/\//i.test(abs);
           const isVideo = el.tagName === 'VIDEO' || el.tagName === 'AUDIO' || el.tagName === 'SOURCE';
           const proxied = isMedia
             ? (isVideo ? `/api/video?u=${encodeURIComponent(abs)}` : `/api/img?u=${encodeURIComponent(abs)}`)

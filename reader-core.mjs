@@ -117,7 +117,6 @@ const PARSER_VERSION = 18;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
 const BODY_VERSION = 13;
-const TG_CONTENT_VERSION = 3;   // версия разбора медиа в постах Telegram
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -728,7 +727,6 @@ async function refreshMany(feeds, opts = {}) {
   for (const r of results) if (r.id) lastAddedByFeed[r.id] = r.added ?? 0;
   // Счётчики комментариев обновляем после каждого обновления лент, в фоне.
   refreshCommentCounts().catch(() => {});
-  refreshStarredMedia().catch(() => {});
   store.saveStateSoon();
   return results;
 }
@@ -790,9 +788,7 @@ async function enrichTelegramItem(feed, item) {
     const parsed = parseTelegramChannel(res.text, `https://t.me/${channel}`, feed.id, itemId);
     const media = parsed.items[0];
     if (!media?.content) return false;
-    await store.setBody(feed.id, item.id, { content: media.content, contentFetchedAt: new Date().toISOString(), tgVersion: TG_CONTENT_VERSION });
-    // Сразу складываем картинки поста в кэш: отдача клиенту должна быть надёжной.
-    cachePostImages(feed.id, item.id, media.content).catch(() => {});
+    await store.setBody(feed.id, item.id, { content: media.content, contentFetchedAt: new Date().toISOString() });
     const first = /<img[^>]+src="([^"]+)"/i.exec(media.content)?.[1];
     if (first && !item.image) { item.image = first; store.saveStateSoon(400, { bump: false }); }
     if (media.video && !item.video) item.video = media.video;
@@ -1573,40 +1569,6 @@ async function serveFavicon(req, res, url) {
  */
 let backfillDone = false;
 
-/**
- * Перечитывает избранные посты Telegram, разобранные старой версией: медиа
- * (видео, фотографии) должно появляться без ручных действий.
- */
-let starredMediaBusy = false;
-async function refreshStarredMedia(limit = 10) {
-  if (starredMediaBusy) return 0;
-  starredMediaBusy = true;
-  let fixed = 0;
-  try {
-    const queue = [];
-    for (const feed of db.feeds) {
-      if (feed.kind !== 'telegram' && feed.kind !== 'telegram-bot') continue;
-      for (const item of db.items[feed.id] ?? []) {
-        if (!db.starred[item.id]) continue;
-        queue.push({ feed, item });
-      }
-    }
-    queue.sort((a, b) => (Number(db.starred[b.item.id]) || 0) - (Number(db.starred[a.item.id]) || 0));
-    for (const job of queue) {
-      if (fixed >= limit) break;
-      const body = (await store.body(job.feed.id, job.item.id)) ?? {};
-      if (body.tgVersion === TG_CONTENT_VERSION) continue;
-      const ok = await enrichTelegramItem(job.feed, job.item).catch(() => false);
-      if (ok) fixed += 1;
-      await sleep(300);
-    }
-    if (fixed) log(`избранное: перечитано постов с медиа ${fixed}`);
-  } finally {
-    starredMediaBusy = false;
-  }
-  return fixed;
-}
-
 async function backfillStarredImages(limit = 200) {
   let fixed = 0;
   for (const feed of db.feeds) {
@@ -1631,9 +1593,7 @@ async function backfillStarredImages(limit = 200) {
 async function bodiesFor(ids) {
   const out = {};
   const byFeed = new Map();
-  // Избранные — вперёд: новая версия разбора должна доходить до них в первую очередь.
-  const ordered = [...ids].sort((a, b) => Number(Boolean(db.starred[b])) - Number(Boolean(db.starred[a])));
-  for (const id of ordered) {
+  for (const id of ids) {
     const found = findItem(id);
     if (!found) continue;
     if (!byFeed.has(found.feed.id)) byFeed.set(found.feed.id, []);
@@ -1647,11 +1607,7 @@ async function bodiesFor(ids) {
       // Пост Telegram, у которого нет ни текста, ни картинок: забираем содержимое
       // со страницы встраивания прямо при открытии (такие посты уже ушли со
       // страницы канала, обычный разбор их не видит).
-      // Догружаем также посты, где текст есть, а картинок и видео нет: иначе
-      // альбомы, разобранные старой версией, оставались пустыми.
-      const hasMedia = /<img|<video/i.test(body.content ?? '');
-      const staleTelegram = body.tgVersion !== TG_CONTENT_VERSION;
-      if (feed && !body.fullHtml && enrichBudget > 0 && (!hasMedia || staleTelegram) && /t\.me\//i.test(item.link ?? '')) {
+      if (feed && !body.content && !body.fullHtml && enrichBudget > 0 && /t\.me\//i.test(item.link ?? '')) {
         enrichBudget -= 1;
         const ok = await enrichTelegramItem(feed, item).catch(() => false);
         if (ok) body = (await store.body(feedId, item.id)) ?? {};
@@ -1662,13 +1618,9 @@ async function bodiesFor(ids) {
         item.fullTriedAt = null;
         store.saveStateSoon();
       }
-      // Пост Telegram: единственный правильный текст — из самого поста. Старый
-      // «полный текст со страницы» мог быть мусором (страница загрузки и т. п.).
-      const isTelegramFeed = (feed?.kind ?? '').startsWith('telegram');
-      if (isTelegramFeed && item.hasFull) { item.hasFull = false; store.saveStateSoon(400, { bump: false }); }
       out[item.id] = {
-        content: isTelegramFeed ? shortenPostMedia(body.content ?? '', feed.id, item.id) : (body.content ?? ''),
-        fullHtml: isTelegramFeed ? '' : (body.fullHtml ?? ''),
+        content: body.content ?? '',
+        fullHtml: body.fullHtml ?? '',
         fullFetchedAt: body.fullFetchedAt ?? null,
         hasFull: hasText,
       };
@@ -2166,81 +2118,8 @@ async function serveImage(req, res, url) {
   }
 }
 
-/** Заменяет длинные ссылки медиа на короткие внутренние — их не режут прокси. */
-function shortenPostMedia(html, feedId, itemId) {
-  let imageIndex = 0;
-  let videoIndex = 0;
-  return String(html)
-    .replace(/<img\b([^>]*?)\bsrc="[^"]*"/gi, (match, before) => '<img' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + (imageIndex++) + '"')
-    .replace(/<video\b([^>]*?)\bsrc="[^"]*"/gi, (match, before) => '<video' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + (videoIndex++) + '&v=1"');
-}
-
-/** Скачивает картинки поста в кэш по индексу (tg-<лента>-<пост>-<i>.img). */
-async function cachePostImages(feedId, itemId, html) {
-  const pictures = [...String(html ?? '').matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]).slice(0, 12);
-  await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
-  for (let index = 0; index < pictures.length; index += 1) {
-    const target = path.join(MEDIA_DIR, 'tg-' + feedId + '-' + itemId + '-' + index + '.img');
-    try {
-      await readFile(target);
-      continue;
-    } catch { /* нет в кэше — качаем */ }
-    try {
-      const response = await fetch(pictures[index], { headers: { 'user-agent': UA, accept: '*/*' } });
-      if (!response.ok) continue;
-      await writeFile(target, Buffer.from(await response.arrayBuffer()));
-    } catch { /* пропускаем */ }
-  }
-}
-
-/** Достаёт из сохранённого текста поста N-ю картинку или N-е видео. */
-async function postMediaUrl(feedId, itemId, index, kind) {
-  const body = (await store.body(feedId, itemId)) ?? {};
-  const found = [...String(body.content ?? '').matchAll(kind === 'video' ? /<video\b[^>]*\bsrc="([^"]+)"/gi : /<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]);
-  return found[index] ?? '';
-}
-
-/** Качает внешний файл поста и отдаёт его клиенту (с кэшем на диск). */
-async function proxyRemoteMedia(req, res, remote, kind, cacheName = '') {
-  const key = cacheName || createHash('sha1').update(remote).digest('hex').slice(0, 24);
-  const cached = path.join(MEDIA_DIR, key);
-  try {
-    const data = await readFile(cached);
-    res.writeHead(200, { 'content-type': kind === 'video' ? 'video/mp4' : 'image/jpeg', 'cache-control': 'private, max-age=86400' });
-    return res.end(data);
-  } catch { /* ещё не скачано */ }
-  try {
-    const response = await fetch(remote, { headers: { 'user-agent': UA, accept: '*/*' } });
-    if (!response.ok) throw new Error(String(response.status));
-    const type = response.headers.get('content-type') ?? (kind === 'video' ? 'video/mp4' : 'image/jpeg');
-    if (kind === 'video') {
-      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
-      for await (const chunk of response.body) res.write(chunk);
-      return res.end();
-    }
-    const bin = Buffer.from(await response.arrayBuffer());
-    await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
-    await writeFile(cached, bin).catch(() => {});
-    res.writeHead(200, { 'content-type': type, 'cache-control': 'private, max-age=86400' });
-    return res.end(bin);
-  } catch (err) {
-    res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' }).end('не удалось получить файл: ' + err.message);
-    return undefined;
-  }
-}
-
 async function serveMedia(req, res, url) {
   const feedId = url.searchParams.get('f') ?? '';
-  // Короткая ссылка на медиа поста: /api/media?f=<лента>&k=<пост>&i=<номер>.
-  const postId = url.searchParams.get('k') ?? '';
-  if (postId) {
-    const index = Math.max(0, Number.parseInt(url.searchParams.get('i') ?? '0', 10) || 0);
-    const kind = url.searchParams.get('v') === '1' ? 'video' : 'image';
-    const remote = await postMediaUrl(feedId, postId, index, kind);
-    if (!remote) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('нет файла'); return; }
-    const cacheName = 'tg-' + feedId + '-' + postId + '-' + index + (kind === 'video' ? '.mp4' : '.img');
-    return proxyRemoteMedia(req, res, remote, kind, cacheName);
-  }
   const messageId = Number.parseInt(url.searchParams.get('m') ?? '', 10);
   const item = (db.items[feedId] ?? []).find((i) => i.messageId === messageId);
   const fileId = item?.imageFileId;
@@ -2537,11 +2416,7 @@ async function api(req, res, url) {
 
   if (route === 'GET /api/data') {
     // Один раз за запуск: подставляем превью старым избранным статьям из их текста.
-    if (!backfillDone) {
-      backfillDone = true;
-      await backfillStarredImages().catch(() => 0);
-      refreshStarredMedia().catch(() => {});      // избранные посты — в первую очередь
-    }
+    if (!backfillDone) { backfillDone = true; await backfillStarredImages().catch(() => 0); }
     // Постраничная выдача статей одного вида: клиенту не нужно тянуть все
     // 4000+ статей, чтобы показать первые 40 карточек.
     const viewParam = url.searchParams.get('view');
