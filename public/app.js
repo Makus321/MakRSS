@@ -853,8 +853,14 @@ function layoutArticleImages(root = document) {
       if (!container) return;
       const containerWidth = container.clientWidth || 1;
       const natural = img.naturalWidth || 0;
-      // Меньше 60% ширины колонки — можно обтекать текстом.
-      if (natural && natural < containerWidth * 0.6) img.classList.add('wrap-left');
+      // Обтекание — только для одиночной картинки: если рядом другие, они
+      // налезали друг на друга, и казалось, что видна лишь первая.
+      const block = img.closest('p, figure, div') ?? img.parentElement;
+      const hasNeighbour = Boolean(
+        block?.previousElementSibling?.querySelector?.('img')
+        || block?.nextElementSibling?.querySelector?.('img'),
+      );
+      if (!hasNeighbour && natural && natural < containerWidth * 0.6) img.classList.add('wrap-left');
       else img.classList.remove('wrap-left');
     };
     if (img.complete) apply();
