@@ -117,7 +117,7 @@ const PARSER_VERSION = 18;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
 const BODY_VERSION = 13;
-const TG_CONTENT_VERSION = 2;   // версия разбора медиа в постах Telegram
+const TG_CONTENT_VERSION = 3;   // версия разбора медиа в постах Telegram
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -1660,9 +1660,13 @@ async function bodiesFor(ids) {
         item.fullTriedAt = null;
         store.saveStateSoon();
       }
+      // Пост Telegram: единственный правильный текст — из самого поста. Старый
+      // «полный текст со страницы» мог быть мусором (страница загрузки и т. п.).
+      const isTelegramFeed = (feed?.kind ?? '').startsWith('telegram');
+      if (isTelegramFeed && item.hasFull) { item.hasFull = false; store.saveStateSoon(400, { bump: false }); }
       out[item.id] = {
         content: body.content ?? '',
-        fullHtml: body.fullHtml ?? '',
+        fullHtml: isTelegramFeed ? '' : (body.fullHtml ?? ''),
         fullFetchedAt: body.fullFetchedAt ?? null,
         hasFull: hasText,
       };

@@ -900,11 +900,14 @@ function bodyHtml(item) {
   // Если «тело» статьи — это тот же текст, что в анонсе (так бывает у Telegram
   // и коротких новостей), в полном виде он выглядел дублем. Сравниваем начало.
   const normalise = (text) => String(text ?? '').replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase();
-  const bodySource = body.fullHtml || body.content || '';
+  // Пост Telegram: единственный правильный текст — из самого поста. «Полный текст
+  // со страницы» для таких постов не нужен и мог быть мусором.
+  const telegramPost = String(feedById(item.feedId)?.kind ?? '').startsWith('telegram');
+  const bodySource = telegramPost ? (body.content ?? '') : (body.fullHtml || body.content || '');
   const bodyHead = normalise(bodySource).slice(0, 80);
   const excerptHead = normalise(item.excerpt).slice(0, 80);
   const sameAsExcerpt = Boolean(bodyHead && excerptHead) && (bodyHead.startsWith(excerptHead) || excerptHead.startsWith(bodyHead));
-  let html = sameAsExcerpt && !body.fullHtml ? '' : sanitize(bodySource, item.link);
+  let html = sameAsExcerpt && !body.fullHtml && !telegramPost ? '' : sanitize(bodySource, item.link);
   // Бывает, что от сайта пришёл только текст без разметки (или одна разметка без
   // текста). Тогда карточка выглядела пустой — подставляем текст как абзац.
   if (!String(html ?? '').replace(/<[^>]*>/g, ' ').trim()) {
