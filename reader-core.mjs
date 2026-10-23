@@ -1612,7 +1612,9 @@ async function bodiesFor(ids) {
       // со страницы встраивания прямо при открытии (такие посты уже ушли со
       // страницы канала, обычный разбор их не видит).
       const staleBody = Boolean(body.content) && Number(body.tgVersion ?? 0) < TG_CONTENT_VERSION;
-      if (feed && (!body.content || staleBody) && !body.fullHtml && enrichBudget > 0 && /t\\.me\\//i.test(item.link ?? '')) {
+      // Перечитываем и тогда, когда есть «полный текст со страницы»: у постов
+      // Telegram правильный источник — сам пост, а не извлечённая статья.
+      if (feed && (!body.content || staleBody) && enrichBudget > 0 && /t\.me\//i.test(item.link ?? '')) {
         enrichBudget -= 1;
         const ok = await enrichTelegramItem(feed, item).catch(() => false);
         if (ok) body = (await store.body(feedId, item.id)) ?? {};
@@ -1638,9 +1640,9 @@ async function bodiesFor(ids) {
         content: String(feed?.kind ?? '').startsWith('telegram')
           ? await postHtmlForClient(feedId, item.id, body.content ?? '')
           : (body.content ?? ''),
-        fullHtml: body.fullHtml ?? '',
+        fullHtml: String(feed?.kind ?? '').startsWith('telegram') ? '' : (body.fullHtml ?? ''),
         fullFetchedAt: body.fullFetchedAt ?? null,
-        hasFull: hasText,
+        hasFull: String(feed?.kind ?? '').startsWith('telegram') ? false : hasText,
       };
     }
   }
@@ -2668,13 +2670,13 @@ async function api(req, res, url) {
       ok: true,
       item: {
         ...found.item,
-        hasFull: hasText,
+        hasFull: String(feed?.kind ?? '').startsWith('telegram') ? false : hasText,
         feedId: found.feed.id,
         feedTitle: found.feed.title,
         read: Boolean(db.read[found.item.id]),
         starred: Boolean(db.starred[found.item.id]),
         content: body.content ?? '',
-        fullHtml: body.fullHtml ?? '',
+        fullHtml: String(feed?.kind ?? '').startsWith('telegram') ? '' : (body.fullHtml ?? ''),
         fullFetchedAt: body.fullFetchedAt ?? null,
       },
     });
