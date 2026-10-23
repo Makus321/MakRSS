@@ -2919,7 +2919,7 @@ function fillSettingsForm() {
   setSelectValue($('#set-unread-default'), unreadDefault() ? 'unread' : 'all');
   renderTreeFilter();
   setRefreshSelect(s.refreshMinutes ?? 5);
-  $('#refresh-info').textContent = `Сейчас ленты обновляются каждые ${s.refreshMinutes ?? 10} мин.`;
+  if ($('#refresh-info')) $('#refresh-info').textContent = '';
   $('#set-palette-dark').value = state.prefs.paletteDark;
   $('#set-palette-light').value = state.prefs.paletteLight;
   $('#set-background').value = state.prefs.background === 'theme' ? 'theme' : 'palette';
@@ -2932,10 +2932,13 @@ function renderFeverInfo() {
   const s = state.settings;
   const session = state.session ?? {};
   const account = $('#account-info');
-  if (account) {
-    account.innerHTML = `Вы вошли как <b>${esc(session.login ?? session.user ?? '—')}</b>` +
-      (session.role === 'admin' ? ' <span class="flag">администратор</span>' : '') +
-      '<br>Пользователей, их пароли и ключи Fever заводит администратор в админке.';
+  if (account) account.innerHTML = '';
+  // Логин и роль — плашкой в шапке окна, в теле настроек не дублируем.
+  const who = $('#settings-who');
+  if (who) {
+    const login = session.login ?? session.user ?? '';
+    who.textContent = login ? `${login}${session.role === 'admin' ? ' · администратор' : ''}` : '';
+    who.hidden = !login;
   }
   const adminRow = $('#admin-row');
   if (adminRow) adminRow.hidden = session.role !== 'admin';
@@ -3002,7 +3005,7 @@ function startSettingsRefresh() {
       renderFeverInfo();
       setSelectValue($('#set-fetch-full'), state.settings.fetchFull !== false ? 'yes' : 'no');
       setRefreshSelect(state.settings.refreshMinutes ?? 10);
-      $('#refresh-info').textContent = `Сейчас ленты обновляются каждые ${state.settings.refreshMinutes ?? 10} мин.`;
+  if ($('#refresh-info')) $('#refresh-info').textContent = '';
     } catch { /* настройки временно недоступны */ }
   }, 3000);
 }
@@ -3141,7 +3144,7 @@ $('#set-refresh').addEventListener('change', async (e) => {
   try {
     const payload = await api('/api/settings', { refreshMinutes: minutes });
     state.settings = payload.settings;
-    $('#refresh-info').textContent = `Сейчас ленты обновляются каждые ${minutes} мин.`;
+  if ($('#refresh-info')) $('#refresh-info').textContent = '';
     toast(`Ленты будут обновляться каждые ${minutes} мин`);
   } catch (err) { toast(err.message, true); }
 });

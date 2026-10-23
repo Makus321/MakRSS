@@ -1042,3 +1042,12 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
   font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted);
   border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px;
 }
+
+/* Логин и статус в шапке настроек — жёлтой плашкой. */
+.who-badge {
+  display: inline-flex; align-items: center;
+  margin-left: 10px; padding: 2px 9px; border-radius: 999px;
+  background: var(--star, #f5c451); color: #2b2000;
+  font-size: calc(11.5px * var(--ui-scale, 1)); font-weight: 600;
+  vertical-align: middle;
+}

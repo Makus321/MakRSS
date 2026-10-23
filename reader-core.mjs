@@ -116,7 +116,7 @@ async function refreshVersion() {
 const PARSER_VERSION = 18;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
-const BODY_VERSION = 12;
+const BODY_VERSION = 13;
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -802,6 +802,12 @@ async function fetchFullText(feedId, itemId) {
   const feed = feedById(feedId);
   const target = feed ? (db.items[feedId] ?? []).find((i) => i.id === itemId) : null;
   if (!feed || !target) return { ok: false, error: 'статья не найдена' };
+  // Посты Telegram уже содержат полный текст: ссылка ведёт на страницу канала,
+  // и «докачка» подменяла текст посторонней страницей.
+  if (feed.kind === 'telegram' || feed.kind === 'telegram-bot') {
+    const own = (await store.body(feedId, itemId)) ?? {};
+    return { ok: Boolean(own.content), cached: true, own: true };
+  }
   let body = (await store.body(feedId, itemId)) ?? {};
   // Текст, разобранный старой версией, считаем отсутствующим — он скачается заново.
   if (body.fullHtml && Number(body.bodyVersion ?? 1) < BODY_VERSION) {
@@ -835,6 +841,15 @@ async function fetchFullText(feedId, itemId) {
   }
 
   try {
+    // Страница загрузки, поиск, теги — это не текст статьи: такой адрес не читаем,
+    // иначе в статью попадал список файлов или выдача поиска.
+    if (/\/(download|downloads|search|tag|tags|category|catalog|archive|login|cart)\b/i.test(new URL(target.link).pathname)) {
+      await store.setBody(feedId, itemId, { fullHtml: '' });
+      target.hasFull = false;
+      target.fullTriedAt = new Date().toISOString();
+      store.saveStateSoon(400, { bump: false });
+      return { ok: false, error: 'ссылка ведёт не на статью' };
+    }
     await politeWait(target.link);
     const res = await httpGet(target.link, { timeout: 25000, accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -845,6 +860,15 @@ async function fetchFullText(feedId, itemId) {
       target.fullTriedAt = new Date().toISOString();
       store.saveStateSoon(400, { bump: false });
       return { ok: false, error: 'основной текст на странице не найден' };
+    }
+    // Разбор мог «найти» меню или чужую страницу: если текста меньше, чем уже
+    // есть из ленты, ничего не перезаписываем.
+    const freshText = htmlToText(article.html ?? '');
+    const knownText = htmlToText((await store.body(feedId, itemId))?.content ?? '') || (target.excerpt ?? '');
+    if (freshText.length < knownText.length * 0.5) {
+      target.fullTriedAt = new Date().toISOString();
+      store.saveStateSoon(400, { bump: false });
+      return { ok: false, error: 'текст страницы короче текста ленты' };
     }
     await store.setBody(feedId, itemId, {
       fullHtml: article.html,
