@@ -1620,6 +1620,17 @@ async function bodiesFor(ids) {
         store.saveStateSoon();
       }
       out[item.id] = {
+        ...(String(feed?.kind ?? '').startsWith('telegram') && !item.video
+          ? (() => {
+            const clip = /<video\b[^>]*\bsrc="([^"]+)"/i.exec(body.content ?? '');
+            if (clip?.[1]) {
+              item.video = clip[1];
+              store.saveStateSoon(400, { bump: false });
+              return { video: clip[1] };
+            }
+            return {};
+          })()
+          : {}),
         content: String(feed?.kind ?? '').startsWith('telegram')
           ? await postHtmlForClient(feedId, item.id, body.content ?? '')
           : (body.content ?? ''),
@@ -2186,9 +2197,11 @@ async function postHtmlForClient(feedId, itemId, html) {
       const current = index;
       index += 1;
       // Картинку, которой нет в кэше (битая ссылка Telegram), не показываем вовсе.
-      if (!(await ensureCachedMedia(feedId, itemId, current, urls[current]))) continue;
+      // Все картинки отдаём сразу; если файла ещё нет, его скачает /api/media
+      // при первом обращении. Скачивание внутри запроса делало ответ слишком медленным.
+      void ensureCachedMedia(feedId, itemId, current, urls[current]).catch(() => false);
       const before = match[1] ?? '';
-      pieces.push('<img' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + current + '"');
+      pieces.push('<img' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + current + '">');
     } else {
       pieces.push(chunk);
     }
