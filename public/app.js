@@ -1568,12 +1568,10 @@ function positionArticleActions() {
     const top = Math.max(listRect.top + 8, Math.min(wantedTop, lowest));
     // Если статью прокрутили вверх так, что её начало ушло за экран,
     // кнопки убираем: иначе они висят «в пустоте» над текстом.
-    const scrolledInside = cardRect.top < listRect.top - 8;
-    actions.classList.add('floating');      // кнопки становятся полупрозрачными
-    // Скрываем только когда статья прокручена; иначе возвращаем кнопки обратно
-    // (раньше они оставались «невидимыми и некликабельными» навсегда).
-    actions.style.visibility = scrolledInside ? 'hidden' : 'visible';
-    actions.style.pointerEvents = scrolledInside ? 'none' : 'auto';
+    // Кнопки остаются на месте при прокрутке статьи: скрывать их не нужно,
+    // иначе после небольшой прокрутки они «пропадали» и не нажимались.
+    actions.style.visibility = 'visible';
+    actions.style.pointerEvents = 'auto';
     actions.style.display = '';
     actions.style.position = 'fixed';
     actions.style.top = `${Math.round(top)}px`;
