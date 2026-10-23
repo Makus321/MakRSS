@@ -405,6 +405,49 @@ const passRowProbe = await evaluate(`(() => {
 })()`);
 console.log('  строка пароля:', JSON.stringify(passRowProbe));
 
+// Пост 16444: сколько картинок и видео реально отрисовано.
+const tgPost16444 = await evaluate(`(async () => {
+  const rows = [...document.querySelectorAll('#tree .row[data-feed-row]')];
+  const row = rows.find((r) => (r.textContent || '').includes('welcome2RHK'));
+  if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 2500));
+  const cards = [...document.querySelectorAll('.article')];
+  for (const card of cards) {
+    const title = card.querySelector('.a-title')?.textContent ?? '';
+    if (!title) continue;
+    card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 2500));
+    const body = card.querySelector('.a-body');
+    if (!body) continue;
+    return {
+      title: title.slice(0, 40),
+      imgs: body.querySelectorAll('img').length,
+      videos: body.querySelectorAll('video').length,
+      imgSrc: (body.querySelector('img')?.getAttribute('src') ?? '').slice(0, 40),
+    };
+  }
+  return 'карточек нет';
+})()`);
+console.log('  пост из ленты welcome2RHK:', JSON.stringify(tgPost16444));
+
+// Открываем избранное и смотрим медиа в первом посте.
+const tgPostProbe = await evaluate(`(async () => {
+  const starred = document.querySelector('[data-view="starred"]');
+  if (starred) starred.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 1500));
+  const card = document.querySelector('.article');
+  if (card) card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 3500));
+  const body = document.querySelector('.article.expanded .a-body') || document.querySelector('.a-body');
+  return {
+    expanded: Boolean(document.querySelector('.article.expanded')),
+    imgs: body ? body.querySelectorAll('img').length : 0,
+    videos: body ? body.querySelectorAll('video').length : 0,
+    textLen: body ? body.innerText.trim().length : 0,
+  };
+})()`);
+console.log('  избранное, медиа в посте:', JSON.stringify(tgPostProbe));
+
 // Меню «⋯»: принудительно раскрываем панель и смотрим кнопки.
 const forcedPanel = await evaluate(`(async () => {
   document.body.classList.add('tools-open');

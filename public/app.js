@@ -2011,7 +2011,17 @@ function playVideo(button) {
   player.preload = 'metadata';
   player.className = 'a-video-player';
   player.src = `/api/video?u=${encodeURIComponent(source)}`;
+  // Прокси не смог отдать поток — пробуем напрямую с сервера Telegram,
+  // браузер часто может это сам; если и тут не выйдет, покажем подсказку.
+  let triedDirect = false;
   player.addEventListener('error', () => {
+    if (!triedDirect && /^https?:/i.test(source)) {
+      triedDirect = true;
+      player.src = source;
+      player.load();
+      player.play().catch(() => {});
+      return;
+    }
     block.innerHTML = '<div class="a-note">Видео не открылось — посмотрите его в самом канале.</div>';
   });
   if (block) block.replaceChildren(player);
