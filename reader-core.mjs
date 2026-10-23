@@ -775,6 +775,9 @@ function enqueueFeedFullText(feedId) {
  * Достаёт медиа одного поста Telegram со страницы встраивания. Нужно для старых
  * постов: со страницы канала они уже ушли, и обычный разбор их не видит.
  */
+// Версия разбора постов Telegram: когда она растёт, сохранённые посты перечитываются.
+const TG_CONTENT_VERSION = 3;
+
 async function enrichTelegramItem(feed, item) {
   if (!item?.link || !/t\.me\//i.test(item.link)) return false;
   const match = /t\.me\/([A-Za-z0-9_]+)\/(\d+)/.exec(item.link);
@@ -788,7 +791,7 @@ async function enrichTelegramItem(feed, item) {
     const parsed = parseTelegramChannel(res.text, `https://t.me/${channel}`, feed.id, itemId);
     const media = parsed.items[0];
     if (!media?.content) return false;
-    await store.setBody(feed.id, item.id, { content: media.content, contentFetchedAt: new Date().toISOString() });
+    await store.setBody(feed.id, item.id, { content: media.content, contentFetchedAt: new Date().toISOString(), tgVersion: TG_CONTENT_VERSION });
     cachePostMedia(feed.id, item.id, media.content).catch(() => {});
     const first = /<img[^>]+src="([^"]+)"/i.exec(media.content)?.[1];
     if (first && !item.image) { item.image = first; store.saveStateSoon(400, { bump: false }); }
@@ -1608,7 +1611,8 @@ async function bodiesFor(ids) {
       // Пост Telegram, у которого нет ни текста, ни картинок: забираем содержимое
       // со страницы встраивания прямо при открытии (такие посты уже ушли со
       // страницы канала, обычный разбор их не видит).
-      if (feed && !body.content && !body.fullHtml && enrichBudget > 0 && /t\.me\//i.test(item.link ?? '')) {
+      const staleBody = Boolean(body.content) && Number(body.tgVersion ?? 0) < TG_CONTENT_VERSION;
+      if (feed && (!body.content || staleBody) && !body.fullHtml && enrichBudget > 0 && /t\\.me\\//i.test(item.link ?? '')) {
         enrichBudget -= 1;
         const ok = await enrichTelegramItem(feed, item).catch(() => false);
         if (ok) body = (await store.body(feedId, item.id)) ?? {};
