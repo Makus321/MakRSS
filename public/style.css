@@ -1055,3 +1055,18 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 /* Служебная строка: сколько медиа в статье (для проверки). */
 /* Служебная строка всегда под содержимым, даже если картинки обтекаются текстом. */
 .media-debug { clear: both; margin-top: 10px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); }
+/* Плотность списка: «компактно» — как есть, «свободно» — просторнее карточки.
+   Размер текста при этом не меняется: за него отвечает отдельная настройка. */
+.list.comfortable .article { margin-bottom: 12px; border-radius: 10px; }
+.list.comfortable .a-head { padding: 12px 50px 12px 14px; row-gap: 8px; }
+.list.comfortable .a-title { margin-bottom: 6px; }
+.list.comfortable .a-excerpt { margin-top: 4px; }
+.list.comfortable .a-body { padding: 6px 16px 18px; font-size: var(--font-article); }
+.list.comfortable .a-meta { gap: 10px; }
+@media (max-width: 900px) {
+  .list.comfortable { padding: 6px 2px 70vh; }
+  .list.comfortable .article { margin-bottom: 10px; }
+  .list.comfortable .a-head { padding: 12px 46px 12px 12px; row-gap: 8px; }
+  .list.comfortable .a-excerpt { margin-top: 4px; }
+  .list.comfortable .a-body { padding: 4px 12px 14px; }
+}
