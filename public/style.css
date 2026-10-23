@@ -382,7 +382,7 @@ select:focus-visible { outline: none; }
 
 /* Запас снизу в целый экран: любая статья может уйти выше середины и стать прочитанной. */
 /* Минимальные поля списка: карточка занимает почти всю ширину панели. */
-.list { flex: 1; overflow-y: auto; min-height: 0; padding: 6px 2px 90vh; }
+.list { flex: 1; overflow-y: auto; min-height: 0; padding: 6px 2px calc(100vh + 60px); }
 /* Текст статьи всегда следует настройке размера текста: раньше в «свободном»
    режиме он был жёстко 15px и не реагировал на изменение. */
 .list.comfortable .a-body { font-size: calc(var(--font-article) * 1.03); }
@@ -670,7 +670,7 @@ body.dragging .tree-tail { display: flex; }
   .a-head { padding: 6px 50px 6px 8px; row-gap: 4px; }
   .a-body { padding-right: 46px; }
   /* Зазор между краем экрана и карточкой — 2 пикселя. */
-  .list { padding: 2px 2px 80vh; }
+  .list { padding: 2px 2px calc(100dvh + 60px); }
   .article { border-radius: 8px; margin-bottom: 4px; }
   /* На телефоне настройка «ширина текста» не должна сужать карточку: она
      оставляла поля по краям экрана. Здесь карточка всегда во всю ширину. */
@@ -701,7 +701,7 @@ body.dragging .tree-tail { display: flex; }
   .article.expanded.selected .a-actions .a-next { display: inline-flex; }
   /* Зазор между краем экрана и карточкой — 2 пикселя (это правило идёт
      последним, поэтому перекрывает более раннее). */
-  .list { padding: 2px 2px 70vh; touch-action: pan-y; }
+  .list { padding: 2px 2px calc(100dvh + 60px); touch-action: pan-y; }
   .tree { padding-bottom: 70px; }
 
   .modal { padding: 10px 8px 40px; }
@@ -1006,7 +1006,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 
 /* Телефон: карточка и текст — во всю ширину экрана. */
 @media (max-width: 900px) {
-  .list { padding: 2px 2px 70vh; }
+  .list { padding: 2px 2px calc(100dvh + 60px); }
   .article {
     max-width: 100% !important;
     width: 100% !important;
