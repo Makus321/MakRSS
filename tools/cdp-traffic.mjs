@@ -405,10 +405,56 @@ const passRowProbe = await evaluate(`(() => {
 })()`);
 console.log('  строка пароля:', JSON.stringify(passRowProbe));
 
+// Меню «⋯»: принудительно раскрываем панель и смотрим кнопки.
+const forcedPanel = await evaluate(`(async () => {
+  document.body.classList.add('tools-open');
+  await new Promise((r) => setTimeout(r, 400));
+  const btn = document.querySelector('#mark-all');
+  const box = btn ? btn.getBoundingClientRect() : null;
+  return {
+    visible: Boolean(box && box.width > 0),
+    w: box ? Math.round(box.width) : 0,
+    text: btn ? btn.textContent.trim() : 'нет',
+  };
+})()`);
+console.log('  кнопка в раскрытой панели:', JSON.stringify(forcedPanel));
+
+// Что видно в меню «⋯» на телефоне.
+const panelProbe = await evaluate(`(async () => {
+  const tune = document.querySelector('#tune-btn');
+  if (tune) tune.click();
+  await new Promise((r) => setTimeout(r, 700));
+  const btn = document.querySelector('#mark-all');
+  const panel = document.querySelector('#toolbar');
+  const visible = (el) => Boolean(el && el.offsetParent !== null && el.getBoundingClientRect().width > 0);
+  return {
+    panelOpen: panel ? !panel.hidden && getComputedStyle(panel).display !== 'none' : 'нет панели',
+    markAll: btn ? { visible: visible(btn), display: getComputedStyle(btn).display, w: Math.round(btn.getBoundingClientRect().width) } : 'кнопки нет',
+    buttons: panel ? [...panel.querySelectorAll('button, label.mini-field')].map((el) => el.id || el.className).slice(0, 12) : [],
+  };
+})()`);
+console.log('  меню «⋯»:', JSON.stringify(panelProbe));
+
+// Проверка кнопки «обновить ленты».
+const refreshProbe = await evaluate(`(async () => {
+  const btn = document.querySelector('#refresh-all');
+  if (!btn) return { error: 'нет кнопки' };
+  const started = Date.now();
+  btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 22000));
+  const toast = document.querySelector('#toast')?.textContent ?? document.querySelector('.toast')?.textContent ?? '';
+  return {
+    ms: Date.now() - started,
+    spinning: btn.classList.contains('spin'),
+    toast: toast.trim().slice(0, 80),
+  };
+})()`);
+console.log('  обновление лент:', JSON.stringify(refreshProbe));
+
 // Снимок настроек, если задан --settings.
 const settingsShot = args.get('settings');
 if (settingsShot) {
-  await realClick('#settings-btn');
+  await realClick('#open-settings');
   await sleep(1200);
   const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
   if (shot?.data) {

@@ -383,7 +383,9 @@ select:focus-visible { outline: none; }
 /* Запас снизу в целый экран: любая статья может уйти выше середины и стать прочитанной. */
 /* Минимальные поля списка: карточка занимает почти всю ширину панели. */
 .list { flex: 1; overflow-y: auto; min-height: 0; padding: 6px 2px 90vh; }
-.list.comfortable .a-body { font-size: calc(15px * var(--ui-scale, 1)); }
+/* Текст статьи всегда следует настройке размера текста: раньше в «свободном»
+   режиме он был жёстко 15px и не реагировал на изменение. */
+.list.comfortable .a-body { font-size: calc(var(--font-article) * 1.03); }
 
 .article {
   position: relative;
@@ -444,7 +446,14 @@ select:focus-visible { outline: none; }
    до того, как на экране появится следующая статья. Каждая кнопка действует на
    свою статью. */
 .a-rail { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; }
-.a-actions { position: absolute; top: 8px; right: 10px; z-index: 3; pointer-events: auto; display: flex; flex-direction: column; gap: 4px; }
+.a-actions {
+  position: absolute; top: 8px; right: 10px; z-index: 3; pointer-events: auto;
+  display: flex; flex-direction: column; gap: 2px;
+  /* Кнопки всегда полупрозрачные: и в кратком виде, и плавающие. */
+  opacity: .55;
+  transition: opacity .18s ease;
+}
+.a-actions:hover, .a-actions:focus-within { opacity: 1; }
 .article.expanded { overflow: visible; }                 /* иначе sticky не работает */
 .article.expanded.selected .a-rail { bottom: var(--actions-stop, 140px); }
 /* Плавающие кнопки: положение целиком задаёт positionArticleActions —
@@ -655,7 +664,7 @@ body.dragging .tree-tail { display: flex; }
   .btn, .mini-btn, .link-btn, .switch { min-height: 36px; }
   .icon-btn { width: 36px; height: 36px; font-size: calc(15px * var(--ui-scale, 1)); }
   /* Кнопки в карточке меньше и стоят столбиком: на телефоне они съедали ширину. */
-  .a-actions { top: 6px; right: 6px; gap: 3px; }
+  .a-actions { top: 6px; right: 6px; gap: 2px; }
   .a-actions button { width: 30px; height: 30px; font-size: calc(14px * var(--ui-scale, 1)); }
   /* Минимальные поля: текст должен доходить до края карточки. */
   .a-head { padding: 6px 50px 6px 8px; row-gap: 4px; }
@@ -667,7 +676,8 @@ body.dragging .tree-tail { display: flex; }
      оставляла поля по краям экрана. Здесь карточка всегда во всю ширину. */
   .article { max-width: 100%; width: 100%; margin-left: 0; margin-right: 0; }
   .a-body { padding: 2px 8px 10px; }
-  .article.expanded:not(.selected) .a-body { padding-right: 40px; }
+  /* На телефоне кнопки плавают поверх и не отнимают ширину у текста. */
+  .article.expanded:not(.selected) .a-body { padding-right: 8px; }
   .a-actions { top: 4px; right: 4px; }
   .a-title { margin-bottom: 2px; }
   .a-excerpt { margin-top: 2px; }
@@ -708,7 +718,7 @@ body.dragging .tree-tail { display: flex; }
   .head-tools { gap: 6px; }
   .head-tools .search { min-width: 0; flex: 1 1 120px; }
   /* На узком экране прячем второстепенные кнопки, чтобы шапка не занимала пол-экрана. */
-  #expand-all, #mark-all { display: none; }
+  #expand-all { display: none; }
   .mini-field { font-size: calc(11.5px * var(--ui-scale, 1)); }
   .width-controls #width-value { min-width: 30px; }
   .a-meta { font-size: calc(10.5px * var(--ui-scale, 1)); gap: 6px; }
@@ -823,7 +833,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   /* Тема переехала в меню «⋯» — в строке она больше не нужна. */
   #theme-toggle { display: none; }
   /* Кнопки действий в статье крупнее: пальцем в мелкие не попасть. */
-  .a-actions { gap: 6px; }
+  .a-actions { gap: 2px; }
   .a-actions button, .a-actions a.icon-btn {
     width: 40px; height: 36px; border-radius: 9px;
     font-size: calc(17px * var(--ui-scale, 1));
@@ -838,7 +848,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
      должно быть доступно и на широком (раскрытом) экране тоже. */
   #theme-toggle { display: none; }
   #tune-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; }
-  .a-actions { gap: 6px; }
+  .a-actions { gap: 2px; }
   .a-actions button, .a-actions a.icon-btn {
     width: 40px; height: 36px; border-radius: 9px;
     font-size: calc(17px * var(--ui-scale, 1));
@@ -982,3 +992,53 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Обтекание не должно вылезать за пределы статьи. */
 .a-body::after,
 .comment-body::after { content: ""; display: block; clear: both; }
+
+/* Окно подтверждения: компактное, по центру. */
+.confirm-box { width: min(420px, 100%); }
+.confirm-text { margin: 4px 0 16px; line-height: 1.5; }
+
+/* Карточка не должна быть ниже колонки плавающих кнопок (4 кнопки по 30 + зазоры),
+   иначе кнопки вылезают за её пределы. */
+.article { min-height: var(--actions-min, 132px); }
+@media (max-width: 900px) { .article { min-height: 124px; } }
+/* Кнопки прячутся, когда раскрытую статью начали прокручивать. */
+body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
+
+/* Телефон: карточка и текст — во всю ширину экрана. */
+@media (max-width: 900px) {
+  .list { padding: 2px 2px 70vh; }
+  .article {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  .a-head { padding-right: 8px; }
+  .article.expanded:not(.selected) .a-body { padding-right: 8px; }
+  .a-title, .a-excerpt, .a-body { max-width: 100%; }
+  /* По левому краю: «по ширине» на узком экране даёт огромные промежутки между словами. */
+  .a-body, .a-excerpt { text-align: left; hyphens: none; }
+}
+
+/* Встроенное видео в статье: до нажатия — только кнопка, после — плеер. */
+.embed-box { margin: 12px 0; }
+.embed-box .embed-play { width: 100%; justify-content: center; min-height: 44px; }
+.embed-frame {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 10px;
+  background: #000;
+}
+
+/* Группы настроек: видно, что действует на устройстве, а что на аккаунте. */
+.group-head {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 18px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
+}
+.group-head:first-child { margin-top: 0; }
+.group-title { font-size: calc(13px * var(--ui-scale, 1)); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text); }
+.group-scope {
+  font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px;
+}

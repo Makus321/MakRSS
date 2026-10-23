@@ -13,6 +13,34 @@ const faviconFailed = new Set();
 window.__faviconFailed = (feedId) => { faviconFailed.add(feedId); };        // id → прочитано/непрочитано (приоритет над автоматикой)
 const pendingUnstar = new Set();     // снятые в «Избранном», но показываемые до смены раздела
 
+/**
+ * Окно подтверждения вместо window.confirm: в установленном приложении на
+ * телефоне системный confirm может не показываться, и действие выполнялось
+ * без вопроса.
+ */
+function askConfirm(title, text) {
+  return new Promise((resolve) => {
+    const modal = $('#confirm-modal');
+    if (!modal) { resolve(window.confirm(text)); return; }
+    $('#confirm-title').textContent = title;
+    $('#confirm-text').textContent = text;
+    modal.hidden = false;
+    const done = (answer) => {
+      modal.hidden = true;
+      $('#confirm-yes').removeEventListener('click', yes);
+      $('#confirm-no').removeEventListener('click', no);
+      modal.removeEventListener('click', backdrop);
+      resolve(answer);
+    };
+    const yes = () => done(true);
+    const no = () => done(false);
+    const backdrop = (event) => { if (event.target === modal) done(false); };
+    $('#confirm-yes').addEventListener('click', yes);
+    $('#confirm-no').addEventListener('click', no);
+    modal.addEventListener('click', backdrop);
+  });
+}
+
 const PREF_KEY = 'rss.prefs';
 // Раз в час читалка в фоне просит сервер докачать полные тексты и прогревает
 // кэш статей — чтобы при плохой связи они открывались из памяти.
@@ -768,6 +796,10 @@ $('#new-close').addEventListener('click', () => {
     resetSnapshot();
     state.resetScroll = true;
     render();
+    // Плашку убираем сразу: статьи уже в списке, «закрыть» нажимать незачем.
+    state.newRowClosedTotal = pendingNewTotal();
+    const row = $('#new-row');
+    if (row) row.hidden = true;
   });
 
 /** Полоска под поиском: превратить запрос в фильтр текущей ленты. */
@@ -825,6 +857,29 @@ function layoutArticleImages(root = document) {
     };
     if (img.complete) apply();
     else img.addEventListener('load', apply, { once: true });
+  }
+}
+
+/**
+ * Кнопка «Смотреть видео»: подставляет плеер по нажатию. Так статья не тянет
+ * внешние скрипты и видео, пока их не попросили.
+ */
+function setupEmbeds(root = document) {
+  for (const box of root.querySelectorAll('.embed-box[data-embed]')) {
+    if (box.dataset.ready) continue;
+    box.dataset.ready = '1';
+    box.addEventListener('click', (event) => {
+      if (!event.target.closest('.embed-play')) return;
+      const src = box.dataset.embed;
+      if (!src) return;
+      const frame = document.createElement('iframe');
+      frame.src = src;
+      frame.loading = 'lazy';
+      frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+      frame.allowFullscreen = true;
+      frame.className = 'embed-frame';
+      box.replaceChildren(frame);
+    });
   }
 }
 
@@ -1128,7 +1183,6 @@ let activePin = { id: null, until: 0 };
 /** Последняя активная статья и положение списка на тот момент (защита от мигания). */
 let activeMeta = { id: null, scrollTop: -1 };
 
-
 /** Ставит рамку на конкретную статью и держит её, пока список не тронут руками. */
 function pinActive(id, ms = 1500) {
   activePin = { id: id ?? null, until: Date.now() + ms };
@@ -1227,7 +1281,6 @@ function holdImageSpace(root) {
 function feverMode() {
   return Boolean(state.settings?.feverMode);
 }
-
 
 function fillViewport() {
   if (state.filling) return;
@@ -1339,6 +1392,7 @@ function renderList() {
   updateActiveArticle();
 
   layoutArticleImages();
+  setupEmbeds();
 }
 
 /** Обновляет только отметки времени, не трогая остальной список. */
@@ -1479,7 +1533,14 @@ function positionArticleActions() {
     }
     const lowest = cardRect.bottom - 140 - height;       // «рельс» заканчивается выше конца
     const top = Math.max(listRect.top + 8, Math.min(wantedTop, lowest));
+    // Если статью прокрутили вверх так, что её начало ушло за экран,
+    // кнопки убираем: иначе они висят «в пустоте» над текстом.
+    const scrolledInside = cardRect.top < listRect.top - 8;
     actions.classList.add('floating');      // кнопки становятся полупрозрачными
+    // Скрываем только когда статья прокручена; иначе возвращаем кнопки обратно
+    // (раньше они оставались «невидимыми и некликабельными» навсегда).
+    actions.style.visibility = scrolledInside ? 'hidden' : 'visible';
+    actions.style.pointerEvents = scrolledInside ? 'none' : 'auto';
     actions.style.display = '';
     actions.style.position = 'fixed';
     actions.style.top = `${Math.round(top)}px`;
@@ -1524,8 +1585,6 @@ function keepManualUnread(id) {
   if (manual.moved > 220) { state.manualUnread = null; return false; }
   return true;
 }
-
-
 
 /** Автоматике можно трогать эту статью? */
 function autoReadAllowed(id) {
@@ -2001,6 +2060,25 @@ async function refreshFeeds(feedId) {
   $('#refresh-all').classList.add('spin');
   try {
     const payload = await api('/api/refresh', feedId ? { id: feedId } : {});
+    if (payload.busy) { toast('Обновление уже идёт'); return; }
+    if (payload.started) {
+      // Сервер обновляет в фоне. Ждём завершения, затем показываем новые статьи:
+      // пользователь нажал «обновить» именно чтобы их увидеть.
+      toast('Обновляю ленты…');
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 90_000) {
+        await new Promise((done) => setTimeout(done, 2000));
+        const check = await api(`/api/data?rev=${state.revision}`).catch(() => null);
+        if (check && check.unchanged && (check.refreshing === false || !check.started)) break;
+        if (check && check.changed) break;
+      }
+      await loadData();
+      resetSnapshot();
+      render();
+      const added = Number(state.data.lastRefreshAdded) || 0;
+      toast(added ? `Новых статей: ${added}` : 'Новых статей нет');
+      return;
+    }
     if (payload.data) rememberData(payload.data);
     const results = payload.results ?? [];
     const added = results.reduce((n, r) => n + (r.added ?? 0), 0);
@@ -2064,7 +2142,6 @@ async function removeFeedPrompt(feedId) {
     render();
   } catch (err) { toast(err.message, true); }
 }
-
 
 function moveFeed(feedId, folderId, beforeFeedId = null) {
   const feed = state.data.feeds.find((f) => f.id === feedId);
@@ -2245,7 +2322,6 @@ $('#list').addEventListener('scroll', (event) => {
 
 $('#view-switch').addEventListener('change', (event) => setViewMode(event.target.value));
 
-
 $('#tree').addEventListener('click', async (event) => {
   const toggle = event.target.closest('[data-toggle]');
   if (toggle) {
@@ -2409,18 +2485,20 @@ $('#refresh-all').addEventListener('click', () => refreshFeeds(null));
 $('#view-refresh').addEventListener('click', () => refreshFeeds(state.view.type === 'feed' ? state.view.id : null));
 // На телефоне кнопка обновления стоит рядом с переключателем темы.
 $('#refresh-top').addEventListener('click', () => refreshFeeds(state.view.type === 'feed' ? state.view.id : null));
-$('#mark-all').addEventListener('click', async () => {
+async function markAllInView() {
   const ids = visibleItems().filter((i) => !i.read).map((i) => i.id);
   if (!ids.length) { toast('Непрочитанных нет'); return; }
   const what = state.view.type === 'feed' ? `в ленте «${viewFeed()?.title ?? ''}»`
     : state.view.type === 'folder' ? `в папке «${viewFolder()?.name ?? ''}»`
       : state.view.type === 'starred' ? 'в избранном' : 'во всех подписках';
-  if (!confirm(`Отметить прочитанными ${ids.length} ${plural(ids.length, 'статью', 'статьи', 'статей')} ${what}?`)) return;
+  if (!(await askConfirm('Прочитать всё', `Отметить прочитанными ${ids.length} ${plural(ids.length, 'статью', 'статьи', 'статей')} ${what}?`))) return;
   await markRead(ids, true);
   resetSnapshot();          // после массовой отметки список пересобирается
   render();
   toast(`Отмечено: ${ids.length}`);
-});
+}
+$('#mark-all').addEventListener('click', () => markAllInView());
+
 $('#expand-all').addEventListener('click', () => {
   const items = visibleItems().slice(0, state.limit);
   const allExpanded = items.every((i) => isExpanded(i));
@@ -3229,6 +3307,15 @@ async function loadData({ poll = false } = {}) {
         }
       }
       if (state_.addedByFeed) state.data.addedByFeed = state_.addedByFeed;
+      // Синхронизация завершилась и принесла статьи — подтягиваем их в данные,
+      // иначе они не появляются ни в дереве, ни в списке.
+      const freshSync = state_.lastRefresh && state_.lastRefresh !== state.data.lastRefreshSeen;
+      if (freshSync && Number(state_.lastRefreshAdded) > 0) {
+        state.data.lastRefreshSeen = state_.lastRefresh;
+        await loadData({ poll: false });
+        return;
+      }
+      if (state_.lastRefresh) state.data.lastRefreshSeen = state_.lastRefresh;
       if (state_.lastRefreshAdded !== undefined) state.data.lastRefreshAdded = state_.lastRefreshAdded;
       if (state_.lastRefreshFeeds !== undefined) state.data.lastRefreshFeeds = state_.lastRefreshFeeds;
       if (state_.lastRefresh !== undefined) state.data.lastRefresh = state_.lastRefresh;
@@ -3368,8 +3455,7 @@ function setupMobile() {
       syncHeadMenu();
       return;
     }
-    if (event.target.closest('#menu-refresh')) { closeHeadMenu(); refreshFeeds(state.view.type === 'feed' ? state.view.id : null); return; }
-    if (event.target.closest('#menu-settings')) { closeHeadMenu(); openSettings(); }
+    if (event.target.closest('#menu-read-all')) { closeHeadMenu(); markAllInView(); return; }
   });
   // Жёсткое обновление: сносим кэши и service worker, чтобы приложение
   // гарантированно загрузило свежую версию (полезно, если оболочка «залипла»).
@@ -3449,16 +3535,14 @@ function setupMobile() {
     if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
     const open = document.body.classList.contains('tree-open');
     if (dx > 0) {
-      // Свайп вправо с левой половины экрана или из уже открытой панели.
-      if (open || startX <= window.innerWidth / 2) openTree(true);
+      // Свайп вправо из ЛЮБОГО места экрана открывает дерево подписок.
+      if (!open) openTree(true);
       return;
     }
-    if (open) { openTree(false); return; }                           // влево: закрыть подписки
-    // Свайп влево по правой половине экрана (панель закрыта) — следующая статья.
-    if (startX >= window.innerWidth / 2) {
-      const id = state.selectedId ?? state.activeId;
-      if (id) goRelative(id, 1);
-    }
+    if (open) { openTree(false); return; }                           // влево при открытой панели: закрыть её
+    // Влево при закрытой панели — следующая статья.
+    const id = state.selectedId ?? state.activeId;
+    if (id) goRelative(id, 1);
   }, { passive: true });
 }
 
@@ -3634,6 +3718,20 @@ function sanitize(html, baseUrl) {
     'BLOCKQUOTE', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'FIGURE', 'FIGCAPTION', 'PICTURE', 'SOURCE',
     'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'CAPTION', 'VIDEO', 'AUDIO', 'SUB', 'SUP', 'SMALL', 'MARK',
     'DL', 'DT', 'DD', 'ABBR', 'TIME', 'CITE', 'Q', 'KBD', 'SAMP', 'VAR', 'SECTION', 'ARTICLE', 'ASIDE', 'MAIN']);
+  // Встроенные видео (YouTube, VK) санитайзер вырезал целиком. Оставляем
+  // заметную кнопку: по нажатию подставляем плеер, без нажатия — ноль трафика.
+  // Ссылки-заметки от сервера: <p>youtube:ID</p> и <p>embed:URL</p>.
+  html = String(html).replace(/<p[^>]*>[^<]*youtube:([\w-]{6,})[^<]*<\/p>/gi,
+    (match, id) => `<div class="embed-box" data-embed="https://www.youtube.com/embed/${id}?autoplay=1"><button type="button" class="btn embed-play">▶ Смотреть видео</button></div>`);
+  html = String(html).replace(/<p[^>]*>[^<]*embed:([^<\s]+)[^<]*<\/p>/gi,
+    (match, url) => `<div class="embed-box" data-embed="${url}"><button type="button" class="btn embed-play">▶ Смотреть видео</button></div>`);
+  html = String(html).replace(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*>(?:[\s\S]*?<\/iframe>)?/gi, (match, src) => {
+    const id = /(?:youtube\.com\/embed\/|youtube-nocookie\.com\/embed\/|youtu\.be\/)([\w-]{6,})/i.exec(src)?.[1];
+    const absolute = /^https?:/i.test(src) ? src : '';
+    if (id) return `<div class="embed-box" data-embed="https://www.youtube.com/embed/${id}?autoplay=1"><button type="button" class="btn embed-play">▶ Смотреть видео</button></div>`;
+    if (absolute) return `<div class="embed-box" data-embed="${absolute}"><button type="button" class="btn embed-play">▶ Смотреть видео</button></div>`;
+    return '';
+  });
   const doc = new DOMParser().parseFromString(`<div id="__root">${html}</div>`, 'text/html');
   const root = doc.getElementById('__root');
   if (!root) return '';

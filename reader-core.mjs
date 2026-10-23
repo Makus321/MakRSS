@@ -116,7 +116,7 @@ async function refreshVersion() {
 const PARSER_VERSION = 18;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
-const BODY_VERSION = 11;
+const BODY_VERSION = 12;
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -350,7 +350,10 @@ const toMeta = (item) => ({
   link: item.link,
   date: item.date,
   author: item.author,
-  excerpt: shortExcerpt(item.excerpt),
+  // У части лент (lenta.ru и подобные) описания в ленте нет вовсе: тогда короткий
+  // текст берём из содержимого статьи, иначе карточка показывала только
+  // «Нажмите, чтобы раскрыть статью».
+  excerpt: shortExcerpt(item.excerpt || htmlToText(item.content ?? '')),
   image: item.image,
   categories: item.categories ?? [],
   hasFull: Boolean(item.hasFull),
@@ -819,6 +822,10 @@ async function fetchFullText(feedId, itemId) {
   if (body.fullHtml) {
     // Текст уже лежит в хранилище — помечаем статью, чтобы не ставить её в очередь снова.
     if (!target.hasFull) { target.hasFull = true; store.saveStateSoon(400, { bump: false }); }
+    if (!target.excerpt && body.fullHtml) {
+      const text = htmlToText(body.fullHtml);
+      if (text) { target.excerpt = shortExcerpt(text); store.saveStateSoon(400, { bump: false }); }
+    }
     // У старых избранных статей не было превью — берём картинку из текста.
     if (!target.image) {
       const firstImage = /<img[^>]+src="([^"]+)"/i.exec(body.fullHtml ?? '')?.[1];
@@ -2594,21 +2601,25 @@ async function api(req, res, url) {
     const body = await readJson(req);
     const targets = body.id ? db.feeds.filter((f) => f.id === body.id) : db.feeds;
     if (!targets.length) return json(res, 200, { ok: true, results: [], data: buildPayload() });
+    // Обновление в фоне: лент много, синхронный ответ шёл 15-20 секунд и
+    // выглядел как «кнопка не работает». Клиент узнает результат опросом.
+    if (refreshing) return json(res, 200, { ok: true, started: false, busy: true });
     refreshing = true;
-    let results;
-    try {
-      results = await refreshMany(targets, { force: Boolean(body.force) });
-    } finally {
-      refreshing = false;
-      store.saveStateSoon();
-    }
-    if (!body.id) scheduleFullText();
-    // Ручное обновление перезапускает отсчёт: иначе nextRefreshAt оставался в
-    // прошлом, и таймер в клиенте замирал на 0:00 навсегда.
-    schedulePeriodicRefresh();
-    // Свежие числа комментариев: в карточке должно быть актуальное значение.
-    await refreshCommentCounts().catch(() => 0);
-    return json(res, 200, { ok: true, results, data: buildPayload() });
+    json(res, 200, { ok: true, started: true, feeds: targets.length });
+    (async () => {
+      try {
+        await refreshMany(targets, { force: Boolean(body.force) });
+      } catch (err) {
+        log(`обновление: ${err.message}`);
+      } finally {
+        refreshing = false;
+        store.saveStateSoon();
+        if (!body.id) scheduleFullText();
+        schedulePeriodicRefresh();
+        refreshCommentCounts().catch(() => 0);
+      }
+    })();
+    return undefined;
   }
 
   if (route === 'POST /api/read') {
