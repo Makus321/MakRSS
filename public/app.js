@@ -3843,7 +3843,12 @@ function sanitize(html, baseUrl) {
   // Подряд идущие картинки собираем в один блок: тогда читалка раскладывает их
   // в несколько колонок, если по ширине помещается больше одной, вместо длинной
   // ленты одиночных картинок.
-  const ownsMedia = (node) => node.nodeType === 1 && node.classList?.contains('img-alone') && !node.classList.contains('img-row');
+  // Картинки постов (/api/media) в общий ряд не собираем: каждая остаётся
+  // своим абзацем во всю ширину, так они гарантированно видны.
+  const ownsMedia = (node) => node.nodeType === 1
+    && node.classList?.contains('img-alone')
+    && !node.classList.contains('img-row')
+    && !node.querySelector('img[src^="/api/media"]');
   let run = [];
   const flush = () => {
     if (run.length < 2) { run = []; return; }
