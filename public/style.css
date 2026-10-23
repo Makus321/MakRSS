@@ -1053,4 +1053,5 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 }
 
 /* Служебная строка: сколько медиа в статье (для проверки). */
-.media-debug { margin-top: 10px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); }
+/* Служебная строка всегда под содержимым, даже если картинки обтекаются текстом. */
+.media-debug { clear: both; margin-top: 10px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); }
