@@ -241,7 +241,9 @@ function applyVisualPrefs() {
   // Интерфейс (кнопки, подписи, окна) растёт умеренно: иначе на телефоне поля
   // и подписи выглядят разного размера. Крупный текст статьи задаётся отдельно.
   // Масштаб интерфейса — отдельная настройка, а не производная от размера дерева.
-  const uiScale = Math.max(0.85, Math.min(1.4, Number(state.prefs.uiScale) || 1));
+  // Системные надписи на ступеньку крупнее прежнего: коэффициент 1.08 применяем
+  // ко всем вариантам выбора, чтобы привычные ступени сохранились.
+  const uiScale = Math.max(0.85, Math.min(1.6, (Number(state.prefs.uiScale) || 1) * 1.08));
   document.documentElement.style.setProperty('--ui-scale', String(uiScale));
   root.style.setProperty('--font-tree', bigger(state.prefs.fontTree, '13px'));
   root.style.setProperty('--font-article', bigger(state.prefs.fontArticle, '14.5px'));
@@ -1344,8 +1346,16 @@ function fillViewport() {
   if (state.limit >= total) return;
   if (listEl.scrollHeight > listEl.clientHeight + 120) return;
   state.filling = true;
+  // Дозагрузка не должна сдвигать ленту: запоминаем позицию и высоту и после
+  // перерисовки возвращаем прокрутку туда же.
+  const beforeHeight = listEl.scrollHeight;
+  const beforeTop = listEl.scrollTop;
   state.limit = Math.min(total, state.limit + 10);
   renderList();
+  const grown = $('#list');
+  if (grown && beforeTop > 0) {
+    grown.scrollTop = beforeTop + Math.max(0, grown.scrollHeight - beforeHeight);
+  }
   state.filling = false;
   fillViewport();
 }

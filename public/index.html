@@ -148,7 +148,7 @@
             <option value="all">Все</option>
           </select>
         </label>
-                <label class="mini-field" id="images-only-wrap" title="Показывать в статьях только картинки, без разметки сайта" hidden>
+        <label class="mini-field" id="images-only-wrap" title="Показывать в статьях только картинки, без разметки сайта" hidden>
           <select id="images-only">
             <option value="no">Обычный вид</option>
             <option value="yes">Только картинки</option>
@@ -227,7 +227,7 @@
               <option value="auto">как в системе</option>
             </select>
           </label>
-          <label class="row-line">Фон
+        <label class="row-line">Фон
             <select id="set-background" title="Какой цвет у фона читалки">
               <option value="theme">фон темы (белый/чёрный)</option>
               <option value="palette">фон с гаммой</option>
@@ -248,7 +248,7 @@
               <option value="mono">Монохром</option>
             </select>
           </label>
-          <label class="row-line">Гамма светлой темы
+        <label class="row-line">Гамма светлой темы
             <select id="set-palette-light">
               <option value="day">Дневная</option>
               <option value="sky">Небо</option>
@@ -269,20 +269,12 @@
             <option value="full">полностью</option>
           </select>
         </label>
-        <label class="row-line">Размер системных надписей
-          <select id="set-ui-scale">
-            <option value="0.9">мельче</option>
-            <option value="1">обычный</option>
-            <option value="1.15">крупнее</option>
-            <option value="1.3">самый крупный</option>
-          </select>
-        </label>        <label class="row-line">Плотность списка
           <select id="set-density">
             <option value="compact">компактно</option>
             <option value="comfortable">свободно</option>
           </select>
         </label>
-                <label class="row-line">Обтекание картинок текстом
+        <label class="row-line">Обтекание картинок текстом
           <select id="set-image-wrap">
             <option value="no">выключено</option>
             <option value="yes">узкие картинки слева</option>
@@ -294,9 +286,7 @@
             <option value="no">не показывать</option>
           </select>
         </label>
-        
-                
-                <label class="row-line">Рамки в интерфейсе
+        <label class="row-line">Рамки в интерфейсе
           <select id="set-borders">
             <option value="yes">показывать</option>
             <option value="no">без рамок</option>
@@ -315,6 +305,14 @@
           </select>
         </label>
         <div class="grid2">
+          <label class="row-line">Размер системных надписей
+            <select id="set-ui-scale">
+              <option value="0.9">мелкий</option>
+              <option value="1">обычный</option>
+              <option value="1.15">крупный</option>
+              <option value="1.3">очень крупный</option>
+            </select>
+          </label>
           <label class="row-line">Шрифт в дереве
             <select id="set-font-tree">
               <option value="12px">мелкий</option>
@@ -323,7 +321,7 @@
               <option value="20px">очень крупный</option>
             </select>
           </label>
-          <label class="row-line">Шрифт статьи
+        <label class="row-line">Шрифт статьи
             <select id="set-font-article">
               <option value="13px">мелкий</option>
               <option value="14.5px">обычный</option>
@@ -331,7 +329,7 @@
               <option value="22px">очень крупный</option>
             </select>
           </label>
-          <label class="row-line">Шрифт краткого вида
+        <label class="row-line">Шрифт краткого вида
             <select id="set-font-excerpt">
               <option value="13px">мелкий</option>
               <option value="14.5px">обычный</option>
@@ -397,7 +395,7 @@
         <div class="fever-info" id="account-info"></div>
         <div class="pass-row">
           <label class="row-line">Текущий пароль <input id="set-pass-current" type="password" autocomplete="current-password"></label>
-          <label class="row-line">Новый пароль <input id="set-pass" type="password" autocomplete="new-password" placeholder="не короче 4 символов"></label>
+        <label class="row-line">Новый пароль <input id="set-pass" type="password" autocomplete="new-password" placeholder="не короче 4 символов"></label>
           <button class="btn primary" id="save-credentials">Сменить пароль</button>
         </div>
         <div class="fever-info" id="fever-info"></div>
@@ -497,8 +495,8 @@
     <div class="modal-head"><h3>Вход в MAK RSS Reader</h3></div>
     <div class="modal-body">
       <label class="row-line">Логин <input id="login-user" type="text" autocomplete="username"></label>
-      <label class="row-line">Пароль <input id="login-pass" type="password" autocomplete="current-password"></label>
-      <label class="row-line check"><input type="checkbox" id="login-remember" checked> запомнить меня на 30 дней</label>
+        <label class="row-line">Пароль <input id="login-pass" type="password" autocomplete="current-password"></label>
+        <label class="row-line check"><input type="checkbox" id="login-remember" checked> запомнить меня на 30 дней</label>
       <div class="login-error" id="login-error"></div>
       <div class="btn-row"><button class="btn primary" id="login-submit">Войти</button></div>
     </div>
@@ -507,6 +505,6 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
-<script src="/app.js?v=210" type="module"></script>
+<script src="/app.js?v=211" type="module"></script>
 </body>
 </html>
