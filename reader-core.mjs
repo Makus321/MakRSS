@@ -2146,19 +2146,31 @@ async function cachePostMedia(feedId, itemId, html, limit = 12) {
   return saved;
 }
 
-/** Есть ли картинка в кэше сервера. */
-async function hasCachedMedia(feedId, itemId, index) {
+/** Гарантирует, что картинка лежит в кэше: при промахе скачивает и сохраняет. */
+async function ensureCachedMedia(feedId, itemId, index, remoteUrl) {
+  const target = path.join(MEDIA_DIR, postMediaFile(feedId, itemId, index));
   try {
-    await readFile(path.join(MEDIA_DIR, postMediaFile(feedId, itemId, index)));
+    await readFile(target);
+    return true;
+  } catch { /* ещё нет — качаем сейчас */ }
+  if (!remoteUrl) return false;
+  try {
+    const response = await fetch(remoteUrl, { headers: { 'user-agent': UA, accept: '*/*' } });
+    if (!response.ok) return false;
+    const bin = Buffer.from(await response.arrayBuffer());
+    if (bin.length < 200) return false;
+    await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
+    await writeFile(target, bin).catch(() => {});
     return true;
   } catch {
     return false;
   }
 }
 
-/** Каждая картинка — отдельным абзацем; отдаём только то, что есть в кэше. */
+/** Каждая картинка — отдельным абзацем; отдаём только то, что удалось закэшировать. */
 async function postHtmlForClient(feedId, itemId, html) {
   let out = String(html ?? '');
+  const urls = [...out.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]);
   // Склеенные в одном абзаце картинки разносим по отдельным абзацам.
   out = out.replace(/<p[^>]*>\s*((?:<img\b[^>]*>\s*)+)<\/p>/gi, (match, inner) => {
     const pics = [...inner.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
@@ -2174,7 +2186,7 @@ async function postHtmlForClient(feedId, itemId, html) {
       const current = index;
       index += 1;
       // Картинку, которой нет в кэше (битая ссылка Telegram), не показываем вовсе.
-      if (!(await hasCachedMedia(feedId, itemId, current))) continue;
+      if (!(await ensureCachedMedia(feedId, itemId, current, urls[current]))) continue;
       const before = match[1] ?? '';
       pieces.push('<img' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + current + '"');
     } else {

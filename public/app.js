@@ -3800,7 +3800,9 @@ function sanitize(html, baseUrl) {
           // содержимое») — отдаём их через свой прокси. Ссылки не трогаем.
           // Картинки и видео всегда отдаём через свой прокси: он снимает проблему
           // «смешанного содержимого», запрета хотлинков и чужого референта.
-          const isMedia = name !== 'href' && /^https?:\/\//i.test(abs);
+          // Внутренние ссылки (/api/media) не оборачиваем повторно в прокси:
+          // иначе сервер запрашивал бы сам себя без сессии и получал отказ.
+          const isMedia = name !== 'href' && /^https?:\/\//i.test(abs) && !abs.startsWith(location.origin + '/api/');
           const isVideo = el.tagName === 'VIDEO' || el.tagName === 'AUDIO' || el.tagName === 'SOURCE';
           const proxied = isMedia
             ? (isVideo ? `/api/video?u=${encodeURIComponent(abs)}` : `/api/img?u=${encodeURIComponent(abs)}`)
