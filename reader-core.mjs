@@ -117,6 +117,7 @@ const PARSER_VERSION = 18;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
 const BODY_VERSION = 13;
+const TG_CONTENT_VERSION = 2;   // версия разбора медиа в постах Telegram
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -788,7 +789,7 @@ async function enrichTelegramItem(feed, item) {
     const parsed = parseTelegramChannel(res.text, `https://t.me/${channel}`, feed.id, itemId);
     const media = parsed.items[0];
     if (!media?.content) return false;
-    await store.setBody(feed.id, item.id, { content: media.content, contentFetchedAt: new Date().toISOString() });
+    await store.setBody(feed.id, item.id, { content: media.content, contentFetchedAt: new Date().toISOString(), tgVersion: TG_CONTENT_VERSION });
     const first = /<img[^>]+src="([^"]+)"/i.exec(media.content)?.[1];
     if (first && !item.image) { item.image = first; store.saveStateSoon(400, { bump: false }); }
     if (media.video && !item.video) item.video = media.video;
@@ -1607,7 +1608,11 @@ async function bodiesFor(ids) {
       // Пост Telegram, у которого нет ни текста, ни картинок: забираем содержимое
       // со страницы встраивания прямо при открытии (такие посты уже ушли со
       // страницы канала, обычный разбор их не видит).
-      if (feed && !body.content && !body.fullHtml && enrichBudget > 0 && /t\.me\//i.test(item.link ?? '')) {
+      // Догружаем также посты, где текст есть, а картинок и видео нет: иначе
+      // альбомы, разобранные старой версией, оставались пустыми.
+      const hasMedia = /<img|<video/i.test(body.content ?? '');
+      const staleTelegram = body.tgVersion !== TG_CONTENT_VERSION;
+      if (feed && !body.fullHtml && enrichBudget > 0 && (!hasMedia || staleTelegram) && /t\.me\//i.test(item.link ?? '')) {
         enrichBudget -= 1;
         const ok = await enrichTelegramItem(feed, item).catch(() => false);
         if (ok) body = (await store.body(feedId, item.id)) ?? {};
