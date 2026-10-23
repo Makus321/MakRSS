@@ -1073,3 +1073,6 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 
 /* Иконка «поделиться» — обычный узел из трёх точек, а не стрелка вверх. */
 .a-actions button.a-share svg { display: block; pointer-events: none; }
+/* Якорь прокрутки по умолчанию включён: браузер сам удерживает позицию. */
+.list { overflow-anchor: auto; }
+.article { overflow-anchor: auto; }
