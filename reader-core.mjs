@@ -791,6 +791,8 @@ async function enrichTelegramItem(feed, item) {
     const media = parsed.items[0];
     if (!media?.content) return false;
     await store.setBody(feed.id, item.id, { content: media.content, contentFetchedAt: new Date().toISOString(), tgVersion: TG_CONTENT_VERSION });
+    // Сразу складываем картинки поста в кэш: отдача клиенту должна быть надёжной.
+    cachePostImages(feed.id, item.id, media.content).catch(() => {});
     const first = /<img[^>]+src="([^"]+)"/i.exec(media.content)?.[1];
     if (first && !item.image) { item.image = first; store.saveStateSoon(400, { bump: false }); }
     if (media.video && !item.video) item.video = media.video;
@@ -2173,6 +2175,24 @@ function shortenPostMedia(html, feedId, itemId) {
     .replace(/<video\b([^>]*?)\bsrc="[^"]*"/gi, (match, before) => '<video' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + (videoIndex++) + '&v=1"');
 }
 
+/** Скачивает картинки поста в кэш по индексу (tg-<лента>-<пост>-<i>.img). */
+async function cachePostImages(feedId, itemId, html) {
+  const pictures = [...String(html ?? '').matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]).slice(0, 12);
+  await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
+  for (let index = 0; index < pictures.length; index += 1) {
+    const target = path.join(MEDIA_DIR, 'tg-' + feedId + '-' + itemId + '-' + index + '.img');
+    try {
+      await readFile(target);
+      continue;
+    } catch { /* нет в кэше — качаем */ }
+    try {
+      const response = await fetch(pictures[index], { headers: { 'user-agent': UA, accept: '*/*' } });
+      if (!response.ok) continue;
+      await writeFile(target, Buffer.from(await response.arrayBuffer()));
+    } catch { /* пропускаем */ }
+  }
+}
+
 /** Достаёт из сохранённого текста поста N-ю картинку или N-е видео. */
 async function postMediaUrl(feedId, itemId, index, kind) {
   const body = (await store.body(feedId, itemId)) ?? {};
@@ -2181,8 +2201,8 @@ async function postMediaUrl(feedId, itemId, index, kind) {
 }
 
 /** Качает внешний файл поста и отдаёт его клиенту (с кэшем на диск). */
-async function proxyRemoteMedia(req, res, remote, kind) {
-  const key = createHash('sha1').update(remote).digest('hex').slice(0, 24);
+async function proxyRemoteMedia(req, res, remote, kind, cacheName = '') {
+  const key = cacheName || createHash('sha1').update(remote).digest('hex').slice(0, 24);
   const cached = path.join(MEDIA_DIR, key);
   try {
     const data = await readFile(cached);
@@ -2218,7 +2238,8 @@ async function serveMedia(req, res, url) {
     const kind = url.searchParams.get('v') === '1' ? 'video' : 'image';
     const remote = await postMediaUrl(feedId, postId, index, kind);
     if (!remote) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('нет файла'); return; }
-    return proxyRemoteMedia(req, res, remote, kind);
+    const cacheName = 'tg-' + feedId + '-' + postId + '-' + index + (kind === 'video' ? '.mp4' : '.img');
+    return proxyRemoteMedia(req, res, remote, kind, cacheName);
   }
   const messageId = Number.parseInt(url.searchParams.get('m') ?? '', 10);
   const item = (db.items[feedId] ?? []).find((i) => i.messageId === messageId);
