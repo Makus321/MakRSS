@@ -1,0 +1,43 @@
+/** Имя файла кэша для N-й картинки поста. */
+function postMediaFile(feedId, itemId, index) {
+  return 'tg-' + feedId + '-' + itemId + '-' + index + '.img';
+}
+
+/** Скачивает картинки поста в кэш на сервере (до limit штук). */
+async function cachePostMedia(feedId, itemId, html, limit = 12) {
+  const urls = [...String(html ?? '').matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]).slice(0, limit);
+  await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
+  let saved = 0;
+  for (let index = 0; index < urls.length; index += 1) {
+    const target = path.join(MEDIA_DIR, postMediaFile(feedId, itemId, index));
+    try { await readFile(target); saved += 1; continue; } catch { /* ещё нет в кэше */ }
+    try {
+      const response = await fetch(urls[index], { headers: { 'user-agent': UA, accept: '*/*' } });
+      if (!response.ok) continue;
+      const bin = Buffer.from(await response.arrayBuffer());
+      if (bin.length < 200) continue;
+      await writeFile(target, bin);
+      saved += 1;
+    } catch { /* пропускаем картинку */ }
+  }
+  return saved;
+}
+
+/** Каждая картинка — отдельным абзацем, ссылки — короткие внутренние. */
+function postHtmlForClient(feedId, itemId, html) {
+  let out = String(html ?? '');
+  // Склеенные в одном абзаце картинки разносим по отдельным абзацам.
+  out = out.replace(/<p[^>]*>\s*((?:<img\b[^>]*>\s*)+)<\/p>/gi, (match, inner) => {
+    const pics = [...inner.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+    return pics.map((pic) => '<p>' + pic + '</p>').join('\n');
+  });
+  let index = 0;
+  out = out.replace(/<img\b([^>]*?)\bsrc="[^"]*"/gi, (match, before) => {
+    const current = index;
+    index += 1;
+    return '<img' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + current + '"';
+  });
+  return out;
+}
+
+async function serveMedia(req, res, url) {

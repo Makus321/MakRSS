@@ -789,6 +789,7 @@ async function enrichTelegramItem(feed, item) {
     const media = parsed.items[0];
     if (!media?.content) return false;
     await store.setBody(feed.id, item.id, { content: media.content, contentFetchedAt: new Date().toISOString() });
+    cachePostMedia(feed.id, item.id, media.content).catch(() => {});
     const first = /<img[^>]+src="([^"]+)"/i.exec(media.content)?.[1];
     if (first && !item.image) { item.image = first; store.saveStateSoon(400, { bump: false }); }
     if (media.video && !item.video) item.video = media.video;
@@ -1619,7 +1620,9 @@ async function bodiesFor(ids) {
         store.saveStateSoon();
       }
       out[item.id] = {
-        content: body.content ?? '',
+        content: String(feed?.kind ?? '').startsWith('telegram')
+          ? await postHtmlForClient(feedId, item.id, body.content ?? '')
+          : (body.content ?? ''),
         fullHtml: body.fullHtml ?? '',
         fullFetchedAt: body.fullFetchedAt ?? null,
         hasFull: hasText,
@@ -2118,8 +2121,114 @@ async function serveImage(req, res, url) {
   }
 }
 
+/** Имя файла кэша для N-й картинки поста. */
+function postMediaFile(feedId, itemId, index) {
+  return 'tg-' + feedId + '-' + itemId + '-' + index + '.img';
+}
+
+/** Скачивает картинки поста в кэш на сервере (до limit штук). */
+async function cachePostMedia(feedId, itemId, html, limit = 12) {
+  const urls = [...String(html ?? '').matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]).slice(0, limit);
+  await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
+  let saved = 0;
+  for (let index = 0; index < urls.length; index += 1) {
+    const target = path.join(MEDIA_DIR, postMediaFile(feedId, itemId, index));
+    try { await readFile(target); saved += 1; continue; } catch { /* ещё нет в кэше */ }
+    try {
+      const response = await fetch(urls[index], { headers: { 'user-agent': UA, accept: '*/*' } });
+      if (!response.ok) continue;
+      const bin = Buffer.from(await response.arrayBuffer());
+      if (bin.length < 200) continue;
+      await writeFile(target, bin);
+      saved += 1;
+    } catch { /* пропускаем картинку */ }
+  }
+  return saved;
+}
+
+/** Есть ли картинка в кэше сервера. */
+async function hasCachedMedia(feedId, itemId, index) {
+  try {
+    await readFile(path.join(MEDIA_DIR, postMediaFile(feedId, itemId, index)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Каждая картинка — отдельным абзацем; отдаём только то, что есть в кэше. */
+async function postHtmlForClient(feedId, itemId, html) {
+  let out = String(html ?? '');
+  // Склеенные в одном абзаце картинки разносим по отдельным абзацам.
+  out = out.replace(/<p[^>]*>\s*((?:<img\b[^>]*>\s*)+)<\/p>/gi, (match, inner) => {
+    const pics = [...inner.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+    return pics.map((pic) => '<p>' + pic + '</p>').join('\n');
+  });
+  let index = 0;
+  const pieces = [];
+  const re = /<img\b([^>]*?)\bsrc="[^"]*"[^>]*>|<[^>]+>|[^<]+/gi;
+  let match;
+  while ((match = re.exec(out)) !== null) {
+    const chunk = match[0];
+    if (/^<img\b/i.test(chunk)) {
+      const current = index;
+      index += 1;
+      // Картинку, которой нет в кэше (битая ссылка Telegram), не показываем вовсе.
+      if (!(await hasCachedMedia(feedId, itemId, current))) continue;
+      const before = match[1] ?? '';
+      pieces.push('<img' + before + ' src="/api/media?f=' + feedId + '&k=' + itemId + '&i=' + current + '"');
+    } else {
+      pieces.push(chunk);
+    }
+  }
+  return pieces.join('');
+}
+
 async function serveMedia(req, res, url) {
   const feedId = url.searchParams.get('f') ?? '';
+  // Короткая ссылка на картинку поста: отдаём из кэша, при промахе качаем и кэшируем.
+  const postId = url.searchParams.get('k') ?? '';
+  if (postId) {
+    const index = Math.max(0, Number.parseInt(url.searchParams.get('i') ?? '0', 10) || 0);
+    const target = path.join(MEDIA_DIR, postMediaFile(feedId, postId, index));
+    try {
+      const data = await readFile(target);
+      res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
+      return res.end(data);
+    } catch { /* ещё не скачано */ }
+    const stored = (await store.body(feedId, postId)) ?? {};
+    const remote = [...String(stored.content ?? '').matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1])[index] ?? '';
+    if (!remote) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('нет файла');
+      return;
+    }
+    try {
+      // Пробуем дважды: Telegram иногда отдаёт файл не с первого раза.
+      let response = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        response = await fetch(remote, { headers: { 'user-agent': UA, accept: '*/*' } }).catch(() => null);
+        if (response?.ok) break;
+        await sleep(400);
+      }
+      if (!response?.ok) throw new Error(String(response?.status ?? 'нет ответа'));
+      const bin = Buffer.from(await response.arrayBuffer());
+      await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
+      await writeFile(target, bin).catch(() => {});
+      res.writeHead(200, {
+        'content-type': response.headers.get('content-type') ?? 'image/jpeg',
+        'cache-control': 'private, max-age=86400',
+      });
+      return res.end(bin);
+    } catch (err) {
+      // Ссылка устарела (Telegram отдаёт 404/500) — перечитываем пост в фоне,
+      // чтобы получить свежие адреса картинок; сейчас честно отвечаем 404.
+      const feed = feedById(feedId);
+      const post = (db.items[feedId] ?? []).find((i) => i.id === postId);
+      if (feed && post) enrichTelegramItem(feed, post).catch(() => false);
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('картинка недоступна');
+      return undefined;
+    }
+  }
   const messageId = Number.parseInt(url.searchParams.get('m') ?? '', 10);
   const item = (db.items[feedId] ?? []).find((i) => i.messageId === messageId);
   const fileId = item?.imageFileId;

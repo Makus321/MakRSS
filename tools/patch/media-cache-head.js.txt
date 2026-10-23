@@ -1,0 +1,33 @@
+  const feedId = url.searchParams.get('f') ?? '';
+  // Короткая ссылка на картинку поста: отдаём из кэша, при промахе качаем и кэшируем.
+  const postId = url.searchParams.get('k') ?? '';
+  if (postId) {
+    const index = Math.max(0, Number.parseInt(url.searchParams.get('i') ?? '0', 10) || 0);
+    const target = path.join(MEDIA_DIR, postMediaFile(feedId, postId, index));
+    try {
+      const data = await readFile(target);
+      res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
+      return res.end(data);
+    } catch { /* ещё не скачано */ }
+    const stored = (await store.body(feedId, postId)) ?? {};
+    const remote = [...String(stored.content ?? '').matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1])[index] ?? '';
+    if (!remote) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('нет файла');
+      return;
+    }
+    try {
+      const response = await fetch(remote, { headers: { 'user-agent': UA, accept: '*/*' } });
+      if (!response.ok) throw new Error(String(response.status));
+      const bin = Buffer.from(await response.arrayBuffer());
+      await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
+      await writeFile(target, bin).catch(() => {});
+      res.writeHead(200, {
+        'content-type': response.headers.get('content-type') ?? 'image/jpeg',
+        'cache-control': 'private, max-age=86400',
+      });
+      return res.end(bin);
+    } catch (err) {
+      res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' }).end('картинка не получена');
+      return undefined;
+    }
+  }

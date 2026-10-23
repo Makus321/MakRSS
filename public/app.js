@@ -863,7 +863,9 @@ function layoutArticleImages(root = document) {
         block?.previousElementSibling?.querySelector?.('img')
         || block?.nextElementSibling?.querySelector?.('img'),
       );
-      if (!hasNeighbour && natural && natural < containerWidth * 0.6) img.classList.add('wrap-left');
+      // Картинки постов Telegram идут из кэша сервера (/api/media) и всегда во всю ширину — без обтекания.
+      const fromCache = (img.getAttribute('src') ?? '').startsWith('/api/media');
+      if (!fromCache && !hasNeighbour && natural && natural < containerWidth * 0.6) img.classList.add('wrap-left');
       else img.classList.remove('wrap-left');
     };
     if (img.complete) apply();
