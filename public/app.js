@@ -885,6 +885,30 @@ function setupEmbeds(root = document) {
   }
 }
 
+/**
+ * Служебная строка в конце статьи: сколько картинок и видео в тексте.
+ * Показываем только ненулевые значения, иначе строки нет вовсе.
+ */
+function showMediaCounters() {
+  for (const card of document.querySelectorAll('.article[data-item]')) {
+    const body = card.querySelector('.a-body');
+    if (!body) continue;
+    const imgs = body.querySelectorAll('img').length;
+    const vids = body.querySelectorAll('video').length;
+    let badge = card.querySelector('.media-debug');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'media-debug';
+      body.append(badge);
+    }
+    const parts = [];
+    if (imgs > 0) parts.push('картинок ' + imgs);
+    if (vids > 0) parts.push('видео ' + vids);
+    badge.textContent = parts.length ? 'в тексте: ' + parts.join(', ') : '';
+    badge.hidden = parts.length === 0;
+  }
+}
+
 function bodyHtml(item) {
   const body = state.bodies.get(item.id);
   if (!body) {
@@ -1394,6 +1418,7 @@ function renderList() {
   updateActiveArticle();
 
   layoutArticleImages();
+  showMediaCounters();
   setupEmbeds();
 }
 
