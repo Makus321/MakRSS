@@ -939,7 +939,13 @@ function bodyHtml(item) {
   const bodyHead = normalise(bodySource).slice(0, 80);
   const excerptHead = normalise(item.excerpt).slice(0, 80);
   const sameAsExcerpt = Boolean(bodyHead && excerptHead) && (bodyHead.startsWith(excerptHead) || excerptHead.startsWith(bodyHead));
-  let html = sameAsExcerpt && !body.fullHtml ? '' : sanitize(bodySource, item.link);
+  // Текст совпал с анонсом — сам текст в полной статье не дублируем, но медиа
+  // (картинки и видео) из него оставляем: иначе статья выглядела бы пустой.
+  let html = sanitize(bodySource, item.link);
+  if (sameAsExcerpt && !body.fullHtml) {
+    const media = html.match(/<(?:img|video)\b[^>]*>/gi) ?? [];
+    html = media.length ? media.map((tag) => '<p>' + tag + '</p>').join('\n') : '';
+  }
   // Бывает, что от сайта пришёл только текст без разметки (или одна разметка без
   // текста). Тогда карточка выглядела пустой — подставляем текст как абзац.
   if (!String(html ?? '').replace(/<[^>]*>/g, ' ').trim()) {
@@ -968,11 +974,15 @@ function bodyHtml(item) {
     html = `<p class="img-alone"><img src="${esc(imageSrc(item))}" alt="" loading="lazy"></p>${html}`;
   }
   if (html) {
-    // Пост с видео: кнопка пробует проиграть его через наш прокси (без кеша).
-    const video = item.video
-      ? `<div class="a-video"><button class="btn primary" data-video="${esc(item.video)}">▶ Просмотреть видео</button>
-          <span class="note">видео проигрывается через прокси и не сохраняется</span></div>`
-      : '';
+    // Видео: кнопка на каждый ролик поста, а не только на первый. Сами теги
+    // <video> из текста убираем — вместо них кнопки, которые включают прокси.
+    const bodyVideos = [...String(html).matchAll(/<video\b[^>]*\bsrc="([^"]+)"[^>]*>/gi)].map((m) => m[1]);
+    if (bodyVideos.length) html = html.replace(/<video\b[^>]*>[\s\S]*?<\/video>|<video\b[^>]*>/gi, '');
+    const videoSources = bodyVideos.length ? bodyVideos : (item.video ? [item.video] : []);
+    const video = videoSources
+      .map((src) => `<div class="a-video"><button class="btn primary" data-video="${esc(src)}">▶ Просмотреть видео</button>
+          <span class="note">видео проигрывается через прокси и не сохраняется</span></div>`)
+      .join('');
     return column(note + html + video);
   }
   const kind = feedById(item.feedId)?.kind;
