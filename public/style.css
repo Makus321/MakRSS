@@ -616,7 +616,7 @@ body.dragging .tree-tail { display: flex; }
    у которой задан display, остаётся видимой). */
 [hidden] { display: none !important; }
 
-@media (max-width: 900px) {
+@media (max-width: 900px), (pointer: coarse) {
   .app { grid-template-columns: minmax(0, 1fr); height: 100dvh; }
   .splitter { display: none; }
 

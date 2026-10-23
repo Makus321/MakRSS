@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MAK RSS Reader</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f97316'/><circle cx='10' cy='22' r='3' fill='white'/><path d='M7 14a11 11 0 0 1 11 11' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/><path d='M7 7a18 18 0 0 1 18 18' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="/style.css?v=136">
+<link rel="stylesheet" href="/style.css?v=137">
 <!-- Установка на домашний экран телефона (PWA) -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -269,7 +269,14 @@
             <option value="full">полностью</option>
           </select>
         </label>
-        <label class="row-line">Плотность списка
+        <label class="row-line">Размер системных надписей
+          <select id="set-ui-scale">
+            <option value="0.9">мельче</option>
+            <option value="1">обычный</option>
+            <option value="1.15">крупнее</option>
+            <option value="1.3">самый крупный</option>
+          </select>
+        </label>        <label class="row-line">Плотность списка
           <select id="set-density">
             <option value="compact">компактно</option>
             <option value="comfortable">свободно</option>
@@ -500,6 +507,6 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
-<script src="/app.js?v=200" type="module"></script>
+<script src="/app.js?v=201" type="module"></script>
 </body>
 </html>

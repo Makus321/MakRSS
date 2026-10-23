@@ -64,6 +64,7 @@ const state = {
     theme: 'dark', paletteDark: 'graphite', paletteLight: 'day', background: 'palette', density: 'compact', thumbs: true,
     fontTree: '13px', fontArticle: '14.5px', fontExcerpt: '14.5px', fontFamily: 'system', lineHeight: 'normal',
     borders: true,
+    uiScale: 1,                            // размер системных надписей и диалогов
     imageWrap: false,                      // узкие картинки в статье обтекаются текстом
     readOnExpand: true, readOnScroll: true, readOnFinish: false,
     treeFilter: 'all',
@@ -239,7 +240,9 @@ function applyVisualPrefs() {
   const treeSize = parseFloat(bigger(state.prefs.fontTree, '13px')) || 13;
   // Интерфейс (кнопки, подписи, окна) растёт умеренно: иначе на телефоне поля
   // и подписи выглядят разного размера. Крупный текст статьи задаётся отдельно.
-  document.documentElement.style.setProperty('--ui-scale', String(Math.max(0.9, Math.min(1.15, treeSize / 13))));
+  // Масштаб интерфейса — отдельная настройка, а не производная от размера дерева.
+  const uiScale = Math.max(0.85, Math.min(1.4, Number(state.prefs.uiScale) || 1));
+  document.documentElement.style.setProperty('--ui-scale', String(uiScale));
   root.style.setProperty('--font-tree', bigger(state.prefs.fontTree, '13px'));
   root.style.setProperty('--font-article', bigger(state.prefs.fontArticle, '14.5px'));
   root.style.setProperty('--font-excerpt', bigger(state.prefs.fontExcerpt, '14.5px'));
@@ -2943,6 +2946,7 @@ function fillSettingsForm() {
   setSelectValue($('#set-font-family'), fontVariant(state.prefs.fontFamily));
   setSelectValue($('#set-line-height'), state.prefs.lineHeight || 'normal');
   setFontSelect($('#set-font-tree'), state.prefs.fontTree);
+  setSelectValue($('#set-ui-scale'), String(state.prefs.uiScale ?? 1));
   setFontSelect($('#set-font-article'), state.prefs.fontArticle);
   setFontSelect($('#set-font-excerpt'), state.prefs.fontExcerpt);
   setSelectValue($('#set-read-mode'), readMode());
@@ -3093,6 +3097,11 @@ $('#set-borders').addEventListener('change', (e) => {
 $('#set-font-family').addEventListener('change', (e) => { state.prefs.fontFamily = e.target.value; savePrefs(); applyVisualPrefs(); });
 $('#set-line-height').addEventListener('change', (e) => { state.prefs.lineHeight = e.target.value; savePrefs(); applyVisualPrefs(); });
 $('#set-font-tree').addEventListener('change', (e) => { state.prefs.fontTree = e.target.value; savePrefs(); applyVisualPrefs(); });
+  $('#set-ui-scale').addEventListener('change', (e) => {
+    state.prefs.uiScale = Number(e.target.value) || 1;
+    savePrefs();
+    applyVisualPrefs();
+  });
 $('#set-font-article').addEventListener('change', (e) => { state.prefs.fontArticle = e.target.value; savePrefs(); applyVisualPrefs(); });
 $('#set-font-excerpt').addEventListener('change', (e) => { state.prefs.fontExcerpt = e.target.value; savePrefs(); applyVisualPrefs(); });
 /** Какой из трёх вариантов отметки выбран. */
