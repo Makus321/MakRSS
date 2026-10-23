@@ -405,6 +405,35 @@ const passRowProbe = await evaluate(`(() => {
 })()`);
 console.log('  строка пароля:', JSON.stringify(passRowProbe));
 
+// Глубокий разбор: тело статьи для поста из избранного.
+const deepProbe = await evaluate(`(async () => {
+  const starred = document.querySelector('[data-view="starred"]');
+  if (starred) starred.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 2000));
+  const cards = [...document.querySelectorAll('.article')];
+  const card = cards.find((c) => (c.textContent || '').includes('Universal Studios')) || cards[0];
+  const id = card?.dataset.item;
+  card?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 3000));
+  const body = card?.querySelector('.a-body');
+  const html = body ? body.innerHTML : '';
+  const resp = id
+    ? await fetch('/api/bodies', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [id] }) }).then((r) => r.json()).catch(() => null)
+    : null;
+  const remote = resp?.bodies?.[id] ?? {};
+  return {
+    id,
+    imgs: body ? body.querySelectorAll('img').length : 0,
+    videos: body ? body.querySelectorAll('video').length : 0,
+    htmlLen: html.length,
+    htmlStart: html.slice(0, 160),
+    remoteContentLen: (remote.content || '').length,
+    remoteImgs: (remote.content || '').split('<img').length - 1,
+    remoteFullLen: (remote.fullHtml || '').length,
+  };
+})()`);
+console.log('  пост из избранного:', JSON.stringify(deepProbe));
+
 // Пост 16444: сколько картинок и видео реально отрисовано.
 const tgPost16444 = await evaluate(`(async () => {
   const rows = [...document.querySelectorAll('#tree .row[data-feed-row]')];

@@ -908,6 +908,17 @@ function bodyHtml(item) {
   const excerptHead = normalise(item.excerpt).slice(0, 80);
   const sameAsExcerpt = Boolean(bodyHead && excerptHead) && (bodyHead.startsWith(excerptHead) || excerptHead.startsWith(bodyHead));
   let html = sameAsExcerpt && !body.fullHtml && !telegramPost ? '' : sanitize(bodySource, item.link);
+  // Пост Telegram: если чистка почему-то выбросила медиа, добавляем его из
+  // исходного текста поста — картинки и ролики должны быть видны всегда.
+  if (telegramPost) {
+    const raw = String(body.content ?? '');
+    if (!/<img\b/i.test(html) && /<img\b/i.test(raw)) {
+      const pictures = [...raw.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]);
+      if (pictures.length) {
+        html += pictures.map((src) => `<p><img src="${esc(src)}" alt=""></p>`).join('\n');
+      }
+    }
+  }
   // Бывает, что от сайта пришёл только текст без разметки (или одна разметка без
   // текста). Тогда карточка выглядела пустой — подставляем текст как абзац.
   if (!String(html ?? '').replace(/<[^>]*>/g, ' ').trim()) {
