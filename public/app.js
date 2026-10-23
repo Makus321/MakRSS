@@ -928,7 +928,9 @@ function bodyHtml(item) {
   const bodyHead = normalise(bodySource).slice(0, 80);
   const excerptHead = normalise(item.excerpt).slice(0, 80);
   const sameAsExcerpt = Boolean(bodyHead && excerptHead) && (bodyHead.startsWith(excerptHead) || excerptHead.startsWith(bodyHead));
-  let html = sameAsExcerpt && !body.fullHtml && !telegramPost ? '' : sanitize(bodySource, item.link);
+  let html = sameAsExcerpt && !body.fullHtml && !telegramPost
+    ? ''
+    : sanitize(bodySource, item.link, { directMedia: telegramPost });
   // Пост Telegram: если чистка почему-то выбросила медиа, добавляем его из
   // исходного текста поста — картинки и ролики должны быть видны всегда.
   if (telegramPost) {
@@ -1430,6 +1432,7 @@ function renderList() {
 
   layoutArticleImages();
   setupEmbeds();
+  showMediaCounters();
 }
 
 /** Обновляет только отметки времени, не трогая остальной список. */
@@ -3762,8 +3765,11 @@ updateCountdown();
 // ------------------------------------------------------------- санитайзер
 
 /** Убирает из HTML статьи всё опасное и починяет относительные ссылки. */
-function sanitize(html, baseUrl) {
+function sanitize(html, baseUrl, options = {}) {
   if (!html) return '';
+  // Телеграм-посты: картинки берём прямо с сервера Telegram. Прокси не нужен —
+  // он и был причиной пустых мест вместо фотографий.
+  const directMedia = Boolean(options.directMedia);
   const allowed = new Set(['A', 'P', 'BR', 'HR', 'DIV', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'DEL', 'INS', 'CODE', 'PRE',
     'BLOCKQUOTE', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'FIGURE', 'FIGCAPTION', 'PICTURE', 'SOURCE',
     'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'CAPTION', 'VIDEO', 'AUDIO', 'SUB', 'SUP', 'SMALL', 'MARK',
@@ -3805,7 +3811,7 @@ function sanitize(html, baseUrl) {
           // содержимое») — отдаём их через свой прокси. Ссылки не трогаем.
           // Картинки и видео всегда отдаём через свой прокси: он снимает проблему
           // «смешанного содержимого», запрета хотлинков и чужого референта.
-          const isMedia = name !== 'href' && /^https?:\/\//i.test(abs);
+          const isMedia = name !== 'href' && /^https?:\/\//i.test(abs) && !directMedia;
           const isVideo = el.tagName === 'VIDEO' || el.tagName === 'AUDIO' || el.tagName === 'SOURCE';
           const proxied = isMedia
             ? (isVideo ? `/api/video?u=${encodeURIComponent(abs)}` : `/api/img?u=${encodeURIComponent(abs)}`)

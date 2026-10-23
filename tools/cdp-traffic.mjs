@@ -405,6 +405,30 @@ const passRowProbe = await evaluate(`(() => {
 })()`);
 console.log('  строка пароля:', JSON.stringify(passRowProbe));
 
+// Пост «Alina Rin»: что именно запрашивает браузер для картинок.
+const alinaProbe = await evaluate(`(async () => {
+  const starred = document.querySelector('[data-view="starred"]');
+  if (starred) starred.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 1800));
+  const cards = [...document.querySelectorAll('.article')];
+  const card = cards.find((c) => (c.textContent || '').includes('Alina Rin'));
+  if (!card) return { error: 'пост не найден', titles: cards.map((c) => (c.querySelector('.a-title')?.textContent || '').slice(0, 20)) };
+  card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 3000));
+  const imgs = [...card.querySelectorAll('.a-body img')];
+  const first = imgs[0];
+  const src = first?.getAttribute('src') ?? '';
+  const status = src ? await fetch(src).then((r) => r.status).catch((e) => String(e)) : 'нет src';
+  return {
+    count: imgs.length,
+    src: src.slice(0, 70),
+    natural: imgs.map((i) => i.naturalWidth).slice(0, 5),
+    display: first ? getComputedStyle(first).display : '',
+    status,
+  };
+})()`);
+console.log('  пост Alina:', JSON.stringify(alinaProbe));
+
 // Проверяем загрузку картинки поста из браузера.
 const imgFetchProbe = await evaluate(`(async () => {
   const starred = document.querySelector('[data-view="starred"]');
