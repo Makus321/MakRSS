@@ -844,6 +844,27 @@ function textWidth() {
  * ждёт под картинкой. Широкие оставляем как есть — им нужна вся строка.
  * Решение принимаем по реальной ширине файла после загрузки.
  */
+/**
+ * Диагностика медиа в статье: показывает, сколько картинок и видео реально
+ * попало в текст. Видно в карточке, помогает понять, где теряется медиа.
+ */
+function showMediaCounters() {
+  for (const card of document.querySelectorAll('.article[data-item]')) {
+    const body = card.querySelector('.a-body');
+    if (!body) continue;
+    const imgs = body.querySelectorAll('img').length;
+    const vids = body.querySelectorAll('video').length;
+    let badge = card.querySelector('.media-debug');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'media-debug';
+      body.append(badge);
+    }
+    badge.textContent = `в тексте: картинок ${imgs}, видео ${vids}`;
+    badge.hidden = false;
+  }
+}
+
 function layoutArticleImages(root = document) {
   const wrap = Boolean(state.prefs.imageWrap);
   for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {

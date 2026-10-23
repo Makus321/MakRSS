@@ -405,6 +405,23 @@ const passRowProbe = await evaluate(`(() => {
 })()`);
 console.log('  строка пароля:', JSON.stringify(passRowProbe));
 
+// Проверяем загрузку картинки поста из браузера.
+const imgFetchProbe = await evaluate(`(async () => {
+  const starred = document.querySelector('[data-view="starred"]');
+  if (starred) starred.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 1500));
+  const cards = [...document.querySelectorAll('.article')];
+  const card = cards.find((c) => (c.textContent || '').includes('Universal Studios')) || cards[0];
+  card?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 3000));
+  const img = card?.querySelector('.a-body img');
+  if (!img) return { error: 'картинок в теле нет' };
+  const src = img.getAttribute('src') || '';
+  const head = await fetch(src, { method: 'GET' }).then((r) => ({ status: r.status, type: r.headers.get('content-type') })).catch((e) => ({ error: String(e) }));
+  return { src: src.slice(0, 60), natural: img.naturalWidth, complete: img.complete, head };
+})()`);
+console.log('  картинка поста:', JSON.stringify(imgFetchProbe));
+
 // Глубокий разбор: тело статьи для поста из избранного.
 const deepProbe = await evaluate(`(async () => {
   const starred = document.querySelector('[data-view="starred"]');
