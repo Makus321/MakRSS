@@ -2068,6 +2068,19 @@ function playVideo(button) {
   if (block) block.replaceChildren(player);
 }
 
+/** Обновляет только вид звёздочки: статус и иконку, без перерисовки списка. */
+function updateStarVisual(id, starred) {
+  const row = document.querySelector(`.article[data-item="${id}"]`);
+  if (!row) return;
+  row.classList.toggle('starred', Boolean(starred));
+  for (const button of row.querySelectorAll('[data-star]')) {
+    button.classList.toggle('on', Boolean(starred));
+    button.textContent = starred ? '★' : '☆';
+  }
+  const badge = document.querySelector('#badge-starred');
+  if (badge) badge.textContent = String(state.data?.counts?.starred ?? '') || '';
+}
+
 async function toggleStar(id, event) {
   event?.stopPropagation();
   event?.preventDefault();
@@ -2082,8 +2095,10 @@ async function toggleStar(id, event) {
   }
   // В «Избранном» новая статья должна появляться сразу.
   if (next && state.view.type === 'starred' && state.snapshot?.ids) state.snapshot.ids.add(item.id);
-  renderSidebar();
-  renderList();
+  // Список не перерисовываем: меняем только статус и иконку, иначе карточка
+  // «прыгает» на новое место (особенно при снятии звезды в «Избранном»).
+  updateStarVisual(id, next);
+  renderToolbar();
   try {
     const payload = await api('/api/star', { id, starred: next, light: true });
     if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
