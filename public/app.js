@@ -2361,20 +2361,15 @@ $('#list').addEventListener('scroll', (event) => {
     state.manualUnread.moved += step;
     state.manualUnread.lastTop = el.scrollTop;
   }
-  // Сначала отметка (она смотрит на рамку до этой прокрутки), потом пересчёт рамки.
+  // Сначала отметка (она смотрит на рамку до этой прокрутки).
   scheduleScrollReadCheck();
-  scheduleActiveArticle();
-  // Дополнительная проверка после остановки: на телефоне последний кадр
-  // прокрутки иногда не доходит, и статья оставалась непрочитанной.
-  // На телефоне нет курсора: пока идёт прокрутка кнопки полупрозрачные, а как
-  // только список остановился — проявляются полностью (см. .settled в стилях).
-  for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.remove('settled');
+  // Рамку активной статьи и позиции кнопок пересчитываем только после остановки:
+  // во время прокрутки любая запись стилей давала дёрганье на телефоне.
   clearTimeout(scrollSettleTimer);
   scrollSettleTimer = setTimeout(() => {
     updateActiveArticle();
-    // Кнопки остаются полупрозрачными всегда: текст под ними должен читаться.
-    for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.remove('settled');
-  }, 260);
+    positionArticleActions();
+  }, 180);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {
     // Событий прокрутки десятки в секунду: без паузы каждое вызывало полную
@@ -2396,7 +2391,7 @@ $('#list').addEventListener('scroll', (event) => {
       }, 200);
     }
   }
-});
+}, { passive: true });
 
 $('#view-switch').addEventListener('change', (event) => setViewMode(event.target.value));
 
