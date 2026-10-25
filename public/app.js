@@ -1431,6 +1431,7 @@ function patchBodies(ids) {
   else holdImageSpace($('#list'));
 }
 
+
 function renderList() {
   if (pointerDown) { renderPending = true; return; }
   if (state.scrolling) { state.deferredRender = true; return; }
@@ -2417,8 +2418,8 @@ $('#list').addEventListener('scroll', (event) => {
   // во время прокрутки любая запись стилей давала дёрганье на телефоне.
   clearTimeout(scrollSettleTimer);
   scrollSettleTimer = setTimeout(() => {
-    updateActiveArticle();
-    positionArticleActions();
+    updateActiveArticle();   // только классы: рамка активной статьи
+    // positionArticleActions() здесь не нужен: он двигает кнопки и даёт сдвиг.
   }, 180);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {
