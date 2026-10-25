@@ -1421,7 +1421,7 @@ function softRefreshCards() {
 function flushScrollWork() {
   if (state.scrolling) return;
   // Мягкое обновление делает таймер остановки прокрутки — второго вызова не нужно.
-  if (state.deferredRender) state.deferredRender = false;
+  if (state.deferredRender) { state.deferredRender = false; renderList(); }
   if (state.deferredBodies) { state.deferredBodies = false; ensureBodiesNeeded(); }
   if (state.deferredPoll) { state.deferredPoll = false; loadData({ poll: true }); }
 }
@@ -2471,7 +2471,7 @@ $('#list').addEventListener('scroll', (event) => {
   scrollSettleTimer = setTimeout(() => {
     // Одна точка после остановки: и классы, и рамка — в одном кадре.
     requestAnimationFrame(() => {
-      softRefreshCards();
+      // мягкое обновление не нужно: если состав списка менялся, ниже был renderList
       applyDeferredPatches();   // текст карточек, которые снова стали видны
     });
   }, 180);
