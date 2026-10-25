@@ -1431,19 +1431,28 @@ function flushScrollWork() {
  * списка во время фоновой загрузки и вызывала рывки при прокрутке.
  */
 function patchBodies(ids) {
+  const listEl = document.querySelector("#list");
+  const listTop = listEl ? listEl.getBoundingClientRect().top : 0;
   let missed = false;
+  let grewAbove = 0;   // насколько выросло то, что выше видимой части
   for (const id of ids) {
     const card = document.querySelector(`.article[data-item="${id}"]`);
     const item = state.data.items.find((i) => i.id === id);
     if (!card || !item) { missed = true; continue; }
-    const wrapper = document.createElement('div');
+    const rectBefore = card.getBoundingClientRect();
+    const above = rectBefore.bottom <= listTop + 4;
+    const wrapper = document.createElement("div");
     wrapper.innerHTML = articleHtml(item);
     const fresh = wrapper.firstElementChild;
     if (!fresh) { missed = true; continue; }
     card.replaceWith(fresh);
+    // Если карточка выше экрана выросла (пришёл текст), всё нижнее уезжает вниз.
+    // Возвращаем прокрутку на ту же величину — тогда глазу нечего замечать.
+    if (above) grewAbove += fresh.getBoundingClientRect().height - rectBefore.height;
   }
+  if (listEl && grewAbove) listEl.scrollTop += grewAbove;
   if (missed) renderListSoon();
-  else holdImageSpace($('#list'));
+  else holdImageSpace(document.querySelector("#list"));
 }
 
 
