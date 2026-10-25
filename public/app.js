@@ -1405,22 +1405,23 @@ function softRefreshCards() {
     card.classList.toggle('starred', Boolean(item.starred));
     const star = card.querySelector('[data-star]');
     if (star) {
-      star.classList.toggle('on', Boolean(item.starred));
-      star.textContent = item.starred ? '★' : '☆';
+      if (item.starred) star.classList.add('on'); else star.classList.remove('on');
+      if (star.textContent !== (item.starred ? '★' : '☆')) star.textContent = item.starred ? '★' : '☆';
     }
     const readBtn = card.querySelector('[data-read]');
     if (readBtn) {
       readBtn.dataset.value = item.read ? '0' : '1';
-      readBtn.textContent = item.read ? '●' : '○';
+      if (readBtn.textContent !== (item.read ? '●' : '○')) readBtn.textContent = item.read ? '●' : '○';
     }
   }
   renderToolbar();
-  updateActiveArticle();
+  // рамку ставит отдельный вызов, чтобы не было двух перерисовок
 }
 
 function flushScrollWork() {
   if (state.scrolling) return;
-  if (state.deferredRender) { state.deferredRender = false; softRefreshCards(); }
+  // Мягкое обновление делает таймер остановки прокрутки — второго вызова не нужно.
+  if (state.deferredRender) state.deferredRender = false;
   if (state.deferredBodies) { state.deferredBodies = false; ensureBodiesNeeded(); }
   if (state.deferredPoll) { state.deferredPoll = false; loadData({ poll: true }); }
 }
@@ -2432,8 +2433,8 @@ $('#list').addEventListener('scroll', (event) => {
   // во время прокрутки любая запись стилей давала дёрганье на телефоне.
   clearTimeout(scrollSettleTimer);
   scrollSettleTimer = setTimeout(() => {
-    updateActiveArticle();   // только классы: рамка активной статьи
-    // positionArticleActions() здесь не нужен: он двигает кнопки и даёт сдвиг.
+    // Одна точка после остановки: и классы, и рамка — в одном кадре.
+    requestAnimationFrame(() => { softRefreshCards(); updateActiveArticle(); });
   }, 180);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {
