@@ -1083,3 +1083,6 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
   height: auto;
   max-height: none;
 }
+/* Карточка сама отвечает за свою раскладку: смена классов (прочитано, активная)
+   не может сдвинуть соседние карточки. */
+.article { contain: layout style; }
