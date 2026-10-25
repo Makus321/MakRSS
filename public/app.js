@@ -1061,6 +1061,20 @@ async function loadComments(id, force = false) {
 // Счётчики комментариев: показываем цифру до нажатия, чтобы было видно, есть ли смысл открывать.
 const countsRequested = new Set();
 
+
+/** Обновляет только цифры комментариев у карточек, не перерисовывая список. */
+function updateCommentBadges() {
+  const listEl = $("#list");
+  if (!listEl) return;
+  for (const card of listEl.querySelectorAll(".article[data-item]")) {
+    const item = state.data.items.find((i) => i.id === card.dataset.item);
+    if (!item) continue;
+    const badge = card.querySelector("[data-comments-count]");
+    if (!badge) continue;
+    badge.textContent = Number.isFinite(item.commentsCount) ? String(item.commentsCount) : "";
+  }
+}
+
 async function requestCommentCounts() {
   const ids = visibleItems()
     .slice(0, state.limit)
@@ -1077,7 +1091,7 @@ async function requestCommentCounts() {
       if (!item) continue;
       if (Number.isFinite(count)) { item.commentsCount = count; changed = true; }
     }
-    if (changed) renderList();
+    if (changed && !state.scrolling) updateCommentBadges();
   } catch { /* счётчики не критичны */ }
 }
 
