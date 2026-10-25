@@ -1,7 +1,7 @@
 /**
  * Самодиагностика прокрутки: 30 секунд следит за списком и показывает прямо на
- * экране каждый сдвиг (позиция ленты, положение карточек, высота содержимого).
- * Нужна, чтобы ловить рывки на телефоне без консоли разработчика.
+ * экране каждый сдвиг. Сравниваем с «базой», снятой в момент остановки, а не
+ * с предыдущим кадром — иначе медленный сдвиг по 1 px не ловился.
  */
 export function installScrollDiagnostics() {
   const panel = document.querySelector('#scroll-diag');
@@ -18,17 +18,14 @@ export function installScrollDiagnostics() {
   let startedAt = 0;
   const lines = [];
 
-  const stamp = () => {
-    const elapsed = Math.round((Date.now() - startedAt) / 100) / 10;
-    return elapsed.toFixed(1) + ' с';
-  };
-
+  const stamp = () => ((Date.now() - startedAt) / 1000).toFixed(1) + ' с';
   const paint = () => {
     logEl.textContent = lines.length ? lines.slice(-14).join('\n') : 'сдвигов не зафиксировано';
   };
 
+  const listEl = () => document.querySelector('#list');
   const anchorCard = () => {
-    const list = document.querySelector('#list');
+    const list = listEl();
     if (!list) return null;
     const top = list.getBoundingClientRect().top;
     return [...list.querySelectorAll('.article[data-item]')]
@@ -53,50 +50,69 @@ export function installScrollDiagnostics() {
     if (stateEl) stateEl.textContent = 'идёт замер, прокручивайте ленту';
     paint();
 
-    let lastScroll = document.querySelector('#list')?.scrollTop ?? 0;
-    let lastHeight = document.querySelector('#list')?.scrollHeight ?? 0;
-    let lastAnchorId = anchorCard()?.dataset.item ?? '';
-    let lastAnchorTop = lastAnchorId ? Math.round(anchorCard().getBoundingClientRect().top) : 0;
-    let lastUserScrollAt = Date.now();
+    let userScrolling = false;
+    let lastScrollAt = 0;
+    let baseline = null;          // снимок после остановки
+    let lastScrollTop = listEl()?.scrollTop ?? 0;
     let mutations = 0;
 
-    const list = document.querySelector('#list');
-    list?.addEventListener('scroll', () => { lastUserScrollAt = Date.now(); }, { passive: true });
-
     const observer = new MutationObserver((records) => { mutations += records.length; });
-    if (list) observer.observe(list, { childList: true, subtree: true, attributes: true });
+    const list = listEl();
+    if (list) observer.observe(list, { childList: true, subtree: true, attributes: true, characterData: true });
+
+    list?.addEventListener('scroll', () => {
+      lastScrollAt = Date.now();
+      userScrolling = true;
+      baseline = null;            // пока двигаем — базой не пользуемся
+    }, { passive: true });
+
+    const snapshot = () => {
+      const el = listEl();
+      const card = anchorCard();
+      return {
+        scrollTop: Math.round(el?.scrollTop ?? 0),
+        height: Math.round(el?.scrollHeight ?? 0),
+        id: card?.dataset.item ?? '',
+        top: card ? Math.round(card.getBoundingClientRect().top) : 0,
+      };
+    };
 
     sampler = setInterval(() => {
-      const listEl = document.querySelector('#list');
-      if (!listEl) return;
-      const card = anchorCard();
-      const anchorId = card?.dataset.item ?? '';
-      const anchorTop = card ? Math.round(card.getBoundingClientRect().top) : 0;
-      const idle = Date.now() - lastUserScrollAt > 400;
-      const scrollDelta = Math.round(listEl.scrollTop - lastScroll);
-      const heightDelta = listEl.scrollHeight - lastHeight;
-      const sameAnchor = anchorId && anchorId === lastAnchorId;
-      const anchorDelta = sameAnchor ? anchorTop - lastAnchorTop : 0;
+      const el = listEl();
+      if (!el) return;
+      const idle = Date.now() - lastScrollAt > 350;
 
-      // Сдвиг = лента уже не листается, а карточка или позиция изменились.
-      if (idle && (Math.abs(scrollDelta) > 1 || Math.abs(anchorDelta) > 1 || heightDelta !== 0)) {
+      if (!idle) { lastScrollTop = el.scrollTop; return; }
+
+      if (userScrolling) {
+        userScrolling = false;
+        baseline = snapshot();
+        mutations = 0;
+        return;
+      }
+      if (!baseline) { baseline = snapshot(); return; }
+
+      const now = snapshot();
+      const shiftScroll = now.scrollTop - baseline.scrollTop;
+      const shiftCard = now.id && now.id === baseline.id ? now.top - baseline.top : 0;
+      const shiftHeight = now.height - baseline.height;
+
+      if (Math.abs(shiftScroll) > 0 || Math.abs(shiftCard) > 0 || Math.abs(shiftHeight) > 0) {
         lines.push([
           stamp(),
-          'scroll ' + (scrollDelta > 0 ? '+' : '') + scrollDelta + ' px',
-          'карточка ' + (anchorDelta > 0 ? '+' : '') + anchorDelta + ' px',
-          'высота ' + (heightDelta > 0 ? '+' : '') + heightDelta + ' px',
-          'изменений DOM ' + mutations,
+          'прокрутка ' + (shiftScroll > 0 ? '+' : '') + shiftScroll,
+          'карточка ' + (shiftCard > 0 ? '+' : '') + shiftCard,
+          'высота ' + (shiftHeight > 0 ? '+' : '') + shiftHeight,
+          'DOM ' + mutations,
         ].join(' · '));
         if (stateEl) stateEl.textContent = 'найдено сдвигов: ' + lines.length;
         paint();
+        baseline = now;
         mutations = 0;
       }
 
-      lastScroll = listEl.scrollTop;
-      lastHeight = listEl.scrollHeight;
-      lastAnchorId = anchorId;
-      lastAnchorTop = anchorTop;
-    }, 60);
+      lastScrollTop = now.scrollTop;
+    }, 50);
 
     timer = setTimeout(() => stop('замер закончен: сдвигов ' + lines.length), 30000);
   };
