@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MAK RSS Reader</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f97316'/><circle cx='10' cy='22' r='3' fill='white'/><path d='M7 14a11 11 0 0 1 11 11' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/><path d='M7 7a18 18 0 0 1 18 18' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="/style.css?v=144">
+<link rel="stylesheet" href="/style.css?v=142">
 <!-- Установка на домашний экран телефона (PWA) -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -269,14 +269,10 @@
             <option value="full">полностью</option>
           </select>
         </label>
-        <label class="row-line">Плотность списка
           <select id="set-density">
             <option value="compact">компактно</option>
             <option value="comfortable">свободно</option>
           </select>
-        </label>
-        <label class="row-line">Диагностика прокрутки
-          <button class="btn" id="scroll-diag-start" type="button">Замерить 30 секунд</button>
         </label>
         <label class="row-line">Обтекание картинок текстом
           <select id="set-image-wrap">
@@ -509,22 +505,6 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
-
-<!-- Самодиагностика прокрутки: показывает сдвиги прямо на экране, без консоли. -->
-<div class="scroll-diag" id="scroll-diag" hidden>
-  <div class="scroll-diag-head">
-    <strong>Диагностика прокрутки</strong>
-    <span id="scroll-diag-state">идёт замер…</span>
-  </div>
-  <pre id="scroll-diag-log">прокручивайте ленту как обычно</pre>
-  <div class="btn-row">
-    <button class="btn" id="scroll-diag-copy" type="button">Скопировать</button>
-    <button class="btn primary" id="scroll-diag-close" type="button">Готово</button>
-  </div>
-</div>
-
-<link rel="stylesheet" href="/scroll-diag.css?v=1">
-<script src="/app.js?v=227" type="module"></script>
-<script type="module">import { installScrollDiagnostics } from "/scroll-diag.js?v=3"; installScrollDiagnostics();</script>
+<script src="/app.js?v=213" type="module"></script>
 </body>
 </html>

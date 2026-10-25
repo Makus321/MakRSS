@@ -1061,20 +1061,6 @@ async function loadComments(id, force = false) {
 // Счётчики комментариев: показываем цифру до нажатия, чтобы было видно, есть ли смысл открывать.
 const countsRequested = new Set();
 
-
-/** Обновляет только цифры комментариев у карточек, не перерисовывая список. */
-function updateCommentBadges() {
-  const listEl = $("#list");
-  if (!listEl) return;
-  for (const card of listEl.querySelectorAll(".article[data-item]")) {
-    const item = state.data.items.find((i) => i.id === card.dataset.item);
-    if (!item) continue;
-    const badge = card.querySelector("[data-comments-count]");
-    if (!badge) continue;
-    badge.textContent = Number.isFinite(item.commentsCount) ? String(item.commentsCount) : "";
-  }
-}
-
 async function requestCommentCounts() {
   const ids = visibleItems()
     .slice(0, state.limit)
@@ -1091,7 +1077,7 @@ async function requestCommentCounts() {
       if (!item) continue;
       if (Number.isFinite(count)) { item.commentsCount = count; changed = true; }
     }
-    if (changed && !state.scrolling) updateCommentBadges();
+    if (changed) renderList();
   } catch { /* счётчики не критичны */ }
 }
 
@@ -1389,97 +1375,12 @@ function beginScrollWork() {
 }
 
 /** Выполняет то, что отложили на время прокрутки. */
-/**
- * Обновляет состояние карточек (прочитано, звезда, кнопки) БЕЗ пересоздания
- * разметки. Вызывается в конце прокрутки: раньше здесь был полный renderList,
- * и лента дёргалась ровно в момент остановки.
- */
-function softRefreshCards() {
-  const listEl = $('#list');
-  if (!listEl) return;
-  for (const card of listEl.querySelectorAll('.article[data-item]')) {
-    const item = state.data.items.find((i) => i.id === card.dataset.item);
-    if (!item) continue;
-    card.classList.toggle('read', Boolean(item.read));
-    card.classList.toggle('unread', !item.read);
-    card.classList.toggle('starred', Boolean(item.starred));
-    const star = card.querySelector('[data-star]');
-    if (star) {
-      if (item.starred) star.classList.add('on'); else star.classList.remove('on');
-      if (star.textContent !== (item.starred ? '★' : '☆')) star.textContent = item.starred ? '★' : '☆';
-    }
-    const readBtn = card.querySelector('[data-read]');
-    if (readBtn) {
-      readBtn.dataset.value = item.read ? '0' : '1';
-      if (readBtn.textContent !== (item.read ? '●' : '○')) readBtn.textContent = item.read ? '●' : '○';
-    }
-  }
-  renderToolbar();
-  // рамку ставит отдельный вызов, чтобы не было двух перерисовок
-}
-
 function flushScrollWork() {
   if (state.scrolling) return;
-  // Мягкое обновление делает таймер остановки прокрутки — второго вызова не нужно.
   if (state.deferredRender) { state.deferredRender = false; renderList(); }
   if (state.deferredBodies) { state.deferredBodies = false; ensureBodiesNeeded(); }
   if (state.deferredPoll) { state.deferredPoll = false; loadData({ poll: true }); }
 }
-
-/**
- * Обновляет только те карточки, для которых пришёл текст. Полная перерисовка
- * списка во время фоновой загрузки и вызывала рывки при прокрутке.
- */
-/**
- * Карточки выше экрана не перерисовываем: их рост двигал бы всю ленту, а
- * компенсация иногда уходила в минус и лента «прыгала» вниз. Такие обновления
- * откладываются и применяются, когда карточка снова станет видимой.
- */
-const deferredPatches = new Set();
-
-function applyDeferredPatches() {
-  if (!deferredPatches.size) return;
-  const listEl = document.querySelector('#list');
-  if (!listEl) return;
-  const listTop = listEl.getBoundingClientRect().top;
-  for (const id of [...deferredPatches]) {
-    const card = listEl.querySelector(`.article[data-item="${id}"]`);
-    if (!card) { deferredPatches.delete(id); continue; }
-    if (card.getBoundingClientRect().bottom <= listTop + 4) continue;   // ещё выше экрана
-    deferredPatches.delete(id);
-    patchBodies([id], { force: true });
-  }
-}
-
-function patchBodies(ids, options = {}) {
-  const listEl = document.querySelector("#list");
-  const listTop = listEl ? listEl.getBoundingClientRect().top : 0;
-  let missed = false;
-  let grewAbove = 0;   // насколько выросло то, что выше видимой части
-  for (const id of ids) {
-    const card = document.querySelector(`.article[data-item="${id}"]`);
-    const item = state.data.items.find((i) => i.id === id);
-    if (!card || !item) { missed = true; continue; }
-    const rectBefore = card.getBoundingClientRect();
-    const above = rectBefore.bottom <= listTop + 4;
-    if (above && !options.force) {
-      // Выше экрана — откладываем: применение сдвинуло бы всю ленту.
-      deferredPatches.add(id);
-      continue;
-    }
-    const wrapper = document.createElement("div");
-    wrapper.innerHTML = articleHtml(item);
-    const fresh = wrapper.firstElementChild;
-    if (!fresh) { missed = true; continue; }
-    card.replaceWith(fresh);
-    // Компенсируем только рост — уменьшение высоты оставляем без правки.
-    if (above) grewAbove += fresh.getBoundingClientRect().height - rectBefore.height;
-  }
-  if (listEl && grewAbove > 0) listEl.scrollTop += grewAbove;
-  if (missed) renderListSoon();
-  else holdImageSpace(document.querySelector("#list"));
-}
-
 
 function renderList() {
   if (pointerDown) { renderPending = true; return; }
@@ -1573,8 +1474,6 @@ function refreshTimes() {
  * рамка остаётся на прежней статье — так она не моргает.
  */
 function updateActiveArticle() {
-  // Если на экран вернулась карточка с отложенным текстом — применяем.
-  applyDeferredPatches();
   const list = $('#list');
   if (!list) return;
   const listRect = list.getBoundingClientRect();
@@ -1901,8 +1800,7 @@ async function ensureBodiesNeeded(force = false) {
       if (item) item.hasFull = Boolean(body.hasFull);
     }
     for (const id of need) if (!state.bodies.has(id)) state.bodies.set(id, { content: '', fullHtml: '', loaded: true });
-    // Обновляем только эти карточки: полная перерисовка во время прокрутки давала рывки.
-    patchBodies(need);
+    renderListSoon();
   } catch (err) {
     // Не ругаемся вслух: текст — не критичная часть, а тост только мешает.
     console.warn('не удалось загрузить текст статей:', err?.message ?? err);
@@ -2463,18 +2361,20 @@ $('#list').addEventListener('scroll', (event) => {
     state.manualUnread.moved += step;
     state.manualUnread.lastTop = el.scrollTop;
   }
-  // Сначала отметка (она смотрит на рамку до этой прокрутки).
+  // Сначала отметка (она смотрит на рамку до этой прокрутки), потом пересчёт рамки.
   scheduleScrollReadCheck();
-  // Рамку активной статьи и позиции кнопок пересчитываем только после остановки:
-  // во время прокрутки любая запись стилей давала дёрганье на телефоне.
+  scheduleActiveArticle();
+  // Дополнительная проверка после остановки: на телефоне последний кадр
+  // прокрутки иногда не доходит, и статья оставалась непрочитанной.
+  // На телефоне нет курсора: пока идёт прокрутка кнопки полупрозрачные, а как
+  // только список остановился — проявляются полностью (см. .settled в стилях).
+  for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.remove('settled');
   clearTimeout(scrollSettleTimer);
   scrollSettleTimer = setTimeout(() => {
-    // Одна точка после остановки: и классы, и рамка — в одном кадре.
-    requestAnimationFrame(() => {
-      // мягкое обновление не нужно: если состав списка менялся, ниже был renderList
-      applyDeferredPatches();   // текст карточек, которые снова стали видны
-    });
-  }, 180);
+    updateActiveArticle();
+    // Кнопки остаются полупрозрачными всегда: текст под ними должен читаться.
+    for (const actions of document.querySelectorAll('.a-actions.floating')) actions.classList.remove('settled');
+  }, 260);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {
     // Событий прокрутки десятки в секунду: без паузы каждое вызывало полную
@@ -2496,7 +2396,7 @@ $('#list').addEventListener('scroll', (event) => {
       }, 200);
     }
   }
-}, { passive: true });
+});
 
 $('#view-switch').addEventListener('change', (event) => setViewMode(event.target.value));
 
