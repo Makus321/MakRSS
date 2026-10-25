@@ -895,7 +895,10 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 
 /* Текст идёт под картинкой, когда шапка карточки ниже картинки: иначе первая
    строка начиналась бы справа от кадра, а под заголовком оставалась пустота. */
-.article.text-under-thumb .a-excerpt { clear: both; }
+/* Текст краткого вида всегда идёт под превью. Раньше класс text-under-thumb
+   переключался после загрузки картинки — это меняло высоту карточки и лента
+   прыгала при прокрутке. Теперь правило постоянное. */
+.article.has-thumb .a-excerpt { clear: both; }
 
 /* Версия приложения на экране входа и в настройках. */
 .splash-version { padding: 0 16px 14px; text-align: center; font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); }

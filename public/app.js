@@ -1311,7 +1311,6 @@ function holdImageSpace(root) {
   for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
     if (img.dataset.hold === '1' || img.complete) continue;
     img.dataset.hold = '1';
-    img.addEventListener('load', () => layoutCardThumbs());
   }
   for (const row of root.querySelectorAll('.img-row')) {
     const images = [...row.querySelectorAll('img')];
@@ -1452,7 +1451,8 @@ function renderList() {
   requestCommentCounts();
   fillViewport();          // если карточек меньше экрана — догружаем сразу
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
-  layoutCardThumbs(listEl); // текст под картинкой, если шапка ниже неё
+  // Класс text-under-thumb больше не переключается: он менял высоту карточки
+  // после загрузки превью, из-за чего лента прыгала. Теперь это задаёт CSS.
   updateActiveArticle();
 
   layoutArticleImages();
