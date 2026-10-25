@@ -1375,9 +1375,38 @@ function beginScrollWork() {
 }
 
 /** Выполняет то, что отложили на время прокрутки. */
+/**
+ * Обновляет состояние карточек (прочитано, звезда, кнопки) БЕЗ пересоздания
+ * разметки. Вызывается в конце прокрутки: раньше здесь был полный renderList,
+ * и лента дёргалась ровно в момент остановки.
+ */
+function softRefreshCards() {
+  const listEl = $('#list');
+  if (!listEl) return;
+  for (const card of listEl.querySelectorAll('.article[data-item]')) {
+    const item = state.data.items.find((i) => i.id === card.dataset.item);
+    if (!item) continue;
+    card.classList.toggle('read', Boolean(item.read));
+    card.classList.toggle('unread', !item.read);
+    card.classList.toggle('starred', Boolean(item.starred));
+    const star = card.querySelector('[data-star]');
+    if (star) {
+      star.classList.toggle('on', Boolean(item.starred));
+      star.textContent = item.starred ? '★' : '☆';
+    }
+    const readBtn = card.querySelector('[data-read]');
+    if (readBtn) {
+      readBtn.dataset.value = item.read ? '0' : '1';
+      readBtn.textContent = item.read ? '●' : '○';
+    }
+  }
+  renderToolbar();
+  updateActiveArticle();
+}
+
 function flushScrollWork() {
   if (state.scrolling) return;
-  if (state.deferredRender) { state.deferredRender = false; renderList(); }
+  if (state.deferredRender) { state.deferredRender = false; softRefreshCards(); }
   if (state.deferredBodies) { state.deferredBodies = false; ensureBodiesNeeded(); }
   if (state.deferredPoll) { state.deferredPoll = false; loadData({ poll: true }); }
 }
