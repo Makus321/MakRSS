@@ -1,7 +1,7 @@
 /**
- * Самодиагностика прокрутки: 30 секунд следит за списком и показывает прямо на
- * экране каждый сдвиг. Сравниваем с «базой», снятой в момент остановки, а не
- * с предыдущим кадром — иначе медленный сдвиг по 1 px не ловился.
+ * Самодиагностика прокрутки: следит за высотой содержимого и положением карточек
+ * и пишет в панель КАЖДОЕ изменение — в том числе во время инерции прокрутки.
+ * Так видно, что именно меняет раскладку: текст, картинки или догрузка.
  */
 export function installScrollDiagnostics() {
   const panel = document.querySelector('#scroll-diag');
@@ -20,16 +20,23 @@ export function installScrollDiagnostics() {
 
   const stamp = () => ((Date.now() - startedAt) / 1000).toFixed(1) + ' с';
   const paint = () => {
-    logEl.textContent = lines.length ? lines.slice(-14).join('\n') : 'сдвигов не зафиксировано';
+    logEl.textContent = lines.length ? lines.slice(-16).join('\n') : 'изменений раскладки не зафиксировано';
   };
 
-  const listEl = () => document.querySelector('#list');
-  const anchorCard = () => {
-    const list = listEl();
+  const state = () => {
+    const list = document.querySelector('#list');
     if (!list) return null;
-    const top = list.getBoundingClientRect().top;
-    return [...list.querySelectorAll('.article[data-item]')]
-      .find((card) => card.getBoundingClientRect().bottom > top + 4) ?? null;
+    const listTop = list.getBoundingClientRect().top;
+    const cards = [...list.querySelectorAll('.article[data-item]')];
+    const first = cards.find((card) => card.getBoundingClientRect().bottom > listTop + 4) ?? null;
+    return {
+      scrollTop: Math.round(list.scrollTop),
+      scrollHeight: Math.round(list.scrollHeight),
+      cardsHeight: Math.round(cards.reduce((sum, card) => sum + card.getBoundingClientRect().height, 0)),
+      cardCount: cards.length,
+      firstId: first?.dataset.item ?? '',
+      firstTop: first ? Math.round(first.getBoundingClientRect().top) : 0,
+    };
   };
 
   const stop = (reason) => {
@@ -50,71 +57,42 @@ export function installScrollDiagnostics() {
     if (stateEl) stateEl.textContent = 'идёт замер, прокручивайте ленту';
     paint();
 
-    let userScrolling = false;
-    let lastScrollAt = 0;
-    let baseline = null;          // снимок после остановки
-    let lastScrollTop = listEl()?.scrollTop ?? 0;
+    let prev = state();
     let mutations = 0;
-
     const observer = new MutationObserver((records) => { mutations += records.length; });
-    const list = listEl();
+    const list = document.querySelector('#list');
     if (list) observer.observe(list, { childList: true, subtree: true, attributes: true, characterData: true });
 
-    list?.addEventListener('scroll', () => {
-      lastScrollAt = Date.now();
-      userScrolling = true;
-      baseline = null;            // пока двигаем — базой не пользуемся
-    }, { passive: true });
-
-    const snapshot = () => {
-      const el = listEl();
-      const card = anchorCard();
-      return {
-        scrollTop: Math.round(el?.scrollTop ?? 0),
-        height: Math.round(el?.scrollHeight ?? 0),
-        id: card?.dataset.item ?? '',
-        top: card ? Math.round(card.getBoundingClientRect().top) : 0,
-      };
-    };
-
     sampler = setInterval(() => {
-      const el = listEl();
-      if (!el) return;
-      const idle = Date.now() - lastScrollAt > 350;
+      const now = state();
+      if (!now || !prev) { prev = now; return; }
+      const heightDelta = now.scrollHeight - prev.scrollHeight;
+      const cardsDelta = now.cardsHeight - prev.cardsHeight;
+      const scrollDelta = now.scrollTop - prev.scrollTop;
+      const sameCard = now.firstId && now.firstId === prev.firstId;
+      const cardDelta = sameCard ? now.firstTop - prev.firstTop : 0;
+      // При обычной прокрутке высоты не меняются вовсе, поэтому любой скачок
+      // высоты — это и есть причина сдвига.
+      const contentChanged = heightDelta !== 0 || cardsDelta !== 0 || now.cardCount !== prev.cardCount;
+      const scrollJumped = Math.abs(scrollDelta) > 2;
 
-      if (!idle) { lastScrollTop = el.scrollTop; return; }
-
-      if (userScrolling) {
-        userScrolling = false;
-        baseline = snapshot();
-        mutations = 0;
-        return;
-      }
-      if (!baseline) { baseline = snapshot(); return; }
-
-      const now = snapshot();
-      const shiftScroll = now.scrollTop - baseline.scrollTop;
-      const shiftCard = now.id && now.id === baseline.id ? now.top - baseline.top : 0;
-      const shiftHeight = now.height - baseline.height;
-
-      if (Math.abs(shiftScroll) > 0 || Math.abs(shiftCard) > 0 || Math.abs(shiftHeight) > 0) {
+      if (contentChanged || scrollJumped) {
         lines.push([
           stamp(),
-          'прокрутка ' + (shiftScroll > 0 ? '+' : '') + shiftScroll,
-          'карточка ' + (shiftCard > 0 ? '+' : '') + shiftCard,
-          'высота ' + (shiftHeight > 0 ? '+' : '') + shiftHeight,
+          'высота списка ' + (heightDelta > 0 ? '+' : '') + heightDelta,
+          'высота карточек ' + (cardsDelta > 0 ? '+' : '') + cardsDelta,
+          'прокрутка ' + (scrollDelta > 0 ? '+' : '') + scrollDelta,
+          'карточка ' + (cardDelta > 0 ? '+' : '') + cardDelta,
           'DOM ' + mutations,
         ].join(' · '));
-        if (stateEl) stateEl.textContent = 'найдено сдвигов: ' + lines.length;
+        if (stateEl) stateEl.textContent = 'записано событий: ' + lines.length;
         paint();
-        baseline = now;
         mutations = 0;
       }
-
-      lastScrollTop = now.scrollTop;
+      prev = now;
     }, 50);
 
-    timer = setTimeout(() => stop('замер закончен: сдвигов ' + lines.length), 30000);
+    timer = setTimeout(() => stop('замер закончен: событий ' + lines.length), 30000);
   };
 
   startBtn.addEventListener('click', (event) => {
@@ -128,7 +106,7 @@ export function installScrollDiagnostics() {
   });
 
   copyBtn?.addEventListener('click', async () => {
-    const text = 'Диагностика прокрутки\n' + (lines.length ? lines.join('\n') : 'сдвигов не зафиксировано');
+    const text = 'Диагностика прокрутки\n' + (lines.length ? lines.join('\n') : 'изменений не зафиксировано');
     try {
       await navigator.clipboard.writeText(text);
       if (stateEl) stateEl.textContent = 'скопировано в буфер';
