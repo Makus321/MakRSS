@@ -1382,6 +1382,26 @@ function flushScrollWork() {
   if (state.deferredPoll) { state.deferredPoll = false; loadData({ poll: true }); }
 }
 
+/**
+ * Обновляет только те карточки, для которых пришёл текст. Полная перерисовка
+ * списка во время фоновой загрузки и вызывала рывки при прокрутке.
+ */
+function patchBodies(ids) {
+  let missed = false;
+  for (const id of ids) {
+    const card = document.querySelector(`.article[data-item="${id}"]`);
+    const item = state.data.items.find((i) => i.id === id);
+    if (!card || !item) { missed = true; continue; }
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = articleHtml(item);
+    const fresh = wrapper.firstElementChild;
+    if (!fresh) { missed = true; continue; }
+    card.replaceWith(fresh);
+  }
+  if (missed) renderListSoon();
+  else holdImageSpace($('#list'));
+}
+
 function renderList() {
   if (pointerDown) { renderPending = true; return; }
   if (state.scrolling) { state.deferredRender = true; return; }
@@ -1800,7 +1820,8 @@ async function ensureBodiesNeeded(force = false) {
       if (item) item.hasFull = Boolean(body.hasFull);
     }
     for (const id of need) if (!state.bodies.has(id)) state.bodies.set(id, { content: '', fullHtml: '', loaded: true });
-    renderListSoon();
+    // Обновляем только эти карточки: полная перерисовка во время прокрутки давала рывки.
+    patchBodies(need);
   } catch (err) {
     // Не ругаемся вслух: текст — не критичная часть, а тост только мешает.
     console.warn('не удалось загрузить текст статей:', err?.message ?? err);
