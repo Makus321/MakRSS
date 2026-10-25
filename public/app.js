@@ -2437,14 +2437,23 @@ $('#list').addEventListener('scroll', (event) => {
     // Одна компенсация: запоминаем позицию и высоту до обновления и возвращаем
     // прокрутку на ту же карточку, если контент изменил высоту (рамка, отметка).
     const listEl = document.querySelector('#list');
-    const beforeTop = listEl ? listEl.scrollTop : 0;
-    const beforeHeight = listEl ? listEl.scrollHeight : 0;
+    // Якорь — первая видимая карточка: запоминаем её положение на экране и
+    // после обновления возвращаем прокрутку так, чтобы она осталась на месте.
+    const listRect = listEl ? listEl.getBoundingClientRect() : null;
+    const anchor = listEl && listRect
+      ? [...listEl.querySelectorAll('.article[data-item]')]
+        .find((card) => card.getBoundingClientRect().bottom > listRect.top + 4)
+      : null;
+    const anchorId = anchor?.dataset.item ?? '';
+    const anchorTop = anchor ? anchor.getBoundingClientRect().top : 0;
     requestAnimationFrame(() => {
       softRefreshCards();
       updateActiveArticle();
-      if (!listEl || beforeTop <= 0) return;
-      const delta = listEl.scrollHeight - beforeHeight;
-      if (delta) listEl.scrollTop = Math.max(0, beforeTop + delta);
+      if (!listEl || !anchorId || listEl.scrollTop <= 0) return;
+      const again = listEl.querySelector('.article[data-item=' + JSON.stringify(anchorId) + ']');
+      if (!again) return;
+      const shift = again.getBoundingClientRect().top - anchorTop;
+      if (Math.abs(shift) >= 1) listEl.scrollTop += shift;
     });
   }, 180);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
