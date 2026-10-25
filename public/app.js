@@ -1430,7 +1430,28 @@ function flushScrollWork() {
  * Обновляет только те карточки, для которых пришёл текст. Полная перерисовка
  * списка во время фоновой загрузки и вызывала рывки при прокрутке.
  */
-function patchBodies(ids) {
+/**
+ * Карточки выше экрана не перерисовываем: их рост двигал бы всю ленту, а
+ * компенсация иногда уходила в минус и лента «прыгала» вниз. Такие обновления
+ * откладываются и применяются, когда карточка снова станет видимой.
+ */
+const deferredPatches = new Set();
+
+function applyDeferredPatches() {
+  if (!deferredPatches.size) return;
+  const listEl = document.querySelector('#list');
+  if (!listEl) return;
+  const listTop = listEl.getBoundingClientRect().top;
+  for (const id of [...deferredPatches]) {
+    const card = listEl.querySelector(`.article[data-item="${id}"]`);
+    if (!card) { deferredPatches.delete(id); continue; }
+    if (card.getBoundingClientRect().bottom <= listTop + 4) continue;   // ещё выше экрана
+    deferredPatches.delete(id);
+    patchBodies([id], { force: true });
+  }
+}
+
+function patchBodies(ids, options = {}) {
   const listEl = document.querySelector("#list");
   const listTop = listEl ? listEl.getBoundingClientRect().top : 0;
   let missed = false;
@@ -1441,16 +1462,20 @@ function patchBodies(ids) {
     if (!card || !item) { missed = true; continue; }
     const rectBefore = card.getBoundingClientRect();
     const above = rectBefore.bottom <= listTop + 4;
+    if (above && !options.force) {
+      // Выше экрана — откладываем: применение сдвинуло бы всю ленту.
+      deferredPatches.add(id);
+      continue;
+    }
     const wrapper = document.createElement("div");
     wrapper.innerHTML = articleHtml(item);
     const fresh = wrapper.firstElementChild;
     if (!fresh) { missed = true; continue; }
     card.replaceWith(fresh);
-    // Если карточка выше экрана выросла (пришёл текст), всё нижнее уезжает вниз.
-    // Возвращаем прокрутку на ту же величину — тогда глазу нечего замечать.
+    // Компенсируем только рост — уменьшение высоты оставляем без правки.
     if (above) grewAbove += fresh.getBoundingClientRect().height - rectBefore.height;
   }
-  if (listEl && grewAbove) listEl.scrollTop += grewAbove;
+  if (listEl && grewAbove > 0) listEl.scrollTop += grewAbove;
   if (missed) renderListSoon();
   else holdImageSpace(document.querySelector("#list"));
 }
@@ -1548,6 +1573,8 @@ function refreshTimes() {
  * рамка остаётся на прежней статье — так она не моргает.
  */
 function updateActiveArticle() {
+  // Если на экран вернулась карточка с отложенным текстом — применяем.
+  applyDeferredPatches();
   const list = $('#list');
   if (!list) return;
   const listRect = list.getBoundingClientRect();
@@ -2445,7 +2472,7 @@ $('#list').addEventListener('scroll', (event) => {
     // Одна точка после остановки: и классы, и рамка — в одном кадре.
     requestAnimationFrame(() => {
       softRefreshCards();
-      updateActiveArticle();
+      applyDeferredPatches();   // текст карточек, которые снова стали видны
     });
   }, 180);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
