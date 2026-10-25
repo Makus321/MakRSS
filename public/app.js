@@ -2178,9 +2178,14 @@ function modeLabel(mode) {
 
 async function setViewMode(mode) {
   if (state.view.type === 'feed') {
+    // Сразу правим ленту локально: сервер отвечает коротко, и без этого меню
+    // после повторного открытия показывало старое значение.
+    const feed = state.data.feeds.find((f) => f.id === state.view.id);
+    if (feed) feed.view = mode;
     try {
       applyPayload(await api('/api/feeds/view', { id: state.view.id, view: mode }));
       toast(`Канал показывает статьи: ${modeLabel(mode)}`);
+      render();
     } catch (err) { toast(err.message, true); }
   } else {
     state.settings.defaultView = mode;
