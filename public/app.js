@@ -2434,7 +2434,18 @@ $('#list').addEventListener('scroll', (event) => {
   clearTimeout(scrollSettleTimer);
   scrollSettleTimer = setTimeout(() => {
     // Одна точка после остановки: и классы, и рамка — в одном кадре.
-    requestAnimationFrame(() => { softRefreshCards(); updateActiveArticle(); });
+    // Одна компенсация: запоминаем позицию и высоту до обновления и возвращаем
+    // прокрутку на ту же карточку, если контент изменил высоту (рамка, отметка).
+    const listEl = document.querySelector('#list');
+    const beforeTop = listEl ? listEl.scrollTop : 0;
+    const beforeHeight = listEl ? listEl.scrollHeight : 0;
+    requestAnimationFrame(() => {
+      softRefreshCards();
+      updateActiveArticle();
+      if (!listEl || beforeTop <= 0) return;
+      const delta = listEl.scrollHeight - beforeHeight;
+      if (delta) listEl.scrollTop = Math.max(0, beforeTop + delta);
+    });
   }, 180);
   // Догружаем заранее, за экран до конца: иначе видно конец списка и надпись.
   if (el.scrollTop + el.clientHeight > el.scrollHeight - 1200) {
