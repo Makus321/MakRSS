@@ -269,10 +269,14 @@
             <option value="full">полностью</option>
           </select>
         </label>
+        <label class="row-line">Плотность списка
           <select id="set-density">
             <option value="compact">компактно</option>
             <option value="comfortable">свободно</option>
           </select>
+        </label>
+        <label class="row-line">Диагностика прокрутки
+          <button class="btn" id="scroll-diag-start" type="button">Замерить 30 секунд</button>
         </label>
         <label class="row-line">Обтекание картинок текстом
           <select id="set-image-wrap">
@@ -505,6 +509,22 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
-<script src="/app.js?v=224" type="module"></script>
+
+<!-- Самодиагностика прокрутки: показывает сдвиги прямо на экране, без консоли. -->
+<div class="scroll-diag" id="scroll-diag" hidden>
+  <div class="scroll-diag-head">
+    <strong>Диагностика прокрутки</strong>
+    <span id="scroll-diag-state">идёт замер…</span>
+  </div>
+  <pre id="scroll-diag-log">прокручивайте ленту как обычно</pre>
+  <div class="btn-row">
+    <button class="btn" id="scroll-diag-copy" type="button">Скопировать</button>
+    <button class="btn primary" id="scroll-diag-close" type="button">Готово</button>
+  </div>
+</div>
+
+<link rel="stylesheet" href="/scroll-diag.css?v=1">
+<script src="/app.js?v=225" type="module"></script>
+<script type="module">import { installScrollDiagnostics } from "/scroll-diag.js?v=1"; installScrollDiagnostics();</script>
 </body>
 </html>
