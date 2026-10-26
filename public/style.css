@@ -540,10 +540,19 @@ body.dragging .tree-tail { display: flex; }
 .comment { border-left: 2px solid var(--line); padding: 6px 0 6px 10px; margin: 8px 0; }
 .comment:hover { border-left-color: var(--accent); }
 /* Имя и время комментария масштабируются вместе с текстом статьи, а не с интерфейсом. */
-.comment-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: calc(var(--font-article, 16px) * 0.78); color: var(--muted); margin-bottom: 2px; }
+.comment-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-family: inherit; font-size: calc(var(--font-article, 16px) * 0.85); color: var(--muted); margin-bottom: 2px; }
 .comment-author { color: var(--accent); font-weight: 600; }
 .comment-score { border: 1px solid var(--line); border-radius: 6px; padding: 0 4px; }
-.comment-body { font-size: calc(var(--font-article) - 1px); line-height: calc(1.55 * var(--lh-scale, 1)); overflow-wrap: anywhere; text-align: justify; hyphens: auto; }
+/* Комментарии — тем же шрифтом и размером, что и статья: раньше они были на 1 px
+   меньше и наследовали другую гарнитуру, из-за чего выглядели «чужими». */
+.comment-body {
+  font-family: inherit;
+  font-size: var(--font-article);
+  line-height: calc(1.65 * var(--lh-scale, 1));
+  overflow-wrap: anywhere;
+  text-align: justify;
+  hyphens: auto;
+}
 .comment-body img, .comment-body video { max-width: 100%; max-height: 60vh; width: auto; height: auto; border-radius: 6px; object-fit: contain; }
 .comment-body blockquote { margin: 6px 0; padding: 2px 10px; border-left: 3px solid var(--line); color: var(--muted); }
 .comment-body pre { background: var(--panel-2); padding: 8px; border-radius: 6px; overflow-x: auto; font-size: calc(12.5px * var(--ui-scale, 1)); }
