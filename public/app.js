@@ -67,6 +67,7 @@ const state = {
     uiScale: 1,                            // размер системных надписей и диалогов
     imageWrap: false,                      // узкие картинки в статье обтекаются текстом
     readOnExpand: true, readOnScroll: true, readOnFinish: false,
+    swipeNext: true,                      // свайп влево: переход к следующей статье (можно выключить)
     treeFilter: 'all',
     unreadOnly: true,
     width: 0,                             // ширина текста: своя на каждом устройстве (0 — ещё не задана)
@@ -2987,6 +2988,7 @@ function fillSettingsForm() {
   $('#set-density').value = state.prefs.density;
   setSelectValue($('#set-thumbs'), state.prefs.thumbs ? 'yes' : 'no');
   setSelectValue($('#set-image-wrap'), state.prefs.imageWrap ? 'yes' : 'no');
+  setSelectValue($('#set-swipe-next'), state.prefs.swipeNext === false ? 'no' : 'yes');
   setSelectValue($('#set-borders'), state.prefs.borders !== false ? 'yes' : 'no');
   setSelectValue($('#set-fetch-full'), s.fetchFull !== false ? 'yes' : 'no');
   $('#set-pass').value = '';
@@ -3136,6 +3138,10 @@ $('#set-thumbs').addEventListener('change', (e) => { state.prefs.thumbs = e.targ
     state.prefs.imageWrap = e.target.value !== 'no';
     savePrefs();
     renderList();
+  });
+  $('#set-swipe-next').addEventListener('change', (e) => {
+    state.prefs.swipeNext = e.target.value !== 'no';
+    savePrefs();
   });
 $('#set-borders').addEventListener('change', (e) => {
   state.prefs.borders = e.target.value !== 'no';
@@ -3633,6 +3639,7 @@ function setupMobile() {
     }
     if (open) { openTree(false); return; }                           // влево при открытой панели: закрыть её
     // Влево при закрытой панели — следующая статья.
+    if (state.prefs.swipeNext === false) return;   // жест выключен в настройках этого устройства
     const id = state.selectedId ?? state.activeId;
     if (id) goRelative(id, 1);
   }, { passive: true });
