@@ -543,7 +543,19 @@ function visibleItems() {
       key,
       // Снимок — это то, что видно сейчас: в режиме «только непрочитанные»
       // в него попадают непрочитанные статьи.
-      ids: new Set(itemsOfView().filter((item) => !onlyUnread || !item.read).map((item) => item.id)),
+      // В «только непрочитанные» снимок собирается из непрочитанных, но уже
+      // показанные статьи не выкидываем: иначе после отметки «прочитано» лента
+      // прыгала к следующей, а всё прочитанное исчезало безвозвратно.
+      ids: (() => {
+        const fresh = itemsOfView().filter((item) => !onlyUnread || !item.read).map((item) => item.id);
+        const ids = new Set(fresh);
+        const previous = state.snapshot?.ids;
+        if (previous) {
+          const stillHere = new Set(itemsOfView().map((item) => item.id));
+          for (const id of previous) if (stillHere.has(id)) ids.add(id);
+        }
+        return ids;
+      })(),
     };
   }
   const snapshot = state.snapshot.ids;
