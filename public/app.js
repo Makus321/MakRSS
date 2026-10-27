@@ -1052,21 +1052,38 @@ function commentsHtml(item) {
       <span class="note">комментариев на сайте: ${total}${loaded.count !== total ? `, показано ${loaded.count}` : ''}${loaded.cached ? ' (из кэша)' : ''}</span>
     </div>
     <div class="a-comments-list">${loaded.threads?.length ? render(loaded.threads) : '<div class="note">Комментариев пока нет.</div>'}</div>
+    ${loaded.hasMore
+      ? `<div class="a-comments-more"><button class="btn" data-comments-more="${esc(item.id)}" data-page="${Number(loaded.page ?? 1) + 1}">Загрузить далее</button></div>`
+      : ''}
   </div>`;
 }
 
 /** Загружает комментарии к статье (по кнопке в конце статьи). */
-async function loadComments(id, force = false) {
-  state.comments.set(id, { loading: true });
-  renderList();
+async function loadComments(id, force = false, options = {}) {
+  const previous = state.comments.get(id);
+  const page = Number(options.page) || 0;
+  if (!page) {
+    state.comments.set(id, { loading: true });
+    renderList();
+  }
   try {
-    const payload = await api(`/api/comments?id=${encodeURIComponent(id)}${force ? '&force=1' : ''}`);
+    const query = `/api/comments?id=${encodeURIComponent(id)}${force ? '&force=1' : ''}${page ? `&page=${page}` : ''}`;
+    const payload = await api(query);
     if (!payload.supported) { state.comments.delete(id); renderList(); return; }
-    state.comments.set(id, { loading: false, ...payload });
+    if (page > 1 && previous) {
+      // Догрузка следующей страницы: добавляем к уже показанным.
+      state.comments.set(id, {
+        ...previous,
+        ...payload,
+        threads: [...(previous.threads ?? []), ...(payload.threads ?? [])],
+      });
+    } else {
+      state.comments.set(id, { loading: false, ...payload });
+    }
     const item = state.data.items.find((i) => i.id === id);
     if (item && Number.isFinite(payload.total)) item.commentsCount = payload.total;
   } catch (err) {
-    state.comments.set(id, { loading: false, ok: false, error: err.message });
+    state.comments.set(id, { ...(previous ?? {}), loading: false, ok: false, error: err.message });
   }
   renderList();
 }
@@ -1227,8 +1244,11 @@ function articleHtml(item) {
           ${item.author && item.author !== item.feedTitle ? `<span>${esc(item.author)}</span>` : ''}
           ${downloaded ? '<span class="flag">скачан</span>' : ''}
           ${item.read ? '<span class="flag read-mark">✓ прочитано</span>' : ''}
-          ${item.comments && Number.isFinite(item.commentsCount)
-            ? `<button class="flag comment-chip${item.commentsCount ? '' : ' empty'}" data-comments="${esc(item.id)}" data-comments-only="1" title="Показать комментарии, не раскрывая статью">💬 ${item.commentsCount}</button>` : ''}
+          ${item.comments
+            ? (Number.isFinite(item.commentsCount)
+              ? `<button class="flag comment-chip${item.commentsCount ? '' : ' empty'}" data-comments="${esc(item.id)}" data-comments-only="1" title="Показать комментарии, не раскрывая статью">💬 ${item.commentsCount}</button>`
+              : `<button class="flag comment-chip empty" data-comments="${esc(item.id)}" data-comments-only="1" title="Проверить комментарии">💬</button>`)
+            : ''}
         </div>
       </div>
       ${expanded ? '' : `<p class="a-excerpt" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:${lines};--excerpt-lines:${lines};overflow:hidden">${esc(item.excerpt || 'Нажмите, чтобы раскрыть статью')}</p>`}
@@ -2329,6 +2349,16 @@ $('#list').addEventListener('click', async (event) => {
   if (readBtn) { event.stopPropagation(); markRead([readBtn.dataset.read], readBtn.dataset.value === '1'); return; }
   const fetchBtn = event.target.closest('[data-fetch]');
   if (fetchBtn) { event.stopPropagation(); fetchFull(fetchBtn.dataset.fetch); return; }
+  const moreBtn = event.target.closest('[data-comments-more]');
+  if (moreBtn) {
+    event.stopPropagation();
+    const id = moreBtn.dataset.commentsMore;
+    const page = Number(moreBtn.dataset.page) || 2;
+    moreBtn.disabled = true;
+    moreBtn.textContent = 'Загружаю…';
+    await loadComments(id, false, { page });
+    return;
+  }
   const commentsBtn = event.target.closest('[data-comments]');
   if (commentsBtn) {
     event.stopPropagation();

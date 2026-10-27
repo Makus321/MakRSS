@@ -2447,13 +2447,37 @@ async function api(req, res, url) {
     const provider = commentsProviderFor(found.feed, found.item);
     if (!provider) return json(res, 200, { ok: true, supported: false });
     const body = (await store.body(found.feed.id, found.item.id)) ?? {};
+    const page = Math.max(1, Number.parseInt(url.searchParams.get('page') ?? '1', 10) || 1);
     const cachedAt = body.commentsAt ? Date.parse(body.commentsAt) : 0;
     const fresh = body.comments && cachedAt && Date.now() - cachedAt < COMMENTS_TTL_MS;
+    // Страница 2 и дальше: догружаем к уже сохранённым комментариям.
+    if (page > 1 && body.comments) {
+      try {
+        const more = await provider.load(httpGet, { page });
+        const known = new Set();
+        const collect = (nodes) => {
+          for (const node of nodes ?? []) { known.add(String(node.id)); collect(node.children); }
+        };
+        collect(body.comments.threads);
+        const added = (more.threads ?? []).filter((node) => !known.has(String(node.id)));
+        const merged = {
+          ...body.comments,
+          threads: [...(body.comments.threads ?? []), ...added],
+          count: Number(body.comments.count ?? 0) + more.count,
+          page,
+          hasMore: Boolean(more.hasMore),
+        };
+        await store.setBody(found.feed.id, found.item.id, { comments: merged });
+        return json(res, 200, { ok: true, supported: true, cached: false, fetchedAt: body.commentsAt, ...merged });
+      } catch (err) {
+        return json(res, 200, { ok: false, supported: true, error: err.message, cached: true, ...body.comments });
+      }
+    }
     if (fresh && url.searchParams.get('force') !== '1') {
       return json(res, 200, { ok: true, supported: true, cached: true, fetchedAt: body.commentsAt, ...body.comments });
     }
     try {
-      const result = await provider.load(httpGet);
+      const result = await provider.load(httpGet, { page });
       await store.setBody(found.feed.id, found.item.id, { comments: result, commentsAt: new Date().toISOString() });
       if (Number.isFinite(result.total)) {
         found.item.commentsCount = result.total;
