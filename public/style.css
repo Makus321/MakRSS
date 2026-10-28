@@ -911,6 +911,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
    переключался после загрузки картинки — это меняло высоту карточки и лента
    прыгала при прокрутке. Теперь правило постоянное. */
 .article.has-thumb .a-excerpt { clear: both; }
+/* Строка «лента · время · метки» всегда начинается от левого края карточки,
+   а не рядом с превью: при коротком заголовке она «прилипала» к картинке. */
+.article.has-thumb .a-meta { clear: both; }
 
 /* Версия приложения на экране входа и в настройках. */
 .splash-version { padding: 0 16px 14px; text-align: center; font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); }
