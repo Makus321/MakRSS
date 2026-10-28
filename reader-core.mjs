@@ -2470,7 +2470,9 @@ async function api(req, res, url) {
           threads: [...(body.comments.threads ?? []), ...added],
           count: Number(body.comments.count ?? 0) + more.count,
           page,
-          hasMore: Boolean(more.hasMore),
+          // Продолжение есть только если страница принесла новые комментарии:
+          // иначе кнопка «Загрузить далее» грузила те же самые.
+          hasMore: added.length > 0 && Boolean(more.hasMore),
         };
         await store.setBody(found.feed.id, found.item.id, { comments: merged });
         return json(res, 200, { ok: true, supported: true, cached: false, fetchedAt: body.commentsAt, ...merged });

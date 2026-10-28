@@ -1065,7 +1065,7 @@ function commentsHtml(item) {
     <div class="a-comments-list">${loaded.threads?.length ? render(loaded.threads) : '<div class="note">Комментариев пока нет.</div>'}</div>
     ${loaded.hasMore
       ? `<div class="a-comments-more"><button class="btn" data-comments-more="${esc(item.id)}" data-page="${Number(loaded.page ?? 1) + 1}">Загрузить далее</button></div>`
-      : ''}
+      : (loaded.page > 1 ? '<div class="a-comments-more"><span class="note">Других комментариев нет.</span></div>' : '')}
   </div>`;
 }
 
@@ -1082,11 +1082,19 @@ async function loadComments(id, force = false, options = {}) {
     const payload = await api(query);
     if (!payload.supported) { state.comments.delete(id); renderList(); return; }
     if (page > 1 && previous) {
-      // Догрузка следующей страницы: добавляем к уже показанным.
+      // Догрузка следующей страницы: добавляем только новые комментарии.
+      const known = new Set();
+      const collect = (nodes) => {
+        for (const node of nodes ?? []) { known.add(String(node.id)); collect(node.children); }
+      };
+      collect(previous.threads);
+      const added = (payload.threads ?? []).filter((node) => !known.has(String(node.id)));
       state.comments.set(id, {
         ...previous,
         ...payload,
-        threads: [...(previous.threads ?? []), ...(payload.threads ?? [])],
+        threads: [...(previous.threads ?? []), ...added],
+        hasMore: added.length > 0 && Boolean(payload.hasMore),
+        nothingNew: added.length === 0,
       });
     } else {
       state.comments.set(id, { loading: false, ...payload });
