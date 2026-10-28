@@ -1366,6 +1366,14 @@ function holdImageSpace(root) {
     else {
       row.classList.add('waiting');
       for (const img of images) img.addEventListener('load', done), img.addEventListener('error', done);
+      // Если картинки так и не пришли, через 3 секунды освобождаем место:
+      // иначе в статье оставалось большое белое поле.
+      setTimeout(() => {
+        if (!row.classList.contains('waiting')) return;
+        row.classList.add('ready');
+        row.classList.remove('waiting');
+        for (const img of images) if (!img.naturalWidth) img.classList.add('broken');
+      }, 3000);
     }
   }
 }
