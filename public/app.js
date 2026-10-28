@@ -566,6 +566,11 @@ function visibleItems() {
   state.listFrozen = true;
   const snapshot = state.snapshot.ids;
   const items = itemsOfView().filter((item) => snapshot.has(item.id));
+  // В «Избранном» порядок — по дате добавления в избранное (как и разделители
+  // дней), в остальных лентах — по дате публикации.
+  if (state.view.type === 'starred') {
+    return items.sort((a, b) => (Number(b.starredAt) || 0) - (Number(a.starredAt) || 0));
+  }
   const direction = sortDir() === 'asc' ? 1 : -1;
   return items.sort((a, b) => {
     const left = a.date ?? '';
