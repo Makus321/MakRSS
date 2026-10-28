@@ -1487,7 +1487,11 @@ function renderList() {
   let html = '';
   let lastGroup = null;
   for (const item of items) {
-    const group = dayLabel(item.date);
+    // В «Избранном» разделитель дня — дата добавления в избранное, а не дата поста.
+    const groupDate = state.view.type === 'starred' && item.starredAt
+      ? new Date(Number(item.starredAt)).toISOString()
+      : item.date;
+    const group = dayLabel(groupDate);
     if (group !== lastGroup) { html += `<div class="day-sep">${esc(group)}</div>`; lastGroup = group; }
     html += articleHtml(item);
   }
