@@ -424,8 +424,7 @@ select:focus-visible { outline: none; }
 .a-thumb { grid-column: 1; grid-row: 1; }
 .a-main { grid-column: 2; grid-row: 1; min-width: 0; }
 /* Строка «лента · время · метки» — своя строка во всю ширину карточки. */
-/* На широком экране строка «лента · время · метки» стоит под заголовком, в колонке текста. */
-.a-head > .a-meta { grid-column: 2; grid-row: 2; }
+
 .a-excerpt { grid-column: 1 / -1; grid-row: 3; }
 .article.compact-thumb .a-thumb { display: block; }
 .a-thumb { display: none; width: 128px; height: 84px; object-fit: cover; border-radius: 8px; background: var(--panel-2); }
@@ -1111,5 +1110,8 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 /* На сенсорных экранах карточка — обычный поток с плавающим превью, поэтому
    строке метаданных нужно очищать обтекание: она начинается от левого края. */
 @media (max-width: 900px), (pointer: coarse) {
+  /* .a-main «растворяется»: заголовок и мета становятся прямыми детьми шапки,
+     поэтому мета может очистить обтекание и встать под превью во всю ширину. */
+  .article.has-thumb .a-main { display: contents; }
   .article.has-thumb .a-meta { clear: both; }
 }
