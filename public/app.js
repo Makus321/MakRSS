@@ -464,6 +464,9 @@ const viewKey = () => JSON.stringify({
 /** Забыть снимок списка: при следующей отрисовке он соберётся заново. */
 function resetSnapshot() {
   state.snapshot = null;
+  // Явное действие (смена ленты, обновление, «показать новые») — размораживаем,
+  // после сборки снимка лента снова замирает до следующего явного действия.
+  state.listFrozen = false;
 }
 
 /** Текст самой статьи — по нему работают фильтры ленты. Название ленты не в счёт:
@@ -538,7 +541,7 @@ function itemsOfView() {
 function visibleItems() {
   const key = viewKey();
   const onlyUnread = unreadModeFor();
-  if (!state.snapshot || state.snapshot.key !== key) {
+  if (!state.listFrozen && (!state.snapshot || state.snapshot.key !== key)) {
     state.snapshot = {
       key,
       // Снимок — это то, что видно сейчас: в режиме «только непрочитанные»
@@ -558,6 +561,9 @@ function visibleItems() {
       })(),
     };
   }
+  // Снимок собран — замораживаем ленту: пока читаете, новые статьи в список не
+  // вставляются, иначе отметки «прочитано» уезжали на соседнюю статью.
+  state.listFrozen = true;
   const snapshot = state.snapshot.ids;
   const items = itemsOfView().filter((item) => snapshot.has(item.id));
   const direction = sortDir() === 'asc' ? 1 : -1;
@@ -1706,6 +1712,26 @@ function autoReadAllowed(id) {
   return !manualRead.has(id);
 }
 
+/**
+ * «Заморозка» ленты на время чтения: пока список не разморожен явно (смена
+ * ленты, обновление, кнопка «показать» новые), состав статей не меняется —
+ * новые статьи только увеличивают счётчик. Так отметки «прочитано» не могут
+ * уехать на соседнюю статью.
+ */
+function freezeListForReading() {
+  state.listFrozen = true;
+}
+
+function unfreezeList() {
+  state.listFrozen = false;
+}
+
+/** Статья входит в текущий список (снимок) — только такие можно отмечать. */
+function inReadingList(id) {
+  const ids = state.snapshot?.ids;
+  return !ids || ids.has(id);
+}
+
 function markReadOnce(id, read = true) {
   // Повторные отметки в пределах нескольких секунд не шлём, но и не блокируем
   // статью навсегда: запись «когда пытались» сама устаревает.
@@ -1714,6 +1740,7 @@ function markReadOnce(id, read = true) {
   if (now - (markedRecently.get(id) ?? 0) < 4000) return;
   const item = state.data.items.find((i) => i.id === id);
   if (!item || item.read === read) return;
+  if (!inReadingList(id)) return;                 // статья не из текущего списка — не трогаем
   markedRecently.set(id, now);
   markRead([id], read, { silent: true }).catch(() => markedRecently.delete(id));
 }
