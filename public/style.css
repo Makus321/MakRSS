@@ -424,7 +424,8 @@ select:focus-visible { outline: none; }
 .a-thumb { grid-column: 1; grid-row: 1; }
 .a-main { grid-column: 2; grid-row: 1; min-width: 0; }
 /* Строка «лента · время · метки» — своя строка во всю ширину карточки. */
-.a-head > .a-meta { grid-column: 1 / -1; grid-row: 2; }
+/* На широком экране строка «лента · время · метки» стоит под заголовком, в колонке текста. */
+.a-head > .a-meta { grid-column: 2; grid-row: 2; }
 .a-excerpt { grid-column: 1 / -1; grid-row: 3; }
 .article.compact-thumb .a-thumb { display: block; }
 .a-thumb { display: none; width: 128px; height: 84px; object-fit: cover; border-radius: 8px; background: var(--panel-2); }
