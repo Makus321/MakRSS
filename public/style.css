@@ -88,9 +88,9 @@ html, body {
 }
 /* ------------------------------------------------------------------ шрифты */
 /* Межстрочный интервал: маленький / нормальный / большой. */
-:root[data-line="normal"] { --lh-scale: 0.8; }
-:root[data-line="tiny"] { --lh-scale: 0.4; }
-:root[data-line="small"] { --lh-scale: 0.5; }
+:root[data-line="normal"] { --lh-scale: 0.9; }
+:root[data-line="tiny"] { --lh-scale: 0.5; }
+:root[data-line="small"] { --lh-scale: 0.65; }
 :root[data-line="large"] { --lh-scale: 1.2; }
 :root[data-line="huge"] { --lh-scale: 1.5; }
 @font-face {
