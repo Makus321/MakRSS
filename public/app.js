@@ -1414,6 +1414,24 @@ function flushScrollWork() {
   if (state.deferredPoll) { state.deferredPoll = false; loadData({ poll: true }); }
 }
 
+/**
+ * Картинка не загрузилась — помечаем и убираем её, чтобы не оставалось
+ * пустого места «под рисунок». Заодно убираем опустевшие абзацы.
+ */
+function markBrokenImages(root = document) {
+  for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
+    if (img.dataset.brokenCheck === '1') continue;
+    img.dataset.brokenCheck = '1';
+    const kill = () => {
+      img.classList.add('broken');
+      const box = img.closest('p, figure');
+      if (box && !box.textContent.trim() && !box.querySelector('img:not(.broken), video, iframe')) box.classList.add('empty-box');
+    };
+    if (img.complete && img.naturalWidth === 0) kill();
+    else img.addEventListener('error', kill, { once: true });
+  }
+}
+
 function renderList() {
   if (pointerDown) { renderPending = true; return; }
   if (state.scrolling) { state.deferredRender = true; return; }
@@ -1484,6 +1502,7 @@ function renderList() {
   requestCommentCounts();
   fillViewport();          // если карточек меньше экрана — догружаем сразу
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
+  markBrokenImages(listEl); // пустое место от не загрузившихся картинок
   // Класс text-under-thumb больше не переключается: он менял высоту карточки
   // после загрузки превью, из-за чего лента прыгала. Теперь это задаёт CSS.
   updateActiveArticle();

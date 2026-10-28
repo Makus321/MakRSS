@@ -428,7 +428,10 @@ select:focus-visible { outline: none; }
 .a-thumb { display: none; width: 128px; height: 84px; object-fit: cover; border-radius: 8px; background: var(--panel-2); }
 /* Заголовок статьи — ссылка, но без подчёркивания; жирный всегда, цвет — как у текста
    статьи (белый в тёмной теме, чёрный в светлой), без оттенка гаммы. */
-.a-title { margin: 0 0 3px; font-size: calc(var(--font-article) * 0.95); line-height: calc(1.35 * var(--lh-scale, 1)); font-weight: 700; color: var(--article-text); }
+/* Заголовок берёт размер из того вида, который выбран у ленты: в кратком виде —
+   от «шрифта краткого вида», в полном — от «шрифта статьи». */
+.a-title { margin: 0 0 3px; font-size: calc(var(--font-excerpt) * 0.95); line-height: calc(1.35 * var(--lh-scale, 1)); font-weight: 700; color: var(--article-text); }
+.article.full .a-title { font-size: calc(var(--font-article) * 0.95); }
 .a-title a { text-decoration: none; color: inherit; }
 .a-title a:hover { color: var(--accent); }
 .a-excerpt { color: var(--article-text); font-size: var(--font-excerpt); margin: 0; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
@@ -1095,3 +1098,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
   height: auto;
   max-height: none;
 }
+/* Картинка не загрузилась — убираем её вместе с местом: пустой прямоугольник
+   выглядел как «зарезервированное место без рисунка». */
+.a-body img.broken, .comment-body img.broken { display: none; }
+.a-body p:empty, .a-body figure:empty { display: none; }
