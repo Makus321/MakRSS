@@ -856,7 +856,12 @@ async function fetchFullText(feedId, itemId) {
       return { ok: false, error: 'ссылка ведёт не на статью' };
     }
     await politeWait(target.link);
-    const res = await httpGet(target.link, { timeout: 25000, accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' });
+    let res = await httpGet(target.link, { timeout: 25000, accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' });
+    // Сайт бывает занят или отдаёт не HTML с первого раза — пробуем ещё раз.
+    if (!res.ok || !/html/i.test(res.contentType ?? '')) {
+      await new Promise((done) => setTimeout(done, 1200));
+      res = await httpGet(target.link, { timeout: 25000, accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' });
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     if (!/html/i.test(res.contentType)) throw new Error(`не HTML (${res.contentType || 'тип неизвестен'})`);
     const article = extractArticle(res.text, target.link);
