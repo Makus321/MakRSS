@@ -1244,7 +1244,8 @@ function articleHtml(item) {
       ${thumb}
       <div class="a-main">
         <h3 class="a-title">${title}</h3>
-        <div class="a-meta">
+      </div>
+      <div class="a-meta">
           <span class="src">${esc(item.feedTitle)}</span>
           <span data-time="${esc(item.date ?? '')}">${esc(timeAgo(item.date))}</span>
           ${item.author && item.author !== item.feedTitle ? `<span>${esc(item.author)}</span>` : ''}
@@ -1256,7 +1257,6 @@ function articleHtml(item) {
               : `<button class="flag comment-chip empty" data-comments="${esc(item.id)}" data-comments-only="1" title="Проверить комментарии">💬</button>`)
             : ''}
         </div>
-      </div>
       ${expanded ? '' : `<p class="a-excerpt" style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:${lines};--excerpt-lines:${lines};overflow:hidden">${esc(item.excerpt || 'Нажмите, чтобы раскрыть статью')}</p>`}
     </div>
     <div class="a-body">${expanded
