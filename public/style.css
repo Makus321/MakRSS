@@ -1132,3 +1132,8 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 }
 .embed-open:active { background: var(--panel); }
 .embed-open-icon { color: var(--accent); font-size: calc(15px * var(--ui-scale, 1)); }
+/* Кнопка плеера и запасная ссылка рядом с ней. */
+.embed-box { margin: 12px 0; display: flex; flex-direction: column; gap: 6px; }
+.embed-box .embed-play { width: 100%; justify-content: center; min-height: 44px; }
+.embed-alt { font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); align-self: flex-start; }
+.embed-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; background: #000; }

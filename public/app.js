@@ -3942,13 +3942,17 @@ function sanitize(html, baseUrl) {
       .replace(/&quot;/g, '"');
     if (isAdEmbed(decoded)) return '';
     const safe = decoded.replace(/"/g, '&quot;');
-    return `<a class="embed-open" href="${safe}" target="_blank" rel="noopener noreferrer">`
-      + `<span class="embed-open-icon">▶</span>${esc(title || 'Открыть видео')}</a>`;
+    // Плеер появляется только по нажатию — до этого никакого трафика.
+    // Рядом ссылка на сайт: некоторые плееры (ВК) вне своего сайта не играют.
+    return `<div class="embed-box" data-embed="${safe}">`
+      + `<button type="button" class="btn embed-play">▶ ${esc(title || 'Смотреть здесь')}</button>`
+      + `<a class="embed-alt" href="${safe}" target="_blank" rel="noopener noreferrer">Открыть на сайте</a>`
+      + `</div>`;
   };
   html = String(html).replace(/<p[^>]*>[^<]*youtube:([\w-]{6,})[^<]*<\/p>/gi,
-    (match, id) => embedLink(`https://www.youtube.com/watch?v=${id}`, 'Смотреть на YouTube'));
+    (match, id) => embedLink(`https://www.youtube.com/embed/${id}?autoplay=1`, 'Смотреть видео'));
   html = String(html).replace(/<p[^>]*>[^<]*embed:([^<\s]+)[^<]*<\/p>/gi,
-    (match, url) => embedLink(url, 'Открыть видео на сайте'));
+    (match, url) => embedLink(url, 'Смотреть видео'));
   html = String(html).replace(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*>(?:[\s\S]*?<\/iframe>)?/gi, (match, src) => {
     const id = /(?:youtube\.com\/embed\/|youtube-nocookie\.com\/embed\/|youtu\.be\/)([\w-]{6,})/i.exec(src)?.[1];
     const absolute = /^https?:/i.test(src) ? src : '';
