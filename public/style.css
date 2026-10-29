@@ -1168,3 +1168,5 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
     object-fit: contain;
   }
 }
+/* Видео из постов: обычный плеер, без предзагрузки. */
+.video-inline { width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }

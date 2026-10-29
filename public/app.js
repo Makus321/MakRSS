@@ -3991,6 +3991,13 @@ function sanitize(html, baseUrl) {
       ?? /<source\b[^>]*\bsrc=["']([^"']+)["']/i.exec(block)?.[1]
       ?? '';
     if (!/^https?:/i.test(src)) return '';
+    // Прямой видеофайл (Telegram, mp4/webm): обычный плеер без предзагрузки —
+    // трафик пойдёт только после «play». Через наш прокси, потому что CDN
+    // Telegram не отдаёт файл напрямую.
+    if (/\.(mp4|webm|ogv|m4v|mov|m3u8)(\?|#|$)/i.test(src)) {
+      const proxied = `/api/video?u=${encodeURIComponent(src)}`;
+      return `<video class="video-inline" controls preload="none" playsinline src="${proxied}"></video>`;
+    }
     return embedLink(src, 'Открыть видео');
   });
   const doc = new DOMParser().parseFromString(`<div id="__root">${html}</div>`, 'text/html');
