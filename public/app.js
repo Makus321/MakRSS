@@ -3930,19 +3930,39 @@ function sanitize(html, baseUrl) {
     'BLOCKQUOTE', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'FIGURE', 'FIGCAPTION', 'PICTURE', 'SOURCE',
     'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'CAPTION', 'VIDEO', 'AUDIO', 'SUB', 'SUP', 'SMALL', 'MARK',
     'DL', 'DT', 'DD', 'ABBR', 'TIME', 'CITE', 'Q', 'KBD', 'SAMP', 'VAR', 'SECTION', 'ARTICLE', 'ASIDE', 'MAIN']);
-  // Встроенные видео (YouTube, VK) санитайзер вырезал целиком. Оставляем
-  // заметную кнопку: по нажатию подставляем плеер, без нажатия — ноль трафика.
-  // Ссылки-заметки от сервера: <p>youtube:ID</p> и <p>embed:URL</p>.
+  // Плееры в статьях. Раньше тут подставлялся встроенный плеер по нажатию, но
+  // такие вставки тяжёлые и часто не работают вне своего сайта. Теперь на месте
+  // плеера — кнопка-ссылка: видео открывается в браузере пользователя, наша
+  // страница не грузит ни одного кадра.
+  // Реклама тоже бывает в iframe — её кнопкой не показываем.
+  const isAdEmbed = (url) => /adriver|doubleclick|googlesyndication|an\.yandex\.ru|ad\.mail\.ru/i.test(String(url));
+  const embedLink = (url, title) => {
+    const decoded = String(url)
+      .replace(/&#0*38;|&amp;/gi, '&')
+      .replace(/&quot;/g, '"');
+    if (isAdEmbed(decoded)) return '';
+    const safe = decoded.replace(/"/g, '&quot;');
+    return `<a class="embed-open" href="${safe}" target="_blank" rel="noopener noreferrer">`
+      + `<span class="embed-open-icon">▶</span>${esc(title || 'Открыть видео')}</a>`;
+  };
   html = String(html).replace(/<p[^>]*>[^<]*youtube:([\w-]{6,})[^<]*<\/p>/gi,
-    (match, id) => `<div class="embed-box" data-embed="https://www.youtube.com/embed/${id}?autoplay=1"><button type="button" class="btn embed-play">▶ Смотреть видео</button></div>`);
+    (match, id) => embedLink(`https://www.youtube.com/watch?v=${id}`, 'Смотреть на YouTube'));
   html = String(html).replace(/<p[^>]*>[^<]*embed:([^<\s]+)[^<]*<\/p>/gi,
-    (match, url) => `<div class="embed-box" data-embed="${url}"><button type="button" class="btn embed-play">▶ Смотреть видео</button></div>`);
+    (match, url) => embedLink(url, 'Открыть видео на сайте'));
   html = String(html).replace(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*>(?:[\s\S]*?<\/iframe>)?/gi, (match, src) => {
     const id = /(?:youtube\.com\/embed\/|youtube-nocookie\.com\/embed\/|youtu\.be\/)([\w-]{6,})/i.exec(src)?.[1];
     const absolute = /^https?:/i.test(src) ? src : '';
-    if (id) return `<div class="embed-box" data-embed="https://www.youtube.com/embed/${id}?autoplay=1"><button type="button" class="btn embed-play">▶ Смотреть видео</button></div>`;
-    if (absolute) return `<div class="embed-box" data-embed="${absolute}"><button type="button" class="btn embed-play">▶ Смотреть видео</button></div>`;
+    if (id) return embedLink(`https://www.youtube.com/watch?v=${id}`, 'Смотреть на YouTube');
+    if (absolute) return embedLink(absolute, 'Открыть видео на сайте');
     return '';
+  });
+  // Встроенный <video> из ленты: тоже кнопка, а не плеер внутри страницы.
+  html = String(html).replace(/<video\b[^>]*>[\s\S]*?<\/video>/gi, (block) => {
+    const src = /\bsrc=["']([^"']+)["']/i.exec(block)?.[1]
+      ?? /<source\b[^>]*\bsrc=["']([^"']+)["']/i.exec(block)?.[1]
+      ?? '';
+    if (!/^https?:/i.test(src)) return '';
+    return embedLink(src, 'Открыть видео');
   });
   const doc = new DOMParser().parseFromString(`<div id="__root">${html}</div>`, 'text/html');
   const root = doc.getElementById('__root');

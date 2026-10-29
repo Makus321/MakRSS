@@ -1115,3 +1115,20 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
   .article.has-thumb .a-main { display: contents; }
   .article.has-thumb .a-meta { clear: both; }
 }
+/* Кнопка-ссылка на месте встроенного плеера: видео открывается в браузере,
+   страница не загружает ни одного кадра. */
+.embed-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--article-text);
+  text-decoration: none;
+  font-size: calc(13px * var(--ui-scale, 1));
+}
+.embed-open:active { background: var(--panel); }
+.embed-open-icon { color: var(--accent); font-size: calc(15px * var(--ui-scale, 1)); }
