@@ -4000,6 +4000,13 @@ function sanitize(html, baseUrl) {
   while (walker.nextNode()) {
     const el = walker.currentNode;
     if (!allowed.has(el.tagName) || el.id === '__root') { doomed.push(el); continue; }
+    // Картинкам и видео в тексте не оставляем размеры из разметки: иначе браузер
+    // заранее резервирует место, и до загрузки видно белое поле. Пусть место
+    // появляется вместе с картинкой.
+    if (el.tagName === 'IMG' || el.tagName === 'VIDEO') {
+      el.removeAttribute('width');
+      el.removeAttribute('height');
+    }
     for (const attr of [...el.attributes]) {
       const name = attr.name.toLowerCase();
       const value = attr.value.trim();
