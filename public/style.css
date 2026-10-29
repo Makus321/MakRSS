@@ -427,7 +427,7 @@ select:focus-visible { outline: none; }
 
 .a-excerpt { grid-column: 1 / -1; grid-row: 3; }
 .article.compact-thumb .a-thumb { display: block; }
-.a-thumb { display: none; width: 128px; height: 84px; object-fit: cover; border-radius: 8px; background: var(--panel-2); }
+.a-thumb { display: none; width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1)); max-height: 70vh; object-fit: cover; border-radius: 8px; background: var(--panel-2); }
 /* Заголовок статьи — ссылка, но без подчёркивания; жирный всегда, цвет — как у текста
    статьи (белый в тёмной теме, чёрный в светлой), без оттенка гаммы. */
 /* Заголовок берёт размер из того вида, который выбран у ленты: в кратком виде —
@@ -707,7 +707,7 @@ body.dragging .tree-tail { display: flex; }
   /* Обтекание чистим в конце карточки, а не в конце шапки: иначе текст начинался
      бы ниже картинки. */
   .article::after { content: ""; display: block; clear: both; }
-  .a-thumb { width: 92px; height: 68px; }
+  .a-thumb { width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1)); max-height: 70vh; object-fit: cover; }
   /* На узком экране картинка обтекается текстом: длинный заголовок идёт под ней,
      а не сжимается в узкую колонку справа от картинки. */
   /* Четвёртая кнопка — переход к следующей статье — только на телефоне, где панель
@@ -912,7 +912,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Текст краткого вида всегда идёт под превью. Раньше класс text-under-thumb
    переключался после загрузки картинки — это меняло высоту карточки и лента
    прыгала при прокрутке. Теперь правило постоянное. */
-.article.has-thumb .a-excerpt { clear: both; }
+
 /* Строка «лента · время · метки» всегда начинается от левого края карточки,
    а не рядом с превью: при коротком заголовке она «прилипала» к картинке. */
 
@@ -941,7 +941,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
    новых карточек список «прыгает» вниз. */
 .a-thumb { background: var(--panel-2); }
 @media (max-width: 560px) {
-  .a-thumb { width: 92px; height: 68px; flex: none; }
+  .a-thumb { width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1)); max-height: 70vh; object-fit: cover; flex: none; }
 }
 
 .new-row .note { flex: 1 1 auto; min-width: 0; }
@@ -1113,7 +1113,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
   /* .a-main «растворяется»: заголовок и мета становятся прямыми детьми шапки,
      поэтому мета может очистить обтекание и встать под превью во всю ширину. */
   .article.has-thumb .a-main { display: contents; }
-  .article.has-thumb .a-meta { clear: both; }
+  
 }
 /* Кнопка-ссылка на месте встроенного плеера: видео открывается в браузере,
    страница не загружает ни одного кадра. */
