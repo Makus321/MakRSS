@@ -1137,3 +1137,11 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 .embed-box .embed-play { width: 100%; justify-content: center; min-height: 44px; }
 .embed-alt { font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); align-self: flex-start; }
 .embed-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; background: #000; }
+/* Карточка с превью на широком экране: картинка слева, справа — заголовок,
+   мета и краткий текст (всё в одной колонке, поэтому текст идёт рядом с картинкой). */
+@media (min-width: 901px) and (pointer: fine) {
+  .article.has-thumb .a-head { display: flex; align-items: flex-start; gap: 12px; }
+  .article.has-thumb .a-thumb { flex: 0 0 auto; margin: 0; }
+  .article.has-thumb .a-main { flex: 1 1 auto; min-width: 0; }
+  .article.has-thumb .a-excerpt { grid-column: auto; grid-row: auto; clear: none; }
+}
