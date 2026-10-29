@@ -8,6 +8,8 @@ const $ = (sel) => document.querySelector(sel);
  * к ошибке «Cannot access before initialization» и скрипт не запускался.
  */
 const manualRead = new Map();
+/** Прочитанные нами статьи остаются в списке до смены ленты: иначе они исчезают сразу после отметки. */
+const keepReadVisible = new Set();
 /** Фавиконы, которые сервер не отдал: повторно не запрашиваем. */
 const faviconFailed = new Set();
 window.__faviconFailed = (feedId) => { faviconFailed.add(feedId); };        // id → прочитано/непрочитано (приоритет над автоматикой)
@@ -464,6 +466,7 @@ const viewKey = () => JSON.stringify({
 /** Забыть снимок списка: при следующей отрисовке он соберётся заново. */
 function resetSnapshot() {
   state.snapshot = null;
+  keepReadVisible.clear();
   // Явное действие (смена ленты, обновление, «показать новые») — размораживаем,
   // после сборки снимка лента снова замирает до следующего явного действия.
   state.listFrozen = false;
@@ -565,7 +568,7 @@ function visibleItems() {
   // вставляются, иначе отметки «прочитано» уезжали на соседнюю статью.
   state.listFrozen = true;
   const snapshot = state.snapshot.ids;
-  const items = itemsOfView().filter((item) => snapshot.has(item.id));
+  const items = itemsOfView().filter((item) => snapshot.has(item.id) || keepReadVisible.has(item.id));
   // В «Избранном» порядок — по дате добавления в избранное (как и разделители
   // дней), в остальных лентах — по дате публикации.
   if (state.view.type === 'starred') {
@@ -1765,7 +1768,6 @@ function markReadOnce(id, read = true) {
   if (now - (markedRecently.get(id) ?? 0) < 4000) return;
   const item = state.data.items.find((i) => i.id === id);
   if (!item || item.read === read) return;
-  if (!inReadingList(id)) return;                 // статья не из текущего списка — не трогаем
   markedRecently.set(id, now);
   markRead([id], read, { silent: true }).catch(() => markedRecently.delete(id));
 }
@@ -2093,6 +2095,7 @@ async function markRead(ids, read, { silent = false } = {}) {
   const items = state.data.items ?? [];
   for (const item of items) if (ids.includes(item.id)) item.read = read;
   for (const id of ids) pendingReads.set(id, read);
+  for (const id of ids) if (read) keepReadVisible.add(id); else keepReadVisible.delete(id);
   savePendingReads();
   if (silent) {
     renderSidebar();
