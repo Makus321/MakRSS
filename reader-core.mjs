@@ -461,6 +461,19 @@ async function mergeItems(feedId, fresh) {
   const added = fresh.reduce((n, i) => n + (oldIds.has(i.id) ? 0 : 1), 0);
   // Свежие метаданные ленты, но служебные признаки берём из прежней записи:
   // иначе каждый опрос «забывал бы», что текст уже скачан или что попытка была.
+  // Читалка докидывает историю Telegram «вниз»: посты старше самой старой
+  // известной записи сразу помечаем прочитанными, иначе они всплывают как новые.
+  const oldestKnown = old.reduce((min, i) => {
+    const t = Date.parse(i.date ?? '');
+    return Number.isFinite(t) && (!min || t < min) ? t : min;
+  }, 0);
+  if (oldestKnown) {
+    for (const item of fresh) {
+      if (oldIds.has(item.id)) continue;
+      const t = Date.parse(item.date ?? '');
+      if (Number.isFinite(t) && t < oldestKnown) db.read[item.id] = Date.now();
+    }
+  }
   const merged = [
     ...fresh.map((item) => {
       const meta = toMeta(item);
