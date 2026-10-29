@@ -3929,7 +3929,8 @@ function sanitize(html, baseUrl) {
   const allowed = new Set(['A', 'P', 'BR', 'HR', 'DIV', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'DEL', 'INS', 'CODE', 'PRE',
     'BLOCKQUOTE', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'FIGURE', 'FIGCAPTION', 'PICTURE', 'SOURCE',
     'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'CAPTION', 'VIDEO', 'AUDIO', 'SUB', 'SUP', 'SMALL', 'MARK',
-    'DL', 'DT', 'DD', 'ABBR', 'TIME', 'CITE', 'Q', 'KBD', 'SAMP', 'VAR', 'SECTION', 'ARTICLE', 'ASIDE', 'MAIN']);
+    'DL', 'DT', 'DD', 'ABBR', 'TIME', 'CITE', 'Q', 'KBD', 'SAMP', 'VAR', 'SECTION', 'ARTICLE', 'ASIDE', 'MAIN',
+    'BUTTON']);   // кнопки плееров внутри статьи
   // Плееры в статьях. Раньше тут подставлялся встроенный плеер по нажатию, но
   // такие вставки тяжёлые и часто не работают вне своего сайта. Теперь на месте
   // плеера — кнопка-ссылка: видео открывается в браузере пользователя, наша
@@ -3953,10 +3954,30 @@ function sanitize(html, baseUrl) {
     (match, id) => embedLink(`https://www.youtube.com/embed/${id}?autoplay=1`, 'Смотреть видео'));
   html = String(html).replace(/<p[^>]*>[^<]*embed:([^<\s]+)[^<]*<\/p>/gi,
     (match, url) => embedLink(url, 'Смотреть видео'));
+  // Обычная ссылка на видео в тексте (YouTube, RuTube, VK, Дзен, OK): превращаем
+  // в кнопку плеера. Ограничений по количеству нет — сколько ссылок, столько кнопок.
+  const videoEmbedFor = (rawUrl) => {
+    const url = String(rawUrl).replace(/&#0*38;|&amp;/gi, '&').trim();
+    if (!/^https?:/i.test(url)) return null;
+    const youtube = /(?:youtube\.com\/(?:watch\?[^#]*?\bv=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]{6,})/i.exec(url)?.[1];
+    if (youtube) return { embed: `https://www.youtube.com/embed/${youtube}?autoplay=1`, title: 'Смотреть на YouTube' };
+    const rutube = /rutube\.ru\/(?:video|play\/embed)\/([0-9a-f]{16,})/i.exec(url)?.[1];
+    if (rutube) return { embed: `https://rutube.ru/play/embed/${rutube}`, title: 'Смотреть на RuTube' };
+    if (/vk\.com\/video|vkvideo\.ru\/video/i.test(url)) return { embed: url, title: 'Смотреть во ВКонтакте' };
+    if (/dzen\.ru\/video|ok\.ru\/video/i.test(url)) return { embed: url, title: 'Смотреть видео' };
+    return null;
+  };
+  html = String(html).replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (match, href, inner) => {
+    const found = videoEmbedFor(href);
+    if (!found) return match;
+    // Ссылка-картинка (обложка) — не трогаем, иначе вместо неё будет кнопка.
+    if (/<img\b/i.test(inner)) return match;
+    return embedLink(found.embed, found.title);
+  });
   html = String(html).replace(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*>(?:[\s\S]*?<\/iframe>)?/gi, (match, src) => {
     const id = /(?:youtube\.com\/embed\/|youtube-nocookie\.com\/embed\/|youtu\.be\/)([\w-]{6,})/i.exec(src)?.[1];
     const absolute = /^https?:/i.test(src) ? src : '';
-    if (id) return embedLink(`https://www.youtube.com/watch?v=${id}`, 'Смотреть на YouTube');
+    if (id) return embedLink(`https://www.youtube.com/embed/${id}?autoplay=1`, 'Смотреть на YouTube');
     if (absolute) return embedLink(absolute, 'Открыть видео на сайте');
     return '';
   });
