@@ -463,15 +463,15 @@ async function mergeItems(feedId, fresh) {
   // иначе каждый опрос «забывал бы», что текст уже скачан или что попытка была.
   // Читалка докидывает историю Telegram «вниз»: посты старше самой старой
   // известной записи сразу помечаем прочитанными, иначе они всплывают как новые.
-  const oldestKnown = old.reduce((min, i) => {
+  const newestKnown = old.reduce((max, i) => {
     const t = Date.parse(i.date ?? '');
-    return Number.isFinite(t) && (!min || t < min) ? t : min;
+    return Number.isFinite(t) && t > max ? t : max;
   }, 0);
-  if (oldestKnown) {
+  if (newestKnown) {
     for (const item of fresh) {
       if (oldIds.has(item.id)) continue;
       const t = Date.parse(item.date ?? '');
-      if (Number.isFinite(t) && t < oldestKnown) db.read[item.id] = Date.now();
+      if (Number.isFinite(t) && t < newestKnown) db.read[item.id] = Date.now();
     }
   }
   const merged = [
