@@ -411,7 +411,8 @@ async function fetchViewInner(offset, reset) {
   applyPendingReads(state.data.items);
   // Снимок видимых статей пересобираем: он мог быть построен до прихода страницы
   // (тогда в нём не было ни одной статьи, и список оставался пустым).
-  if (reset) state.snapshot = null;
+  // Снимок НЕ обнуляем: смену ленты и «показать новые» обрабатывает resetSnapshot().
+  if (reset && !state.snapshot) state.snapshot = null;
   return true;
 }
 
