@@ -1141,7 +1141,16 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
    мета и краткий текст (всё в одной колонке, поэтому текст идёт рядом с картинкой). */
 @media (min-width: 901px) and (pointer: fine) {
   .article.has-thumb .a-head { display: flex; align-items: flex-start; gap: 12px; }
-  .article.has-thumb .a-thumb { flex: 0 0 auto; margin: 0; }
+  /* Превью одной ширины: узкая картинка получает поля по бокам, а не сжимает колонку. */
+  .article.has-thumb .a-thumb {
+    flex: 0 0 30%;
+    width: 30%;
+    height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1));
+    max-height: 70vh;
+    object-fit: contain;
+    background: var(--panel-2);
+    margin: 0;
+  }
   .article.has-thumb .a-main { flex: 1 1 auto; min-width: 0; }
   .article.has-thumb .a-excerpt { grid-column: auto; grid-row: auto; clear: none; }
 }
