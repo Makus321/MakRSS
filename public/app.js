@@ -411,6 +411,13 @@ async function fetchViewInner(offset, reset) {
   };
   state.revision = payload.revision ?? state.revision;
   applyPendingReads(state.data.items);
+  // Сервер удалил статьи (лимит хранения) — убираем их и из локальных списков,
+  // иначе карточки остаются на экране, хотя данных о них уже нет.
+  if (Array.isArray(payload.items) && state.snapshot?.ids) {
+    const alive = new Set(state.data.items.map((i) => i.id));
+    for (const id of [...state.snapshot.ids]) if (!alive.has(id)) state.snapshot.ids.delete(id);
+    for (const id of [...keepReadVisible]) if (!alive.has(id)) { keepReadVisible.delete(id); keepReadItems.delete(id); }
+  }
   // Снимок видимых статей пересобираем: он мог быть построен до прихода страницы
   // (тогда в нём не было ни одной статьи, и список оставался пустым).
   // Снимок НЕ обнуляем: смену ленты и «показать новые» обрабатывает resetSnapshot().

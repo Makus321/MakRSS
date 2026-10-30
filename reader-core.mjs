@@ -91,7 +91,7 @@ const AUTH_PASS = '';
 
 // Политика хранения: непрочитанное не удаляется никогда (до жёсткого предела),
 // прочитанное живёт KEEP_READ_DAYS дней, избранное — всегда.
-const MAX_UNREAD_PER_FEED = Number(process.env.MAX_UNREAD_PER_FEED || argValue('max-unread', 1500));
+const MAX_UNREAD_PER_FEED = Number(process.env.MAX_UNREAD_PER_FEED || argValue('max-unread', 3000));
 const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-read', 1000));
 // Версия разборщика: когда он меняется, ленты перечитываются заново, даже если
 // сайт отвечает «не изменилось» — иначе старые записи остаются без новых полей.
@@ -554,6 +554,10 @@ async function pruneFeed(feedId) {
   let keptUnread = 0;
   let keptRead = 0;
   let droppedUnread = 0;
+  // Если непрочитанных уже под предел, прочитанные в этой ленте не жалеем:
+  // место нужно новым статьям, а прочитанное можно удалить.
+  const unreadTotal = items.filter((i) => !db.read[i.id]).length;
+  const tightRead = unreadTotal > MAX_UNREAD_PER_FEED - 1;
 
   for (const item of items) {           // items уже отсортированы: свежие сверху
     if (db.starred[item.id]) { keep.push(item); keepIds.add(item.id); continue; }
@@ -565,7 +569,7 @@ async function pruneFeed(feedId) {
     // Срок хранения считается от момента прочтения, а не от даты публикации:
     // иначе старая статья исчезала бы сразу после того, как её прочитали.
     const readAt = Number(db.read[item.id]) || 0;
-    if (readAt >= cutoff && keptRead < MAX_READ_PER_FEED) {
+    if (!tightRead && readAt >= cutoff && keptRead < MAX_READ_PER_FEED) {
       keep.push(item); keepIds.add(item.id); keptRead += 1;
     }
   }
