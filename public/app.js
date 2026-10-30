@@ -1014,8 +1014,8 @@ function bodyHtml(item) {
       return nested ? decodeURIComponent(nested[1]) : src;
     };
     const videoList = bodyVideos.map(unwrap);
-    if (bodyVideos.length) html = html.replace(/<video\b[^>]*>[\s\S]*?<\/video>|<video\b[^>]*>/gi, '');
-    const videoSources = videoList.length ? videoList : (item.video ? [unwrap(item.video)] : []);
+    // Видео из текста не вынимаем: санитайзер сам превращает его в плеер.
+    const videoSources = bodyVideos.length ? [] : (item.video ? [unwrap(item.video)] : []);
     const video = videoSources
       .map((src) => `<div class="a-video"><button class="btn primary" data-video="${esc(src)}">▶ Просмотреть видео</button>
           <span class="note">видео проигрывается через прокси и не сохраняется</span></div>`)
