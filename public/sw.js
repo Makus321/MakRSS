@@ -8,7 +8,7 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v196';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
+const CACHE = 'rss-shell-v197';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
 const DATA_CACHE = 'rss-data-v180';
 const MEDIA_CACHE = 'rss-media-v151';
 
@@ -47,7 +47,9 @@ self.addEventListener('activate', (event) => {
 });
 
 const isData = (path) => path === '/api/data' || path === '/api/bodies';
-const isMedia = (path) => path === '/api/img' || path === '/api/thumb' || path === '/api/video';
+// Видео НЕ кэшируем: браузер запрашивает файл частями (Range), а cacheFirst
+// отдавал целую копию из кэша — из-за этого плеер не начинал воспроизведение.
+const isMedia = (path) => path === '/api/img' || path === '/api/thumb';
 const isStatic = (path) => /\.(css|js|png|svg|ico|webmanifest|woff2?|ttf)$/.test(path);
 
 /** Сразу отдаём из кэша, а свежее подтягиваем в фоне. */
