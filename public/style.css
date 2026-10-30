@@ -1139,7 +1139,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 .embed-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; background: #000; }
 /* Карточка с превью на широком экране: картинка слева, справа — заголовок,
    мета и краткий текст (всё в одной колонке, поэтому текст идёт рядом с картинкой). */
-@media (min-width: 901px) and (pointer: fine) {
+@media (min-width: 901px) {
   .article.has-thumb .a-head { display: flex; align-items: flex-start; gap: 12px; }
   /* Превью одной ширины: узкая картинка получает поля по бокам, а не сжимает колонку. */
   /* Высота превью равна высоте текста: карточка не бывает выше своего содержимого. */
@@ -1157,7 +1157,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 }
 /* Телефон: краткий текст и мета начинаются от левого края карточки, под превью.
    Превью не обрезаем: высота по пропорциям图片, ограничение только сверху. */
-@media (max-width: 900px), (pointer: coarse) {
+@media (max-width: 900px) {
   .article.has-thumb .a-excerpt,
   .article.has-thumb .a-meta { clear: both; }
   .article.has-thumb .a-excerpt { display: -webkit-box; }
