@@ -1889,7 +1889,13 @@ async function serveVideo(req, res, url) {
   const controller = new AbortController();
   res.on('close', () => controller.abort());          // клиент ушёл — бросаем загрузку
   try {
-    const headers = { 'user-agent': UA, accept: '*/*', referer: `${parsed.origin}/` };
+    const telegramCdn = /(^|\.)(telesco\.pe|telegram\.org|t\.me)$/i.test(parsed.hostname);
+    const headers = {
+      'user-agent': UA,
+      accept: '*/*',
+      // CDN Telegram отдаёт файл только с реферером t.me.
+      referer: telegramCdn ? 'https://t.me/' : parsed.origin + '/',
+    };
     if (req.headers.range) headers.range = req.headers.range;   // перемотка
     const response = await fetch(source, { headers, signal: controller.signal });
     if (!response.ok && response.status !== 206) throw new Error(`ответ ${response.status}`);
