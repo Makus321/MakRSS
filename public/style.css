@@ -818,7 +818,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 }
 /* Место под ряд держим минимальной высотой, но без цветной подложки: она
    выглядела как пустой бежевый блок справа от одиночной картинки. */
-.a-body .img-row.waiting, .comment-body .img-row.waiting { min-height: 120px; }
+/* Пока картинки не пришли, место под ряд НЕ держим: иначе над первой картинкой
+   висело белое поле, которое схлопывалось через пару секунд. */
+.a-body .img-row.waiting, .comment-body .img-row.waiting { min-height: 0; }
 
 /* Меню «⋯»: аккуратная панель вместо россыпи кнопок в шапке. */
 .head-menu {
@@ -1109,7 +1111,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 .a-body p:empty, .a-body figure:empty { display: none; }
 /* На сенсорных экранах карточка — обычный поток с плавающим превью, поэтому
    строке метаданных нужно очищать обтекание: она начинается от левого края. */
-@media (max-width: 900px), (pointer: coarse) {
+@media (max-width: 699px) {
   /* .a-main «растворяется»: заголовок и мета становятся прямыми детьми шапки,
      поэтому мета может очистить обтекание и встать под превью во всю ширину. */
   .article.has-thumb .a-main { display: contents; }
@@ -1139,7 +1141,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 .embed-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; background: #000; }
 /* Карточка с превью на широком экране: картинка слева, справа — заголовок,
    мета и краткий текст (всё в одной колонке, поэтому текст идёт рядом с картинкой). */
-@media (min-width: 901px) {
+@media (min-width: 700px) {
   .article.has-thumb .a-head { display: flex; align-items: flex-start; gap: 12px; }
   /* Превью одной ширины: узкая картинка получает поля по бокам, а не сжимает колонку. */
   /* Высота превью равна высоте текста: карточка не бывает выше своего содержимого. */
@@ -1157,7 +1159,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 }
 /* Телефон: краткий текст и мета начинаются от левого края карточки, под превью.
    Превью не обрезаем: высота по пропорциям图片, ограничение только сверху. */
-@media (max-width: 900px) {
+@media (max-width: 699px) {
   .article.has-thumb .a-excerpt,
   .article.has-thumb .a-meta { clear: both; }
   .article.has-thumb .a-excerpt { display: -webkit-box; }
