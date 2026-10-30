@@ -10,6 +10,8 @@ const $ = (sel) => document.querySelector(sel);
 const manualRead = new Map();
 /** Прочитанные нами статьи остаются в списке до смены ленты: иначе они исчезают сразу после отметки. */
 const keepReadVisible = new Set();
+/** Копии прочитанных статей: если сервер пришлёт данные без них, всё равно покажем. */
+const keepReadItems = new Map();
 /** Фавиконы, которые сервер не отдал: повторно не запрашиваем. */
 const faviconFailed = new Set();
 window.__faviconFailed = (feedId) => { faviconFailed.add(feedId); };        // id → прочитано/непрочитано (приоритет над автоматикой)
@@ -468,6 +470,7 @@ const viewKey = () => JSON.stringify({
 function resetSnapshot() {
   state.snapshot = null;
   keepReadVisible.clear();
+  keepReadItems.clear();
   // Явное действие (смена ленты, обновление, «показать новые») — размораживаем,
   // после сборки снимка лента снова замирает до следующего явного действия.
   state.listFrozen = false;
@@ -570,6 +573,10 @@ function visibleItems() {
   state.listFrozen = true;
   const snapshot = state.snapshot.ids;
   const items = itemsOfView().filter((item) => snapshot.has(item.id) || keepReadVisible.has(item.id));
+  // Если данные с сервера пришли без только что прочитанной статьи — берём копию.
+  for (const [id, copy] of keepReadItems) {
+    if (!items.some((item) => item.id === id)) items.push(copy);
+  }
   // В «Избранном» порядок — по дате добавления в избранное (как и разделители
   // дней), в остальных лентах — по дате публикации.
   if (state.view.type === 'starred') {
@@ -2100,7 +2107,16 @@ async function markRead(ids, read, { silent = false } = {}) {
   const items = state.data.items ?? [];
   for (const item of items) if (ids.includes(item.id)) item.read = read;
   for (const id of ids) pendingReads.set(id, read);
-  for (const id of ids) if (read) keepReadVisible.add(id); else keepReadVisible.delete(id);
+  for (const id of ids) {
+    if (read) {
+      keepReadVisible.add(id);
+      const copy = items.find((i) => i.id === id);
+      if (copy) keepReadItems.set(id, { ...copy });
+    } else {
+      keepReadVisible.delete(id);
+      keepReadItems.delete(id);
+    }
+  }
   savePendingReads();
   if (silent) {
     renderSidebar();
