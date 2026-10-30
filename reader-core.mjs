@@ -888,7 +888,9 @@ async function fetchFullText(feedId, itemId) {
     // есть из ленты, ничего не перезаписываем.
     const freshText = htmlToText(article.html ?? '');
     const knownText = htmlToText((await store.body(feedId, itemId))?.content ?? '') || (target.excerpt ?? '');
-    if (freshText.length < knownText.length * 0.5) {
+    // Текст со страницы должен быть не короче того, что уже есть из ленты:
+    // иначе вместо статьи сохранялась «читайте также» или страница ошибки.
+    if (freshText.length < knownText.length * 0.9) {
       target.fullTriedAt = new Date().toISOString();
       store.saveStateSoon(400, { bump: false });
       return { ok: false, error: 'текст страницы короче текста ленты' };

@@ -965,7 +965,11 @@ function bodyHtml(item) {
   // Если «тело» статьи — это тот же текст, что в анонсе (так бывает у Telegram
   // и коротких новостей), в полном виде он выглядел дублем. Сравниваем начало.
   const normalise = (text) => String(text ?? '').replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase();
-  const bodySource = body.fullHtml || body.content || '';
+  // Если «полный текст со страницы» оказался короче текста из ленты — значит
+  // со страницы вытащили не статью (404, «читайте также»). Берём то, что длиннее.
+  const fullLen = String(body.fullHtml ?? '').length;
+  const feedLen = String(body.content ?? '').length;
+  const bodySource = (fullLen >= feedLen ? body.fullHtml : body.content) || body.content || '';
   const bodyHead = normalise(bodySource).slice(0, 80);
   const excerptHead = normalise(item.excerpt).slice(0, 80);
   const sameAsExcerpt = Boolean(bodyHead && excerptHead) && (bodyHead.startsWith(excerptHead) || excerptHead.startsWith(bodyHead));
