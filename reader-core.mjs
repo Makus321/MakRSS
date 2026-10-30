@@ -29,7 +29,7 @@
 //   ANY  /fever/                        протокол Fever API для внешних клиентов
 
 import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir, unlink, stat, readdir } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, mkdir, unlink, stat, readdir } from 'node:fs/promises';
 import { gzip, brotliCompress, constants as zlibConstants } from 'node:zlib';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -2350,8 +2350,20 @@ async function serveMedia(req, res, url) {
   }
 }
 
+// Временный журнал запросов: видно, что клиент просит в момент, когда статья
+// пропадает. Пишем строкой, на ответы не влияет.
+const API_LOG_FILE = path.join(DATA_DIR, 'api-log.txt');
+async function apiLog(req, url) {
+  try {
+    const ua = String(req.headers['user-agent'] ?? '').slice(0, 20);
+    const line = `${new Date().toISOString()} ${req.method} ${url.pathname}${url.search} ua=${ua}\n`;
+    await appendFile(API_LOG_FILE, line);
+  } catch { /* журнал не критичен */ }
+}
+
 async function api(req, res, url) {
   const route = `${req.method} ${url.pathname}`;
+  if (url.pathname.startsWith('/api/')) apiLog(req, url);
 
   // ---------------------------------------------------- вход и настройки
   if (route === 'GET /api/session') {
