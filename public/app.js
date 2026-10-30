@@ -3995,18 +3995,11 @@ function sanitize(html, baseUrl) {
     // трафик пойдёт только после «play». Через наш прокси, потому что CDN
     // Telegram не отдаёт файл напрямую.
     if (/\.(mp4|webm|ogv|m4v|mov|m3u8)(\?|#|$)/i.test(src)) {
-      // CDN Telegram отдаёт файл прямо в браузер (проверено: 206 + Range),
-      // поэтому для него прокси не нужен — так видео стартует надёжнее.
-      let mediaUrl = src;
-      try {
-        const host = new URL(src, location.href).hostname;
-        const direct = /(^|\.)(telesco\.pe|telegram\.org|t\.me)$/i.test(host);
-        mediaUrl = direct ? src : `/api/video?u=${encodeURIComponent(src)}`;
-      } catch { mediaUrl = `/api/video?u=${encodeURIComponent(src)}`; }
-      const safeSrc = mediaUrl.replace(/"/g, '&quot;');
-      return `<video class="video-inline" controls preload="none" playsinline src="${safeSrc}"></video>`;
-    }
-    return embedLink(src, 'Открыть видео');
+      // Видео Telegram всегда идёт через наш прокси: прямые ссылки CDN
+      // привязаны к сессии и у части пользователей не открываются.
+      const proxied = `/api/video?u=${encodeURIComponent(src)}`;
+      return `<video class="video-inline" controls preload="none" playsinline src="${proxied}"></video>`;
+    }    return embedLink(src, 'Открыть видео');
   });
   const doc = new DOMParser().parseFromString(`<div id="__root">${html}</div>`, 'text/html');
   const root = doc.getElementById('__root');
