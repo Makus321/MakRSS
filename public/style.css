@@ -1142,11 +1142,12 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 @media (min-width: 901px) and (pointer: fine) {
   .article.has-thumb .a-head { display: flex; align-items: flex-start; gap: 12px; }
   /* Превью одной ширины: узкая картинка получает поля по бокам, а не сжимает колонку. */
+  /* Высота превью равна высоте текста: карточка не бывает выше своего содержимого. */
   .article.has-thumb .a-thumb {
     flex: 0 0 15%;
     width: 15%;
-    height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1));
-    max-height: 70vh;
+    height: auto;
+    align-self: stretch;
     object-fit: contain;
     background: var(--panel-2);
     margin: 0;
