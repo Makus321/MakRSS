@@ -490,7 +490,29 @@ async function mergeItems(feedId, fresh) {
     ...old.filter((i) => !freshIds.has(i.id)),
   ];
   merged.sort(byDateDesc);
-  db.items[feedId] = merged;
+  // Сайт иногда меняет guid или дописывает utm-метки: ссылка та же, id другой.
+  // Тогда оставляем ПРЕЖНИЙ id и переносим на него отметки — иначе свежая
+  // статья «исчезает» из базы, а её звезда становится фантомной.
+  const normLink = (value) => String(value ?? '')
+    .split('#')[0].split('?')[0].replace(/\/+$/, '').toLowerCase();
+  const byLink = new Map();
+  const deduped = [];
+  for (const item of merged) {
+    const key = normLink(item.link);
+    if (!key) { deduped.push(item); continue; }
+    const prev = byLink.get(key);
+    if (!prev) { byLink.set(key, item); deduped.push(item); continue; }
+    const keep = oldIds.has(prev.id) ? prev : (oldIds.has(item.id) ? item : prev);
+    const other = keep === prev ? item : prev;
+    if (db.read[other.id] && !db.read[keep.id]) db.read[keep.id] = db.read[other.id];
+    if (db.starred[other.id] && !db.starred[keep.id]) db.starred[keep.id] = db.starred[other.id];
+    if (other.hasFull && !keep.hasFull) keep.hasFull = other.hasFull;
+    if (Number.isFinite(other.commentsCount) && !Number.isFinite(keep.commentsCount)) keep.commentsCount = other.commentsCount;
+    byLink.set(key, keep);
+    const at = deduped.indexOf(prev);
+    if (at >= 0) deduped[at] = keep;
+  }
+  db.items[feedId] = deduped;
 
   // Тела статей — в отдельные файлы.
   for (const item of fresh) {
