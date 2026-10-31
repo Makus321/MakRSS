@@ -2246,6 +2246,19 @@ async function toggleStar(id, event) {
   renderToolbar();
   try {
     const payload = await api('/api/star', { id, starred: next, light: true });
+    // Сервер может отказать: статья могла быть удалена чисткой. Тогда возвращаем
+    // звёздочку и счётчик на место, чтобы «в избранном» не появлялось пустых записей.
+    if (payload?.ok === false) {
+      item.starred = !next;
+      if (state.data?.counts) {
+        state.data.counts.starred = Math.max(0, Number(state.data.counts.starred ?? 0) + (next ? -1 : 1));
+      }
+      state.snapshot?.ids?.delete(id);
+      updateStarVisual(id, !next);
+      renderToolbar();
+      toast(payload.missing ? 'Статьи уже нет в ленте — в избранное не добавили' : 'Не удалось сохранить избранное', true);
+      return;
+    }
     if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
     if (payload?.data) rememberData(payload.data);
     // В «Избранном» снятие звезды не перерисовываем сразу: нажатие могло быть

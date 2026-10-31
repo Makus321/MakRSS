@@ -2936,6 +2936,11 @@ async function api(req, res, url) {
   if (route === 'POST /api/star') {
     const { id, starred, light } = await readJson(req);
     if (!id) return json(res, 400, { ok: false, error: 'нет id' });
+    // Звезду ставим только существующей статье: иначе в избранном появляется
+    // запись без карточки — счётчик растёт, а показать нечего.
+    if (starred !== false && !findItem(id)) {
+      return json(res, 200, { ok: false, missing: true, error: 'статья не найдена' });
+    }
     if (starred === false) delete db.starred[id];
     else db.starred[id] = Date.now();
     pruneState();
