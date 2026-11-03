@@ -1021,7 +1021,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 
 /* Карточка не должна быть ниже колонки плавающих кнопок (4 кнопки по 30 + зазоры),
    иначе кнопки вылезают за её пределы. */
-.article { min-height: var(--actions-min, 132px); }
+/* Минимальная высота — только чтобы кнопки справа не обрезались. Было 132 px:
+   у коротких карточек из-за этого оставалась пустая полоса внизу. */
+.article { min-height: var(--actions-min, 88px); }
 @media (max-width: 900px) { .article { min-height: 124px; } }
 /* Кнопки прячутся, когда раскрытую статью начали прокручивать. */
 body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
