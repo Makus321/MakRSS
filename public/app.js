@@ -205,7 +205,7 @@ function setFontSelect(select, value) {
 
 /** Шрифты и плотность — переменными CSS, чтобы применялись мгновенно. */
 /** Допустимые наборы шрифта интерфейса (должны совпадать с CSS). */
-const FONT_VARIANTS = new Set(['system', 'condensed', 'book', 'mono', 'cursive', 'tight', 'airy', 'display']);
+const FONT_VARIANTS = new Set(['system', 'condensed', 'book', 'mono', 'cursive', 'tight', 'airy', 'comfortable', 'display']);
 const fontVariant = (value) => (FONT_VARIANTS.has(value) ? value : 'system');
 
 /** Сенсорный экран (телефон, планшет, раскладной) или узкое окно. */
