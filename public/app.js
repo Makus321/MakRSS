@@ -3981,11 +3981,17 @@ function sanitize(html, baseUrl) {
   // страница не грузит ни одного кадра.
   // Реклама тоже бывает в iframe — её кнопкой не показываем.
   const isAdEmbed = (url) => /adriver|doubleclick|googlesyndication|an\.yandex\.ru|ad\.mail\.ru/i.test(String(url));
+  // Один и тот же плеер может прийти дважды: заметкой embed: из текста и обычной
+  // ссылкой ниже. Кнопку показываем только первую.
+  const seenEmbeds = new Set();
   const embedLink = (url, title) => {
     const decoded = String(url)
       .replace(/&#0*38;|&amp;/gi, '&')
       .replace(/&quot;/g, '"');
     if (isAdEmbed(decoded)) return '';
+    const key = decoded.trim().toLowerCase().replace(/\/+$/, '');
+    if (seenEmbeds.has(key)) return '';
+    seenEmbeds.add(key);
     const safe = decoded.replace(/"/g, '&quot;');
     // Плеер появляется только по нажатию — до этого никакого трафика.
     // Рядом ссылка на сайт: некоторые плееры (ВК) вне своего сайта не играют.

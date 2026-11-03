@@ -132,7 +132,7 @@ $code = Invoke-Git @('-C', $Stage, '-c', "user.name=$AuthorName", '-c', "user.em
 if ($code -ne 0) { throw 'git commit не удался' }
 
 Write-Step "Отправляю в $Remote"
-if ((Invoke-Git @('-C', $Stage, 'push', '-u', 'origin', $Branch)) -ne 0) {
+if ((Invoke-Git @('-C', $Stage, '-c', 'http.version=HTTP/1.1', 'push', '-u', 'origin', $Branch)) -ne 0) {
     throw 'git push не удался — проверьте доступ к GitHub'
 }
 
