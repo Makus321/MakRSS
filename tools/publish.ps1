@@ -133,9 +133,19 @@ $code = Invoke-Git @('-C', $Stage, '-c', "user.name=$AuthorName", '-c', "user.em
 if ($code -ne 0) { throw 'git commit не удался' }
 
 Write-Step "Отправляю в $Remote"
-if ((Invoke-Git @('-C', $Stage, '-c', 'http.version=HTTP/1.1', 'push', '-u', 'origin', $Branch)) -ne 0) {
-    throw 'git push не удался — проверьте доступ к GitHub'
-}
+    # Отправка с повторами: канал до GitHub периодически отваливается по таймауту.
+    $pushed = $false
+    for ($attempt = 1; $attempt -le 3 -and -not $pushed; $attempt += 1) {
+        if ((Invoke-Git @('-C', $Stage, '-c', 'http.version=HTTP/1.1', '-c', 'http.lowSpeedLimit=1000', '-c', 'http.lowSpeedTime=20', 'push', '-u', 'origin', $Branch)) -eq 0) {
+            $pushed = $true
+        } else {
+            Write-Host "   попытка $attempt не удалась, ждём 5 секунд" -ForegroundColor DarkYellow
+            Start-Sleep -Seconds 5
+        }
+    }
+    if (-not $pushed) {
+        throw 'git push не удался — проверьте доступ к GitHub'
+    }
 
 $sha = (& git -C $Stage rev-parse --short HEAD)
 $url = $Remote -replace '\.git$', ''
