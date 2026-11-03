@@ -1149,7 +1149,9 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
     flex: 0 0 15%;
     width: 15%;
     height: auto;
-    align-self: stretch;
+    /* Ограничение по высоте: вертикальная картинка иначе растягивала карточку. */
+    max-height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1));
+    align-self: flex-start;
     object-fit: contain;
     background: var(--panel-2);
     margin: 0;
