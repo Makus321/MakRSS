@@ -37,7 +37,8 @@ function Write-Step($text) { Write-Host "== $text" -ForegroundColor Cyan }
 function Write-Note($text) { Write-Host "   $text" -ForegroundColor DarkGray }
 function Invoke-Git {
     param([string[]]$GitArgs)
-    & git @GitArgs 2>&1 | ForEach-Object { Write-Host "   $_" -ForegroundColor DarkGray }
+    # HTTP/2 на этом канале зависает на git push — всегда ходим по HTTP/1.1.
+    & git -c http.version=HTTP/1.1 @GitArgs 2>&1 | ForEach-Object { Write-Host "   $_" -ForegroundColor DarkGray }
     return $LASTEXITCODE
 }
 
