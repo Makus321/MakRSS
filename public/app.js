@@ -4047,6 +4047,9 @@ function sanitize(html, baseUrl) {
   const resolve = (value) => {
     try { return new URL(value, baseUrl || location.href).href; } catch { return ''; }
   };
+  // Страница статьи уходит на сервер как реферер: часть сайтов отдаёт картинки
+  // только запросам со своей страницы (иначе 403 и пустые места в тексте).
+  const pageParam = baseUrl ? `&r=${encodeURIComponent(baseUrl)}` : '';
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
   const doomed = [];
   while (walker.nextNode()) {
@@ -4058,6 +4061,13 @@ function sanitize(html, baseUrl) {
     if (el.tagName === 'IMG' || el.tagName === 'VIDEO') {
       el.removeAttribute('width');
       el.removeAttribute('height');
+    }
+    // Грузим картинки по мере прокрутки: иначе статья с сотней картинок
+    // отправляет сотню запросов сразу, сайт отвечает отказами, и часть
+    // изображений так и не появляется.
+    if (el.tagName === 'IMG') {
+      el.setAttribute('loading', 'lazy');
+      el.setAttribute('decoding', 'async');
     }
     for (const attr of [...el.attributes]) {
       const name = attr.name.toLowerCase();
@@ -4078,7 +4088,7 @@ function sanitize(html, baseUrl) {
           const isMedia = !internal && name !== 'href' && /^https?:\/\//i.test(abs) && !abs.startsWith(location.origin + '/api/');
           const isVideo = el.tagName === 'VIDEO' || el.tagName === 'AUDIO' || el.tagName === 'SOURCE';
           const proxied = isMedia
-            ? (isVideo ? `/api/video?u=${encodeURIComponent(abs)}` : `/api/img?u=${encodeURIComponent(abs)}`)
+            ? (isVideo ? `/api/video?u=${encodeURIComponent(abs)}` : `/api/img?u=${encodeURIComponent(abs)}${pageParam}`)
             : abs;
           el.setAttribute(attr.name, proxied);
         } else el.removeAttribute(attr.name);
@@ -4087,7 +4097,7 @@ function sanitize(html, baseUrl) {
           const [url, ...rest] = part.trim().split(/\s+/);
           const abs = resolve(url);
           if (!/^https?:/i.test(abs)) return '';
-          const src = /^https?:/i.test(abs) ? `/api/img?u=${encodeURIComponent(abs)}` : abs;
+          const src = /^https?:/i.test(abs) ? `/api/img?u=${encodeURIComponent(abs)}${pageParam}` : abs;
           return [src, ...rest].join(' ');
         }).filter(Boolean).join(', ');
         if (fixed) el.setAttribute('srcset', fixed); else el.removeAttribute('srcset');

@@ -2147,6 +2147,17 @@ async function pruneMediaCache() {
   } catch { /* не критично */ }
 }
 
+/** Реферер для картинки: страница статьи, если она с того же сайта, иначе главная. */
+function pageReferer(imageUrl, reqUrl) {
+  const page = String(reqUrl.searchParams.get('r') ?? '');
+  try {
+    const parsedPage = new URL(page);
+    const site = (host) => host.split('.').slice(-2).join('.');
+    if (site(parsedPage.hostname) === site(imageUrl.hostname)) return parsedPage.href;
+  } catch { /* страница не передана */ }
+  return `${imageUrl.origin}/`;
+}
+
 async function serveImage(req, res, url) {
   const source = String(url.searchParams.get('u') ?? '');
   let parsed;
@@ -2171,7 +2182,9 @@ async function serveImage(req, res, url) {
 
   try {
     const response = await fetch(source, {
-      headers: { 'user-agent': UA, accept: 'image/*', referer: `${parsed.origin}/` },
+      // Хотлинк-защита: часть сайтов отдаёт картинку только с реферером
+      // своей статьи. Берём его из параметра r, иначе — с главной сайта.
+      headers: { 'user-agent': UA, accept: 'image/*', referer: pageReferer(parsed, url) },
       signal: AbortSignal.timeout(20000),
     });
     const type = String(response.headers.get('content-type') ?? '');
