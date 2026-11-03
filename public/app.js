@@ -214,17 +214,6 @@ function isTouchDevice() {
 }
 
 // Выбор размера шрифта на телефоне применяется на ступень крупнее.
-const MOBILE_FONT_STEP = {
-  // дерево подписок (12 / 13 / 16.5 / 20)
-  '12px': '14px',
-  '13px': '14.5px',
-  '16.5px': '20px',
-  '20px': '24px',
-  // текст статьи и краткий вид (13 / 14.5 / 18 / 22)
-  '14.5px': '18px',
-  '18px': '22px',
-  '22px': '26px',
-};
 
 function applyVisualPrefs() {
   const root = document.documentElement;
@@ -236,13 +225,15 @@ function applyVisualPrefs() {
   // «Телефон» — это сенсорный экран, а не узкое окно: у раскладных телефонов
   // в разложенном виде ширина большая, но шрифты должны остаться крупными.
   const mobile = isTouchDevice();
-  const bigger = (value, fallback) => {
-    const size = fontPx(value, fallback);
-    if (!mobile) return size;
-    return MOBILE_FONT_STEP[size] ?? size;
+  // На сенсорном экране те же ступени читаются мельче, поэтому прибавляем шаг
+  // к выбранному значению (пользователь видит в списке реальные пиксели).
+  const bigger = (value, fallback, extra = 3.5) => {
+    const size = parseFloat(fontPx(value, fallback)) || 14.5;
+    if (!mobile) return `${size}px`;
+    return `${Math.round((size + extra) * 10) / 10}px`;
   };
   // Остальной интерфейс подстраивается под размер шрифта дерева (13px — обычный).
-  const treeSize = parseFloat(bigger(state.prefs.fontTree, '13px')) || 13;
+  const treeSize = parseFloat(bigger(state.prefs.fontTree, '13px', 1.5)) || 13;
   // Интерфейс (кнопки, подписи, окна) растёт умеренно: иначе на телефоне поля
   // и подписи выглядят разного размера. Крупный текст статьи задаётся отдельно.
   // Масштаб интерфейса — отдельная настройка, а не производная от размера дерева.
@@ -250,7 +241,7 @@ function applyVisualPrefs() {
   // ко всем вариантам выбора, чтобы привычные ступени сохранились.
   const uiScale = Math.max(0.85, Math.min(1.6, (Number(state.prefs.uiScale) || 1) * 1.08));
   document.documentElement.style.setProperty('--ui-scale', String(uiScale));
-  root.style.setProperty('--font-tree', bigger(state.prefs.fontTree, '13px'));
+  root.style.setProperty('--font-tree', bigger(state.prefs.fontTree, '13px', 1.5));
   root.style.setProperty('--font-article', bigger(state.prefs.fontArticle, '14.5px'));
   root.style.setProperty('--font-excerpt', bigger(state.prefs.fontExcerpt, '14.5px'));
   $('#list').classList.toggle('comfortable', state.prefs.density === 'comfortable');
