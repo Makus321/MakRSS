@@ -93,6 +93,26 @@ const AUTH_PASS = '';
 // прочитанное живёт KEEP_READ_DAYS дней, избранное — всегда.
 const MAX_UNREAD_PER_FEED = Number(process.env.MAX_UNREAD_PER_FEED || argValue('max-unread', 3000));
 const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-read', 1000));
+// Идентификаторы удалённых прочитанных статей помним всегда: иначе сайт снова
+// отдаёт их в ленте, и они возвращаются как «новые». Сами статьи при этом
+// удаляются, хранятся только id (35 байт на запись).
+const SEEN_IDS_LIMIT = Number(process.env.SEEN_IDS_LIMIT || 100000);
+let seenIds = new Set();
+
+function seenIdsInit() {
+  seenIds = new Set(Array.isArray(db.seenIds) ? db.seenIds : []);
+}
+
+function rememberSeen(id) {
+  if (!id || seenIds.has(id)) return;
+  seenIds.add(id);
+  if (!Array.isArray(db.seenIds)) db.seenIds = [];
+  db.seenIds.push(id);
+  if (db.seenIds.length > SEEN_IDS_LIMIT) {
+    const drop = db.seenIds.splice(0, db.seenIds.length - SEEN_IDS_LIMIT);
+    for (const old of drop) seenIds.delete(old);
+  }
+}
 // Версия разборщика: когда он меняется, ленты перечитываются заново, даже если
 // сайт отвечает «не изменилось» — иначе старые записи остаются без новых полей.
 // Версия сборки: её сравнивает клиент, чтобы показать кнопку «Обновить приложение».
@@ -420,7 +440,11 @@ async function dedupeFeeds() {
   if (!doomed.length) return;
   const ids = new Set(doomed.map((f) => f.id));
   for (const feed of doomed) {
-    for (const item of db.items[feed.id] ?? []) { delete db.read[item.id]; delete db.starred[item.id]; }
+    for (const item of db.items[feed.id] ?? []) {
+      if (db.read[item.id]) rememberSeen(item.id);
+      delete db.read[item.id];
+      delete db.starred[item.id];
+    }
     delete db.items[feed.id];
     await store.removeFeed(feed.id);
     log(`удалён дубликат ленты «${feed.title}» (${feed.url})`);
@@ -489,6 +513,11 @@ async function mergeItems(feedId, fresh) {
     }),
     ...old.filter((i) => !freshIds.has(i.id)),
   ];
+  // Возвращённая сайтом статья, которую мы уже когда-то читали, снова считается
+  // прочитанной — сами статьи удаляются, а id остаются в памяти.
+  for (const item of merged) {
+    if (!db.read[item.id] && seenIds.has(item.id)) db.read[item.id] = Date.now();
+  }
   merged.sort(byDateDesc);
   // Сайт иногда меняет guid или дописывает utm-метки: ссылка та же, id другой.
   // Тогда оставляем ПРЕЖНИЙ id и переносим на него отметки — иначе свежая
@@ -601,6 +630,9 @@ async function pruneFeed(feedId) {
   if (removed > 0) {
     for (const item of items) {
       if (keepIds.has(item.id)) continue;
+      // Статья уже была прочитана — запоминаем её id, чтобы возвращение из
+      // ленты не показывало её как новую.
+      if (db.read[item.id]) rememberSeen(item.id);
       delete db.read[item.id];
       delete db.starred[item.id];
       // Освобождаем диск: картинка поста Telegram и кэш миниатюры этой статьи.
@@ -2864,7 +2896,11 @@ async function api(req, res, url) {
     const affected = db.feeds.filter((f) => f.folderId === id);
     if (deleteFeeds) {
       for (const feed of affected) {
-        for (const item of db.items[feed.id] ?? []) { delete db.read[item.id]; delete db.starred[item.id]; }
+        for (const item of db.items[feed.id] ?? []) {
+      if (db.read[item.id]) rememberSeen(item.id);
+      delete db.read[item.id];
+      delete db.starred[item.id];
+    }
         delete db.items[feed.id];
         await store.removeFeed(feed.id);
       }
@@ -3186,6 +3222,7 @@ export async function init(options = {}) {
   store = new Store(DATA_DIR, log);
   await store.init();
   db = store.state;
+  seenIdsInit();   // память удалённых прочитанных id
 
   // Вход и пароли ведёт контроллер; здесь остаётся только ключ Fever этого пользователя.
   const userSettings = db.settings ?? (db.settings = {});
