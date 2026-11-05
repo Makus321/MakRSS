@@ -2984,6 +2984,30 @@ async function api(req, res, url) {
     return json(res, 200, { ok: true, data: buildPayload() });
   }
 
+  // Обложка для карточки без картинки: докачиваем текст статьи (он всё равно
+  // нужен) и берём из него картинку. Повторно не чаще раза в неделю.
+  if (route === 'GET /api/cover') {
+    const id = url.searchParams.get('id') ?? '';
+    const found = findItem(id);
+    if (!found) return json(res, 404, { ok: false, error: 'статья не найдена' });
+    const { feed, item } = found;
+    if (item.image) return json(res, 200, { ok: true, image: item.image });
+    const triedAt = item.coverTriedAt ? Date.parse(item.coverTriedAt) : 0;
+    if (triedAt && Date.now() - triedAt < 7 * 86400000) {
+      return json(res, 200, { ok: false, image: null, cached: true });
+    }
+    if (String(feed?.kind ?? '').startsWith('telegram')) {
+      return json(res, 200, { ok: false, image: null });
+    }
+    item.coverTriedAt = new Date().toISOString();
+    try {
+      await fetchFullText(feed.id, item.id);
+    } catch { /* не получилось — попробуем через неделю */ }
+    store.saveStateSoon(400, { bump: false });
+    const fresh = findItem(id)?.item ?? item;
+    return json(res, 200, { ok: Boolean(fresh.image), image: fresh.image ?? null });
+  }
+
   if (route === 'POST /api/fetch-full') {
     const { id, force } = await readJson(req);
     const found = findItem(id ?? '');

@@ -1472,6 +1472,39 @@ function markBrokenImages(root = document) {
   }
 }
 
+/**
+ * Догружает обложки для карточек без картинки: по одной, не чаще раза в 1.5 с,
+ * только для видимых карточек. Сервер достаёт картинку из текста статьи.
+ */
+const coverQueue = [];
+let coverBusy = false;
+function queueCoverFetches() {
+  // Работаем только в виде «кратко + картинка»: в других видах миниатюры не нужны.
+  if (!document.querySelector('#list .article.compact-thumb')) return;
+  for (const item of visibleItems().slice(0, state.limit)) {
+    if (item.image || item.coverAsked) continue;
+    if (String(feedById(item.feedId)?.kind ?? '').startsWith('telegram')) continue;
+    item.coverAsked = true;
+    coverQueue.push(item.id);
+  }
+  pumpCoverQueue();
+}
+
+async function pumpCoverQueue() {
+  if (coverBusy) return;
+  const id = coverQueue.shift();
+  if (!id) return;
+  coverBusy = true;
+  try {
+    const res = await api(`/api/cover?id=${encodeURIComponent(id)}`);
+    if (res?.image) {
+      const item = state.data.items.find((i) => i.id === id);
+      if (item) { item.image = res.image; renderListSoon(); }
+    }
+  } catch { /* обложка не критична */ }
+  coverBusy = false;
+  if (coverQueue.length) setTimeout(pumpCoverQueue, 1500);
+}
 function renderList() {
   if (pointerDown) { renderPending = true; return; }
   if (state.scrolling) { state.deferredRender = true; return; }
@@ -1547,6 +1580,7 @@ function renderList() {
   fillViewport();          // если карточек меньше экрана — догружаем сразу
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
   markBrokenImages(listEl); // пустое место от не загрузившихся картинок
+  queueCoverFetches();    // карточки без обложки — догружаем по одной
   // Класс text-under-thumb больше не переключается: он менял высоту карточки
   // после загрузки превью, из-за чего лента прыгала. Теперь это задаёт CSS.
   updateActiveArticle();
