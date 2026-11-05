@@ -1602,6 +1602,10 @@ function renderList() {
   if (pointerDown) { renderPending = true; return; }
   if (state.scrolling) { state.deferredRender = true; return; }
   const listEl = $('#list');
+  // Панель списка иногда оказывается прокрученной (см. scrollInList): у неё нет
+  // полосы прокрутки, и шапка с поиском оставалась за краем экрана до перезагрузки.
+  const paneEl = document.querySelector('.list-pane');
+  if (paneEl && paneEl.scrollTop) paneEl.scrollTop = 0;
   // При смене ленты/папки список показываем с начала — от новых статей.
   const reset = state.resetScroll;
   state.resetScroll = false;
@@ -2122,6 +2126,28 @@ function collapseItem(id) {
   renderList();
 }
 
+/**
+ * Прокрутка внутри списка статей.
+ * scrollIntoView() прокручивает ВСЕ прокручиваемые предки, включая .list-pane
+ * (у него overflow: hidden — полосы прокрутки нет, но программно он крутится).
+ * Из-за этого шапка с поиском уезжала вверх и не возвращалась. Поэтому крутим
+ * только #list, а панель принудительно держим в нуле.
+ */
+function scrollInList(element, align = 'start') {
+  const list = $('#list');
+  const pane = document.querySelector('.list-pane');
+  if (pane && pane.scrollTop) pane.scrollTop = 0;
+  if (!element || !list) return;
+  const listRect = list.getBoundingClientRect();
+  const rect = element.getBoundingClientRect();
+  const inside = rect.top >= listRect.top && rect.bottom <= listRect.bottom;
+  if (align === 'nearest' && inside) return;
+  let delta = rect.top - listRect.top - 8;
+  if (align === 'center') delta = rect.top - listRect.top - (listRect.height - rect.height) / 2;
+  if (!Number.isFinite(delta)) return;
+  list.scrollTo({ top: Math.max(0, list.scrollTop + delta), behavior: 'smooth' });
+}
+
 /** Показать только комментарии статьи, не раскрывая её текст. */
 async function showCommentsOnly(id) {
   const item = state.data.items.find((i) => i.id === id);
@@ -2132,10 +2158,10 @@ async function showCommentsOnly(id) {
   state.commentsOnly.add(id);
   renderList();
   const element = document.querySelector(`.article[data-item="${id}"]`);
-  if (element) element.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (element) scrollInList(element, 'start');
   await loadComments(id, Boolean(state.comments.get(id)?.ok));
   const block = document.querySelector(`.article[data-item="${id}"] .a-comments`);
-  if (block) block.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  if (block) scrollInList(block, 'nearest');
 }
 
 /** Переход к соседней статье: текущую закрываем, следующую только показываем. */
@@ -2594,7 +2620,7 @@ $('#list').addEventListener('click', async (event) => {
     event.stopPropagation();
     const block = jumpNew.closest('.a-comments');
     const first = block?.querySelector('.comment.is-new');
-    if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (first) scrollInList(first, 'center');
     else toast('Новых комментариев нет');
     return;
   }
@@ -2624,7 +2650,7 @@ $('#list').addEventListener('click', async (event) => {
     await loadComments(id, Boolean(state.comments.get(id)?.ok));   // повторное нажатие — обновить
     if (jump) {
       const block = document.querySelector(`.article[data-item="${id}"] .a-comments`);
-      if (block) block.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      if (block) scrollInList(block, 'start');
     }
     return;
   }
@@ -2959,7 +2985,7 @@ $('#comments-top').addEventListener('click', async () => {
   if (isExpanded(item)) {
     await loadComments(id, Boolean(state.comments.get(id)?.ok));
     const block = document.querySelector(`.article[data-item="${id}"] .a-comments`);
-    if (block) block.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (block) scrollInList(block, 'start');
     return;
   }
   await showCommentsOnly(id);
