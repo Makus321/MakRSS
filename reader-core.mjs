@@ -1401,6 +1401,8 @@ function payloadItem(feed, item) {
     hasFull: Boolean(item.hasFull) || undefined,
     comments: Boolean(commentsProviderFor(feed, item)) || undefined,
     commentsCount: Number.isFinite(item.commentsCount) ? item.commentsCount : null,
+    commentsSeenMaxId: Number.isFinite(item.commentsSeenMaxId) ? item.commentsSeenMaxId : undefined,
+    commentsSeenCount: Number.isFinite(item.commentsSeenCount) ? item.commentsSeenCount : undefined,
     feedId: feed.id,
     feedTitle: feed.title,
     read: Boolean(db.read[item.id]) || undefined,
@@ -1437,6 +1439,10 @@ function buildPayload() {
         hasFull: Boolean(item.hasFull) || undefined,
         comments: Boolean(commentsProviderFor(feed, item)) || undefined,
         commentsCount: Number.isFinite(item.commentsCount) ? item.commentsCount : undefined,
+        // По этим двум числам карточка показывает «+N» — сколько комментариев
+        // добавилось после вашей отметки «прочитано».
+        commentsSeenMaxId: Number.isFinite(item.commentsSeenMaxId) ? item.commentsSeenMaxId : undefined,
+        commentsSeenCount: Number.isFinite(item.commentsSeenCount) ? item.commentsSeenCount : undefined,
         feedId: feed.id,
         feedTitle: feed.title,
         read: Boolean(db.read[item.id]) || undefined,
@@ -2585,7 +2591,12 @@ async function api(req, res, url) {
     const body = (await store.body(found.feed.id, found.item.id)) ?? {};
     const page = Math.max(1, Number.parseInt(url.searchParams.get('page') ?? '1', 10) || 1);
     const cachedAt = body.commentsAt ? Date.parse(body.commentsAt) : 0;
-    const fresh = body.comments && cachedAt && Date.now() - cachedAt < COMMENTS_TTL_MS;
+    // Кэш годится, только если на сайте не прибавилось комментариев: иначе в нём
+    // нет новых, и подсветка «новых» не появится.
+    const siteCount = Number(found.item.commentsCount);
+    const cachedCount = Number(body.comments?.count ?? 0);
+    const countGrew = Number.isFinite(siteCount) && cachedCount > 0 && siteCount > cachedCount;
+    const fresh = body.comments && cachedAt && Date.now() - cachedAt < COMMENTS_TTL_MS && !countGrew;
     // Страница 2 и дальше: догружаем к уже сохранённым комментариям.
     if (page > 1 && body.comments) {
       try {
