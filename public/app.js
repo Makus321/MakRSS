@@ -1948,7 +1948,13 @@ async function fetchFull(id, silent = false) {
     const res = await api('/api/fetch-full', { id });
     if (res.data) rememberData(res.data);
     const fresh = (state.data.items ?? []).find((i) => i.id === id);
-    if (fresh) fresh.hasFull = Boolean(res.item?.fullHtml);
+    if (fresh) {
+      fresh.hasFull = Boolean(res.item?.fullHtml);
+      // Сервер мог достать из статьи картинку-обложку: подставляем её в карточку,
+      // иначе миниатюра появлялась только после перезагрузки страницы.
+      if (!fresh.image && res.item?.image) fresh.image = res.item.image;
+      if (!fresh.excerpt && res.item?.excerpt) fresh.excerpt = res.item.excerpt;
+    }
     state.bodies.set(id, { content: res.item?.content ?? '', fullHtml: res.item?.fullHtml ?? '', tried: true, loaded: true });
     renderList();
     if (!silent) toast(res.ok ? 'Полный текст докачан' : `Не получилось: ${res.error ?? 'текст не найден'}`, !res.ok);
