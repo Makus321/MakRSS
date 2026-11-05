@@ -381,6 +381,10 @@ const toMeta = (item) => ({
   fullTriedAt: item.fullTriedAt ?? null,
   // Число комментариев: из ленты (если сообщает) или из ответа сайта.
   commentsCount: Number.isFinite(item.commentsCount) ? item.commentsCount : null,
+  // До какого комментария дочитано: по этим двум числам клиент показывает «+N»
+  // прямо в карточке, не открывая статью.
+  commentsSeenMaxId: Number.isFinite(item.commentsSeenMaxId) ? item.commentsSeenMaxId : null,
+  commentsSeenCount: Number.isFinite(item.commentsSeenCount) ? item.commentsSeenCount : null,
   video: item.video ?? '',
   // Длина текста, который дала сама лента: по ней решаем, нужна ли докачка.
   contentLength: typeof item.contentLength === 'number'
@@ -2638,7 +2642,9 @@ async function api(req, res, url) {
     if (maxId > previous) {
       found.item.commentsSeenMaxId = maxId;
       found.item.commentsSeenAt = new Date().toISOString();
-      found.item.commentsSeenCount = Number(found.item.commentsCount) || undefined;
+      // Сколько комментариев было на момент отметки: по этой цифре карточка
+      // показывает «+N» — сколько прибавилось с тех пор.
+      found.item.commentsSeenCount = Number(body.count) || Number(found.item.commentsCount) || undefined;
       store.saveStateSoon();
     }
     return json(res, 200, {

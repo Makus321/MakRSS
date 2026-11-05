@@ -1041,6 +1041,14 @@ function bodyHtml(item) {
     : 'В этой ленте текста нет — откройте оригинал.'}</div>`);
 }
 
+/** «+N» у счётчика комментариев: сколько добавилось после прошлой отметки. */
+function commentDelta(item) {
+  const total = Number(item.commentsCount);
+  const seen = Number(item.commentsSeenCount);
+  if (!Number.isFinite(total) || !Number.isFinite(seen) || seen <= 0) return '';
+  const diff = total - seen;
+  return diff > 0 ? ` <b class="comment-delta">+${diff}</b>` : '';
+}
 /** Блок комментариев в конце статьи. */
 function commentsHtml(item) {
   if (!item.comments) return '';
@@ -1089,7 +1097,9 @@ function commentsHtml(item) {
     walk(loaded.threads);
     return max;
   })();
-  const seenButton = newCount
+  // Кнопку показываем всегда, когда показано больше, чем отмечено: это и первая
+  // отметка (когда её ещё нет), и «догнать» после новых комментариев.
+  const seenButton = maxShownId > (Number(loaded.seenMax) || 0)
     ? `<button class="btn" data-comments-seen="${esc(item.id)}" data-max-id="${maxShownId}">Отметить прочитанными</button>`
     : '';
   const jumpButton = newCount
@@ -1192,24 +1202,28 @@ async function markCommentsSeen(id, maxId, options = {}) {
     if (hadNew) toast('Отмечено прочитанным');
   }
   try {
-    const payload = await api('/api/comments/seen', { id, maxId: max });
+    const payload = await api('/api/comments/seen', { id, maxId: max, count: Number(loaded?.count) || undefined });
     if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
   } catch { /* отметка не критична, повторим при следующем открытии */ }
 }
 
 // Долистали комментарии до конца — считаем их прочитанными.
+// Важно: отметку ставим и когда «новых» ещё нет — иначе первая отметка никогда
+// не появится, и подсвечивать будет нечего.
 let commentsSeenStamp = 0;
 window.addEventListener('scroll', () => {
   if (Date.now() - commentsSeenStamp < 1200) return;
   for (const block of document.querySelectorAll('.a-comments[data-comments-block]')) {
     const id = block.dataset.commentsBlock;
     const loaded = state.comments.get(id);
-    if (!loaded?.newIds?.length) continue;
+    if (!loaded?.ok || loaded.loading) continue;
     const list = block.querySelector('.a-comments-list');
     if (!list) continue;
     if (list.getBoundingClientRect().bottom > window.innerHeight + 60) continue;
+    const shownMax = maxCommentId(loaded.threads);
+    if (!shownMax || shownMax <= (Number(loaded.seenMax) || 0)) continue;
     commentsSeenStamp = Date.now();
-    markCommentsSeen(id, 0, { silent: true });
+    markCommentsSeen(id, shownMax, { silent: true });
   }
 }, { passive: true });
 
@@ -1371,7 +1385,7 @@ function articleHtml(item) {
           ${item.read ? '<span class="flag read-mark">✓ прочитано</span>' : ''}
           ${item.comments
             ? (Number.isFinite(item.commentsCount)
-              ? `<button class="flag comment-chip${item.commentsCount ? '' : ' empty'}" data-comments="${esc(item.id)}" data-comments-only="1" title="Показать комментарии, не раскрывая статью">💬 ${item.commentsCount}</button>`
+              ? `<button class="flag comment-chip${item.commentsCount ? '' : ' empty'}" data-comments="${esc(item.id)}" data-comments-only="1" title="Показать комментарии, не раскрывая статью">💬 ${item.commentsCount}${commentDelta(item)}</button>`
               : `<button class="flag comment-chip empty" data-comments="${esc(item.id)}" data-comments-only="1" title="Проверить комментарии">💬</button>`)
             : ''}
         </div>
