@@ -1153,11 +1153,25 @@ async function loadComments(id, force = false, options = {}) {
     }
     const item = state.data.items.find((i) => i.id === id);
     if (item && Number.isFinite(payload.total)) item.commentsCount = payload.total;
+    // На сайте комментариев больше, чем на первой странице: новые могли оказаться
+    // на следующих, поэтому догружаем сами (не больше двух страниц за раз).
+    const shown = Number(state.comments.get(id)?.count ?? 0);
+    const total = Number(state.comments.get(id)?.total ?? payload.total ?? 0);
+    const pageNow = Number(options.page) || 1;
+    if (pageNow < 3 && total > shown && state.comments.get(id)?.hasMore) {
+      autoMoreComments.add(id);
+      await loadComments(id, false, { page: pageNow + 1 });
+      autoMoreComments.delete(id);
+      return;
+    }
   } catch (err) {
     state.comments.set(id, { ...(previous ?? {}), loading: false, ok: false, error: err.message });
   }
   renderList();
 }
+
+// Статьи, у которых прямо сейчас догружаются следующие страницы комментариев.
+const autoMoreComments = new Set();
 
 /** Максимальный id среди комментариев — до него и двигаем отметку «прочитано». */
 function maxCommentId(nodes) {

@@ -512,6 +512,13 @@ async function mergeItems(feedId, fresh) {
         if (Number.isFinite(prev.n)) meta.n = prev.n;
         // Счётчик, полученный от сайта, важнее отсутствующего в ленте.
         if (!Number.isFinite(meta.commentsCount) && Number.isFinite(prev.commentsCount)) meta.commentsCount = prev.commentsCount;
+        // Отметки «дочитал комментарии» и служебные времена: в ленте их нет,
+        // поэтому переносим из прежней записи, иначе обновление ленты их стирало.
+        if (Number.isFinite(prev.commentsSeenMaxId)) meta.commentsSeenMaxId = prev.commentsSeenMaxId;
+        if (Number.isFinite(prev.commentsSeenCount)) meta.commentsSeenCount = prev.commentsSeenCount;
+        if (prev.commentsSeenAt) meta.commentsSeenAt = prev.commentsSeenAt;
+        if (prev.commentsCountAt) meta.commentsCountAt = prev.commentsCountAt;
+        if (prev.coverTriedAt) meta.coverTriedAt = prev.coverTriedAt;
       }
       return meta;
     }),
@@ -3287,6 +3294,15 @@ export async function init(options = {}) {
   await store.init();
   db = store.state;
   seenIdsInit();   // память удалённых прочитанных id
+
+  // Однократно поднимаем revision: в списке появились новые поля (отметка
+  // комментариев), а готовый ответ /api/data кэшируется по revision — без этого
+  // браузер продолжал получать список без «+N».
+  if (db.payloadVersion !== 2) {
+    db.payloadVersion = 2;
+    db.revision = Number(db.revision || 0) + 1;
+    store.saveStateSoon(200);
+  }
 
   // Вход и пароли ведёт контроллер; здесь остаётся только ключ Fever этого пользователя.
   const userSettings = db.settings ?? (db.settings = {});
