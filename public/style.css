@@ -666,6 +666,22 @@ body.dragging .tree-tail { display: flex; }
 .a-comments-list { margin-top: 10px; }
 .comment { border-left: 2px solid var(--line); padding: 6px 0 6px 10px; margin: 8px 0; }
 .comment:hover { border-left-color: var(--accent); }
+/* Новый комментарий (пришёл после отметки «дочитано»): цветная полоса слева,
+   лёгкий фон и метка. Старые остаются как были — видно, кто кому отвечает. */
+.comment.is-new {
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: 0 8px 8px 0;
+}
+.comment.is-new > .comment-head .comment-author { font-weight: 700; }
+.comment-new-chip {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 0 5px;
+  font-size: calc(var(--font-article, 16px) * 0.7);
+}
+.comments-new-count { color: var(--accent); }
 /* Имя и время комментария масштабируются вместе с текстом статьи, а не с интерфейсом. */
 .comment-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-family: inherit; font-size: calc(var(--font-article, 16px) * 0.85); color: var(--muted); margin-bottom: 2px; }
 .comment-author { color: var(--accent); font-weight: 600; }

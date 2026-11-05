@@ -1059,21 +1059,48 @@ function commentsHtml(item) {
       <span class="note">не удалось получить: ${esc(loaded.error ?? 'ошибка')}</span>
     </div></div>`;
   }
-  const render = (nodes) => nodes.map((node) => `
-    <div class="comment" style="margin-left:${Math.min(node.depth, 6) * 14}px">
+  // Новые комментарии: сервер уже сравнил их с вашей отметкой «дочитано до id N».
+  const newSet = new Set((loaded.newIds ?? []).map(String));
+  const render = (nodes) => nodes.map((node) => {
+    const isNew = newSet.has(String(node.id));
+    return `
+    <div class="comment${isNew ? ' is-new' : ''}" style="margin-left:${Math.min(node.depth, 6) * 14}px"${isNew ? ` data-comment-new="${esc(String(node.id))}"` : ''}>
       <div class="comment-head">
         <span class="comment-author">${esc(node.author)}</span>
         <span>${esc(timeAgo(node.date))}</span>
         ${node.score ? `<span class="comment-score">+${node.score}</span>` : ''}
+        ${isNew ? '<span class="comment-new-chip">новый</span>' : ''}
       </div>
       <div class="comment-body">${sanitize(node.html, node.link ?? item.link)}</div>
       ${render(node.children ?? [])}
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const total = Number.isFinite(loaded.total) ? loaded.total : loaded.count;
-  return `<div class="a-comments">
+  const newCount = newSet.size;
+  const maxShownId = (() => {
+    let max = 0;
+    const walk = (nodes) => {
+      for (const node of nodes ?? []) {
+        const num = Number(node.id);
+        if (Number.isFinite(num) && num > max) max = num;
+        walk(node.children);
+      }
+    };
+    walk(loaded.threads);
+    return max;
+  })();
+  const seenButton = newCount
+    ? `<button class="btn" data-comments-seen="${esc(item.id)}" data-max-id="${maxShownId}">Отметить прочитанными</button>`
+    : '';
+  const jumpButton = newCount
+    ? `<button class="btn" data-comments-jump="${esc(item.id)}">К первому новому</button>`
+    : '';
+  return `<div class="a-comments" data-comments-block="${esc(item.id)}">
     <div class="a-comments-head">
       <button class="btn" data-comments="${esc(item.id)}">Обновить</button>
-      <span class="note">комментариев на сайте: ${total}${loaded.count !== total ? `, показано ${loaded.count}` : ''}${loaded.cached ? ' (из кэша)' : ''}</span>
+      ${jumpButton}
+      ${seenButton}
+      <span class="note">комментариев на сайте: ${total}${loaded.count !== total ? `, показано ${loaded.count}` : ''}${newCount ? ` · <b class="comments-new-count">новых: ${newCount}</b>` : ''}${loaded.cached ? ' (из кэша)' : ''}</span>
     </div>
     <div class="a-comments-list">${loaded.threads?.length ? render(loaded.threads) : '<div class="note">Комментариев пока нет.</div>'}</div>
     ${loaded.hasMore
@@ -1106,6 +1133,8 @@ async function loadComments(id, force = false, options = {}) {
         ...previous,
         ...payload,
         threads: [...(previous.threads ?? []), ...added],
+        // Новинки объединяем: страницы считают их от одной и той же отметки.
+        newIds: [...new Set([...(previous.newIds ?? []), ...(payload.newIds ?? [])])],
         hasMore: added.length > 0 && Boolean(payload.hasMore),
         nothingNew: added.length === 0,
       });
@@ -1119,6 +1148,70 @@ async function loadComments(id, force = false, options = {}) {
   }
   renderList();
 }
+
+/** Максимальный id среди комментариев — до него и двигаем отметку «прочитано». */
+function maxCommentId(nodes) {
+  let max = 0;
+  const walk = (list) => {
+    for (const node of list ?? []) {
+      const num = Number(node.id);
+      if (Number.isFinite(num) && num > max) max = num;
+      walk(node.children);
+    }
+  };
+  walk(nodes);
+  return max;
+}
+
+/**
+ * Отмечает комментарии прочитанными до maxId и снимает подсветку.
+ * silent — без перерисовки списка (используется при прокрутке до конца).
+ */
+async function markCommentsSeen(id, maxId, options = {}) {
+  const loaded = state.comments.get(id);
+  const max = maxId || maxCommentId(loaded?.threads);
+  if (!max) return;
+  const hadNew = (loaded?.newIds ?? []).length > 0;
+  if (loaded) { loaded.newIds = []; loaded.seenMax = max; }
+  const item = state.data.items.find((i) => i.id === id);
+  if (item) item.commentsSeenMaxId = max;
+  if (options.silent) {
+    const block = document.querySelector(`.a-comments[data-comments-block="${id}"]`);
+    if (block) {
+      for (const node of block.querySelectorAll('.comment.is-new')) {
+        node.classList.remove('is-new');
+        node.removeAttribute('data-comment-new');
+      }
+      for (const chip of block.querySelectorAll('.comment-new-chip')) chip.remove();
+      for (const btn of block.querySelectorAll('[data-comments-seen], [data-comments-jump]')) btn.remove();
+      const counter = block.querySelector('.comments-new-count');
+      if (counter) counter.remove();
+    }
+  } else {
+    renderList();
+    if (hadNew) toast('Отмечено прочитанным');
+  }
+  try {
+    const payload = await api('/api/comments/seen', { id, maxId: max });
+    if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
+  } catch { /* отметка не критична, повторим при следующем открытии */ }
+}
+
+// Долистали комментарии до конца — считаем их прочитанными.
+let commentsSeenStamp = 0;
+window.addEventListener('scroll', () => {
+  if (Date.now() - commentsSeenStamp < 1200) return;
+  for (const block of document.querySelectorAll('.a-comments[data-comments-block]')) {
+    const id = block.dataset.commentsBlock;
+    const loaded = state.comments.get(id);
+    if (!loaded?.newIds?.length) continue;
+    const list = block.querySelector('.a-comments-list');
+    if (!list) continue;
+    if (list.getBoundingClientRect().bottom > window.innerHeight + 60) continue;
+    commentsSeenStamp = Date.now();
+    markCommentsSeen(id, 0, { silent: true });
+  }
+}, { passive: true });
 
 // Счётчики комментариев: показываем цифру до нажатия, чтобы было видно, есть ли смысл открывать.
 const countsRequested = new Set();
@@ -2495,6 +2588,23 @@ $('#list').addEventListener('click', async (event) => {
   if (readBtn) { event.stopPropagation(); markRead([readBtn.dataset.read], readBtn.dataset.value === '1'); return; }
   const fetchBtn = event.target.closest('[data-fetch]');
   if (fetchBtn) { event.stopPropagation(); fetchFull(fetchBtn.dataset.fetch); return; }
+  // «К первому новому» — прокрутка сразу к earliest новому комментарию.
+  const jumpNew = event.target.closest('[data-comments-jump]');
+  if (jumpNew) {
+    event.stopPropagation();
+    const block = jumpNew.closest('.a-comments');
+    const first = block?.querySelector('.comment.is-new');
+    if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    else toast('Новых комментариев нет');
+    return;
+  }
+  // «Отметить прочитанными» — двигаем отметку до максимального показанного id.
+  const seenBtn = event.target.closest('[data-comments-seen]');
+  if (seenBtn) {
+    event.stopPropagation();
+    await markCommentsSeen(seenBtn.dataset.commentsSeen, Number(seenBtn.dataset.maxId) || 0);
+    return;
+  }
   const moreBtn = event.target.closest('[data-comments-more]');
   if (moreBtn) {
     event.stopPropagation();

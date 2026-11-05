@@ -2555,6 +2555,29 @@ async function api(req, res, url) {
     if (!found) return json(res, 404, { ok: false, error: 'статья не найдена' });
     const provider = commentsProviderFor(found.feed, found.item);
     if (!provider) return json(res, 200, { ok: true, supported: false });
+    // До какого id комментариев вы дочитали. Всё, что больше, — новое.
+    // Пока отметки нет (статью ещё ни разу не открывали), новыми не считаем
+    // ничего: иначе при первом запуске подсветились бы все комментарии сразу.
+    const storedSeen = Number(found.item.commentsSeenMaxId);
+    const hasSeen = Number.isFinite(storedSeen) && storedSeen > 0;
+    const seenMax = hasSeen ? storedSeen : 0;
+    const collectNewCommentIds = (threads, from) => {
+      const out = [];
+      const walk = (nodes) => {
+        for (const node of nodes ?? []) {
+          const num = Number(node.id);
+          if (Number.isFinite(num) && num > from) out.push(String(node.id));
+          walk(node.children);
+        }
+      };
+      walk(threads);
+      return out;
+    };
+    const withNew = (payload) => ({
+      ...payload,
+      seenMax,
+      newIds: hasSeen ? collectNewCommentIds(payload.threads, seenMax) : [],
+    });
     const body = (await store.body(found.feed.id, found.item.id)) ?? {};
     const page = Math.max(1, Number.parseInt(url.searchParams.get('page') ?? '1', 10) || 1);
     const cachedAt = body.commentsAt ? Date.parse(body.commentsAt) : 0;
@@ -2579,13 +2602,13 @@ async function api(req, res, url) {
           hasMore: added.length > 0 && Boolean(more.hasMore),
         };
         await store.setBody(found.feed.id, found.item.id, { comments: merged });
-        return json(res, 200, { ok: true, supported: true, cached: false, fetchedAt: body.commentsAt, ...merged });
+        return json(res, 200, withNew({ ok: true, supported: true, cached: false, fetchedAt: body.commentsAt, ...merged }));
       } catch (err) {
-        return json(res, 200, { ok: false, supported: true, error: err.message, cached: true, ...body.comments });
+        return json(res, 200, withNew({ ok: false, supported: true, error: err.message, cached: true, ...body.comments }));
       }
     }
     if (fresh && url.searchParams.get('force') !== '1') {
-      return json(res, 200, { ok: true, supported: true, cached: true, fetchedAt: body.commentsAt, ...body.comments });
+      return json(res, 200, withNew({ ok: true, supported: true, cached: true, fetchedAt: body.commentsAt, ...body.comments }));
     }
     try {
       const result = await provider.load(httpGet, { page });
@@ -2595,10 +2618,34 @@ async function api(req, res, url) {
         found.item.commentsCountAt = new Date().toISOString();
         store.saveStateSoon();
       }
-      return json(res, 200, { ok: true, supported: true, fetchedAt: new Date().toISOString(), ...result });
+      return json(res, 200, withNew({ ok: true, supported: true, fetchedAt: new Date().toISOString(), ...result }));
     } catch (err) {
-      return json(res, 200, { ok: false, supported: true, error: err.message, cached: false });
+      return json(res, 200, withNew({ ok: false, supported: true, error: err.message, cached: false }));
     }
+  }
+
+  // Отметка «дочитал комментарии до id N» — по ней считается, что нового.
+  if (route === 'POST /api/comments/seen') {
+    const body = await readJson(req);
+    const found = findItem(body.id ?? '');
+    if (!found) return json(res, 404, { ok: false, error: 'статья не найдена' });
+    const maxId = Number(body.maxId);
+    if (!Number.isFinite(maxId) || maxId <= 0) {
+      return json(res, 400, { ok: false, error: 'не передан id комментария' });
+    }
+    const previous = Number(found.item.commentsSeenMaxId) || 0;
+    // Назад отметку не двигаем: иначе старые комментарии снова станут «новыми».
+    if (maxId > previous) {
+      found.item.commentsSeenMaxId = maxId;
+      found.item.commentsSeenAt = new Date().toISOString();
+      found.item.commentsSeenCount = Number(found.item.commentsCount) || undefined;
+      store.saveStateSoon();
+    }
+    return json(res, 200, {
+      ok: true,
+      seenMax: Number(found.item.commentsSeenMaxId) || 0,
+      revision: db.revision,
+    });
   }
 
   // Количество комментариев пачкой — чтобы кнопка сразу показывала цифру.
