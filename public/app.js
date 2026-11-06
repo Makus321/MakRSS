@@ -1272,22 +1272,25 @@ async function markCommentsSeen(id, maxId, options = {}) {
 // новому» в следующий раз ведёт дальше, а не к тем же комментариям.
 let commentsSeenStamp = 0;
 function trackCommentsProgress() {
-  if (Date.now() - commentsSeenStamp < 1200) return;
+  if (Date.now() - commentsSeenStamp < 400) return;
   for (const block of document.querySelectorAll('.a-comments[data-comments-block]')) {
     const id = block.dataset.commentsBlock;
     const loaded = state.comments.get(id);
     if (!loaded?.ok || loaded.loading) continue;
     const seen = Number(loaded.seenMax) || 0;
-    const limit = window.innerHeight - 40;
-    let passedMax = 0;
+    // Считаем прочитанным только то, что реально побывало на экране. Раньше
+    // брали всё, что выше нижнего края, — и при переходе к новым комментариям
+    // они мгновенно «прочитывались», не успев показаться.
+    let visibleMax = 0;
     for (const node of block.querySelectorAll('.comment[data-comment-id]')) {
-      if (node.getBoundingClientRect().bottom > limit) continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
       const num = Number(node.dataset.commentId);
-      if (Number.isFinite(num) && num > passedMax) passedMax = num;
+      if (Number.isFinite(num) && num > visibleMax) visibleMax = num;
     }
-    if (!passedMax || passedMax <= seen) continue;
+    if (!visibleMax || visibleMax <= seen) continue;
     commentsSeenStamp = Date.now();
-    markCommentsSeen(id, passedMax, { silent: true });
+    markCommentsSeen(id, visibleMax, { silent: true });
   }
 }
 
