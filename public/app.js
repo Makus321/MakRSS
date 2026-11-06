@@ -1072,7 +1072,7 @@ function commentsHtml(item) {
   const render = (nodes) => nodes.map((node) => {
     const isNew = newSet.has(String(node.id));
     return `
-    <div class="comment${isNew ? ' is-new' : ''}" style="margin-left:${Math.min(node.depth, 6) * 14}px"${isNew ? ` data-comment-new="${esc(String(node.id))}"` : ''}>
+    <div class="comment${isNew ? ' is-new' : ''}" data-comment-id="${esc(String(node.id))}" style="margin-left:${Math.min(node.depth, 6) * 14}px"${isNew ? ` data-comment-new="${esc(String(node.id))}"` : ''}>
       <div class="comment-head">
         <span class="comment-author">${esc(node.author)}</span>
         <span>${esc(timeAgo(node.date))}</span>
@@ -1195,25 +1195,42 @@ async function markCommentsSeen(id, maxId, options = {}) {
   const loaded = state.comments.get(id);
   const max = maxId || maxCommentId(loaded?.threads);
   if (!max) return;
-  const hadNew = (loaded?.newIds ?? []).length > 0;
-  if (loaded) { loaded.newIds = []; loaded.seenMax = max; }
+  const before = (loaded?.newIds ?? []).length;
+  // Оставляем «новыми» только те, что ещё не дочитаны: отметка двигается вперёд
+  // постепенно, вместе с прокруткой.
+  if (loaded) {
+    loaded.newIds = (loaded.newIds ?? []).filter((x) => Number(x) > max);
+    loaded.seenMax = Math.max(Number(loaded.seenMax) || 0, max);
+  }
   const item = state.data.items.find((i) => i.id === id);
-  if (item) item.commentsSeenMaxId = max;
+  if (item) {
+    item.commentsSeenMaxId = Math.max(Number(item.commentsSeenMaxId) || 0, max);
+    // Чтобы «+N» в карточке сразу уменьшилось: число на момент отметки берём из
+    // загруженного списка, а не ждём перезагрузки страницы.
+    if (Number(loaded?.count)) item.commentsSeenCount = Number(loaded.count);
+  }
+  const left = loaded?.newIds?.length ?? 0;
   if (options.silent) {
     const block = document.querySelector(`.a-comments[data-comments-block="${id}"]`);
     if (block) {
       for (const node of block.querySelectorAll('.comment.is-new')) {
+        const num = Number(node.dataset.commentId);
+        if (!Number.isFinite(num) || num > max) continue;
         node.classList.remove('is-new');
         node.removeAttribute('data-comment-new');
+        const chip = node.querySelector(':scope > .comment-head .comment-new-chip');
+        if (chip) chip.remove();
       }
-      for (const chip of block.querySelectorAll('.comment-new-chip')) chip.remove();
-      for (const btn of block.querySelectorAll('[data-comments-seen], [data-comments-jump]')) btn.remove();
       const counter = block.querySelector('.comments-new-count');
-      if (counter) counter.remove();
+      if (left && counter) counter.textContent = `новых: ${left}`;
+      if (!left) {
+        for (const btn of block.querySelectorAll('[data-comments-seen], [data-comments-jump]')) btn.remove();
+        if (counter) counter.remove();
+      }
     }
   } else {
     renderList();
-    if (hadNew) toast('Отмечено прочитанным');
+    if (before) toast('Отмечено прочитанным');
   }
   try {
     const payload = await api('/api/comments/seen', { id, maxId: max, count: Number(loaded?.count) || undefined });
@@ -1222,8 +1239,9 @@ async function markCommentsSeen(id, maxId, options = {}) {
 }
 
 // Долистали комментарии до конца — считаем их прочитанными.
-// Важно: отметку ставим и когда «новых» ещё нет — иначе первая отметка никогда
-// не появится, и подсвечивать будет нечего.
+// Отмечаем прочитанное по мере прокрутки: всё, что уже ушло выше нижнего края
+// экрана, считаем прочитанным. Так отметка двигается постепенно — и «К первому
+// новому» в следующий раз ведёт дальше, а не к тем же комментариям.
 let commentsSeenStamp = 0;
 window.addEventListener('scroll', () => {
   if (Date.now() - commentsSeenStamp < 1200) return;
@@ -1231,13 +1249,17 @@ window.addEventListener('scroll', () => {
     const id = block.dataset.commentsBlock;
     const loaded = state.comments.get(id);
     if (!loaded?.ok || loaded.loading) continue;
-    const list = block.querySelector('.a-comments-list');
-    if (!list) continue;
-    if (list.getBoundingClientRect().bottom > window.innerHeight + 60) continue;
-    const shownMax = maxCommentId(loaded.threads);
-    if (!shownMax || shownMax <= (Number(loaded.seenMax) || 0)) continue;
+    const seen = Number(loaded.seenMax) || 0;
+    const limit = window.innerHeight - 40;
+    let passedMax = 0;
+    for (const node of block.querySelectorAll('.comment[data-comment-id]')) {
+      if (node.getBoundingClientRect().bottom > limit) continue;
+      const num = Number(node.dataset.commentId);
+      if (Number.isFinite(num) && num > passedMax) passedMax = num;
+    }
+    if (!passedMax || passedMax <= seen) continue;
     commentsSeenStamp = Date.now();
-    markCommentsSeen(id, shownMax, { silent: true });
+    markCommentsSeen(id, passedMax, { silent: true });
   }
 }, { passive: true });
 
