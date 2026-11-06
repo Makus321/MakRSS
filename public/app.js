@@ -1210,6 +1210,12 @@ async function markCommentsSeen(id, maxId, options = {}) {
     if (Number(loaded?.count)) item.commentsSeenCount = Number(loaded.count);
   }
   const left = loaded?.newIds?.length ?? 0;
+    // Счётчик в карточке обновляем сразу: иначе «+N» висит до перезагрузки.
+    const chip = document.querySelector(`.article[data-item="${id}"] .comment-chip`);
+    if (chip && Number.isFinite(Number(item?.commentsCount))) {
+      chip.textContent = `💬 ${item.commentsCount}`;
+      if (left) chip.insertAdjacentHTML("beforeend", ` <b class="comment-delta">+${left}</b>`);
+    }
   if (options.silent) {
     const block = document.querySelector(`.a-comments[data-comments-block="${id}"]`);
     if (block) {
@@ -1243,7 +1249,7 @@ async function markCommentsSeen(id, maxId, options = {}) {
 // экрана, считаем прочитанным. Так отметка двигается постепенно — и «К первому
 // новому» в следующий раз ведёт дальше, а не к тем же комментариям.
 let commentsSeenStamp = 0;
-window.addEventListener('scroll', () => {
+function trackCommentsProgress() {
   if (Date.now() - commentsSeenStamp < 1200) return;
   for (const block of document.querySelectorAll('.a-comments[data-comments-block]')) {
     const id = block.dataset.commentsBlock;
@@ -1261,7 +1267,12 @@ window.addEventListener('scroll', () => {
     commentsSeenStamp = Date.now();
     markCommentsSeen(id, passedMax, { silent: true });
   }
-}, { passive: true });
+}
+
+// Именно capture: список статей прокручивается внутри #list, а такие события
+// до window не всплывают — раньше обработчик не срабатывал вовсе.
+document.addEventListener('scroll', trackCommentsProgress, { capture: true, passive: true });
+document.getElementById('list')?.addEventListener('scroll', trackCommentsProgress, { passive: true });
 
 // Счётчики комментариев: показываем цифру до нажатия, чтобы было видно, есть ли смысл открывать.
 const countsRequested = new Set();
