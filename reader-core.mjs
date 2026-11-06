@@ -2660,11 +2660,16 @@ async function api(req, res, url) {
     if (maxId > previous) {
       found.item.commentsSeenMaxId = maxId;
       found.item.commentsSeenAt = new Date().toISOString();
-      // Сколько комментариев было на момент отметки: по этой цифре карточка
-      // показывает «+N» — сколько прибавилось с тех пор.
-      found.item.commentsSeenCount = Number(body.count) || Number(found.item.commentsCount) || undefined;
-      store.saveStateSoon();
     }
+    // Число комментариев на момент отметки обновляем и без сдвига: счётчик сайта
+    // иногда считает скрытые и удалённые, которых в списке нет, — иначе «+N»
+    // висело бы вечно, хотя новых комментариев уже не осталось.
+    const countNow = Number(body.count) || Number(found.item.commentsCount) || 0;
+    if (countNow > 0) {
+      found.item.commentsSeenCount = countNow;
+      if (!found.item.commentsSeenAt) found.item.commentsSeenAt = new Date().toISOString();
+    }
+    store.saveStateSoon();
     return json(res, 200, {
       ok: true,
       seenMax: Number(found.item.commentsSeenMaxId) || 0,

@@ -1153,6 +1153,18 @@ async function loadComments(id, force = false, options = {}) {
     }
     const item = state.data.items.find((i) => i.id === id);
     if (item && Number.isFinite(payload.total)) item.commentsCount = payload.total;
+    // Новых по id нет, а счётчик сайта больше отмеченного — значит разница
+    // накопилась из скрытых и удалённых комментариев. Выравниваем цифру, чтобы
+    // «+N» в карточке не висело вечно.
+    if (item && !(payload.newIds ?? []).length) {
+      const shownMax = maxCommentId(state.comments.get(id)?.threads);
+      const seenMax = Number(state.comments.get(id)?.seenMax) || 0;
+      const siteCount = Number(item.commentsCount);
+      if (shownMax && seenMax >= shownMax && Number.isFinite(siteCount) && siteCount > (Number(item.commentsSeenCount) || 0)) {
+        item.commentsSeenCount = siteCount;
+        api('/api/comments/seen', { id, maxId: seenMax, count: siteCount }).catch(() => {});
+      }
+    }
     // На сайте комментариев больше, чем на первой странице: новые могли оказаться
     // на следующих, поэтому догружаем сами (не больше двух страниц за раз).
     const shown = Number(state.comments.get(id)?.count ?? 0);
