@@ -1173,6 +1173,28 @@ async function loadComments(id, force = false, options = {}) {
 // Статьи, у которых прямо сейчас догружаются следующие страницы комментариев.
 const autoMoreComments = new Set();
 
+// Открытые комментарии устарели: на сайте больше, чем загружено. Обновляем сами,
+// иначе «+5» в карточке есть, а «перейти к новым» не появляется — в памяти
+// лежит старый список без этих комментариев.
+const commentsStaleChecked = new Set();
+function refreshStaleComments() {
+  for (const [id, loaded] of state.comments) {
+    if (!loaded?.ok || loaded.loading) continue;
+    const item = state.data.items.find((i) => i.id === id);
+    if (!item) continue;
+    const site = Number(item.commentsCount);
+    const shown = Number(loaded.count);
+    if (!Number.isFinite(site) || !Number.isFinite(shown) || site <= shown) continue;
+    // На каждое новое значение счётчика — одна попытка обновления: иначе при
+    // счётчике, который считает и удалённые, запросы шли бы бесконечно.
+    if (loaded.refreshedForCount === site) continue;
+    if (commentsStaleChecked.has(id)) continue;
+    loaded.refreshedForCount = site;
+    commentsStaleChecked.add(id);
+    setTimeout(() => commentsStaleChecked.delete(id), 60000);
+    loadComments(id, true);
+  }
+}
 /** Максимальный id среди комментариев — до него и двигаем отметку «прочитано». */
 function maxCommentId(nodes) {
   let max = 0;
@@ -1742,6 +1764,7 @@ function renderList() {
   // Класс text-under-thumb больше не переключается: он менял высоту карточки
   // после загрузки превью, из-за чего лента прыгала. Теперь это задаёт CSS.
   updateActiveArticle();
+  refreshStaleComments();  // открытые комментарии догоняют счётчик сайта
 
   layoutArticleImages();
   showMediaCounters();
