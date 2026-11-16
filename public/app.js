@@ -1125,7 +1125,7 @@ async function loadComments(id, force = false, options = {}) {
   const page = Number(options.page) || 0;
   if (!page) {
     state.comments.set(id, { loading: true });
-    renderList();
+    patchCard(id);
   }
   try {
     const query = `/api/comments?id=${encodeURIComponent(id)}${force ? '&force=1' : ''}${page ? `&page=${page}` : ''}`;
@@ -1179,7 +1179,7 @@ async function loadComments(id, force = false, options = {}) {
   } catch (err) {
     state.comments.set(id, { ...(previous ?? {}), loading: false, ok: false, error: err.message });
   }
-  renderList();
+  patchCard(id);   // список не пересобираем: человек читает в нём же
 }
 
 // Статьи, у которых прямо сейчас догружаются следующие страницы комментариев.
@@ -1330,7 +1330,7 @@ async function requestCommentCounts() {
       if (!item) continue;
       if (Number.isFinite(count)) { item.commentsCount = count; changed = true; }
     }
-    if (changed) renderList();
+    if (changed) { for (const id of Object.keys(payload.counts ?? {})) patchCard(id); }
   } catch { /* счётчики не критичны */ }
 }
 
@@ -1690,12 +1690,37 @@ async function pumpCoverQueue() {
     const res = await api(`/api/cover?id=${encodeURIComponent(id)}`);
     if (res?.image) {
       const item = state.data.items.find((i) => i.id === id);
-      if (item) { item.image = res.image; renderListSoon(); }
+      if (item) { item.image = res.image; patchCard(id); }
     }
   } catch { /* обложка не критична */ }
   coverBusy = false;
   if (coverQueue.length) setTimeout(pumpCoverQueue, 1500);
 }
+
+/**
+ * Перерисовывает ОДНУ карточку, не трогая остальной список. Пока человек читает
+ * ленту, список пересобираться не должен: полная перерисовка сбрасывала позицию
+ * и «проматывала» статьи в прочитанные.
+ */
+function patchCard(id) {
+  const row = document.querySelector(`#list .article[data-item="${id}"]`);
+  const item = state.data.items.find((i) => i.id === id);
+  if (!row || !item) return false;
+  const list = $('#list');
+  const top = row.getBoundingClientRect().top;
+  const holder = document.createElement('div');
+  holder.innerHTML = articleHtml(item);
+  const fresh = holder.firstElementChild;
+  if (!fresh) return false;
+  row.replaceWith(fresh);
+  const after = document.querySelector(`#list .article[data-item="${id}"]`);
+  if (after && list) {
+    const delta = after.getBoundingClientRect().top - top;
+    if (Math.abs(delta) > 1) list.scrollTop += delta;   // сохраняем позицию чтения
+  }
+  return true;
+}
+
 function renderList() {
   if (pointerDown) { renderPending = true; return; }
   if (state.scrolling) { state.deferredRender = true; return; }
@@ -1855,7 +1880,10 @@ function updateActiveArticle() {
   // Отмечаем всё, что уже пролистано: низ статьи поднялся выше линии чтения.
   // Так работает при любой прокрутке (колесо, палец, клавиши, перетаскивание
   // полосы) и не зависит от того, успела ли переехать рамка.
-  if (state.prefs.readOnScroll) {
+  // Отмечаем только по свежей прокрутке человека: после пересборки карточки могут
+  // «прыгнуть» выше линии чтения, и раньше они разом уходили в прочитанные.
+  const scrolledRecently = Date.now() >= ignoreScrollUntil && Date.now() - userScrollAt < 900;
+  if (state.prefs.readOnScroll && scrolledRecently) {
     for (const entry of visible) {
       if (entry.rect.top >= lineY - 1) continue;   // ещё не спряталась под шапку
       const id = entry.row.dataset.item;
@@ -3814,11 +3842,12 @@ async function loadData({ poll = false } = {}) {
       const state_ = await api('/api/state', { ids });
       if (!state_?.items) return loadData({ poll: false });
       if (Number.isFinite(state_.revision)) state.revision = state_.revision;
+      const touched = [];
       for (const item of state.data.items ?? []) {
         const flags = state_.items[item.id];
         if (!flags) continue;
-        if (flags.r !== Boolean(item.read)) item.read = flags.r;
-        if (flags.s !== Boolean(item.starred)) item.starred = flags.s;
+        if (flags.r !== Boolean(item.read)) { item.read = flags.r; touched.push(item.id); }
+        if (flags.s !== Boolean(item.starred)) { item.starred = flags.s; touched.push(item.id); }
       }
       if (state_.counts) state.data.counts = state_.counts;
       if (state_.feedUnread && Array.isArray(state.data.feeds)) {
@@ -3828,20 +3857,27 @@ async function loadData({ poll = false } = {}) {
         }
       }
       if (state_.addedByFeed) state.data.addedByFeed = state_.addedByFeed;
-      // Синхронизация завершилась и принесла статьи — подтягиваем их в данные,
-      // иначе они не появляются ни в дереве, ни в списке.
+      // Новые статьи НЕ вставляем в список: человек читает ленту, и любая
+      // пересборка сдвигала бы её. Показываем плашку «Новых статей: N» — список
+      // пересобирается только по нажатию «Показать».
       const freshSync = state_.lastRefresh && state_.lastRefresh !== state.data.lastRefreshSeen;
-      if (freshSync && Number(state_.lastRefreshAdded) > 0) {
+      if (freshSync) {
         state.data.lastRefreshSeen = state_.lastRefresh;
-        await loadData({ poll: false });
-        return;
+        if (Number(state_.lastRefreshAdded) > 0) {
+          state.data.lastRefreshAdded = state_.lastRefreshAdded;
+          if (state_.addedByFeed) state.data.addedByFeed = state_.addedByFeed;
+        }
       }
       if (state_.lastRefresh) state.data.lastRefreshSeen = state_.lastRefresh;
       if (state_.lastRefreshAdded !== undefined) state.data.lastRefreshAdded = state_.lastRefreshAdded;
       if (state_.lastRefreshFeeds !== undefined) state.data.lastRefreshFeeds = state_.lastRefreshFeeds;
       if (state_.lastRefresh !== undefined) state.data.lastRefresh = state_.lastRefresh;
       if (state_.nextRefreshAt !== undefined) state.data.nextRefreshAt = state_.nextRefreshAt;
-      render();
+      // Пересобираем только изменившиеся карточки — остальной список не трогаем.
+      for (const id of new Set(touched)) patchCard(id);
+      renderSidebar();
+      renderToolbar();
+      renderNewRow();
       return;
     }
     if (payload.unchanged) {
