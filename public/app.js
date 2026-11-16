@@ -2754,7 +2754,17 @@ $('#list').addEventListener('click', async (event) => {
   // автоматическим правилом прокрутки.
   // Запоминаем решение человека: дальше автоматика эту статью не трогает.
   if (readBtn) manualRead.set(readBtn.dataset.read, readBtn.dataset.value === '1');
-  if (readBtn) { event.stopPropagation(); markRead([readBtn.dataset.read], readBtn.dataset.value === '1'); return; }
+  if (readBtn) {
+    event.stopPropagation();
+    // Отметку ставим точечно: полная перерисовка списка дёргала статью и
+    // сбрасывала позицию чтения. Здесь меняются только классы этой карточки.
+    const id = readBtn.dataset.read;
+    const next = readBtn.dataset.value === '1';
+    readBtn.dataset.value = next ? '0' : '1';
+    readBtn.textContent = next ? '●' : '○';
+    markRead([id], next, { silent: true });
+    return;
+  }
   const fetchBtn = event.target.closest('[data-fetch]');
   if (fetchBtn) { event.stopPropagation(); fetchFull(fetchBtn.dataset.fetch); return; }
   // «К первому новому» — прокрутка сразу к earliest новому комментарию.
