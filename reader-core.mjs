@@ -966,7 +966,7 @@ async function fetchFullText(feedId, itemId) {
     }
     // Табличные вёрстки (batona.net и подобные): разбор статьи не находит картинок,
     // хотя на странице они есть. Тогда добираем их прямо из сырого HTML.
-    let fullHtml = article.html;
+    let fullHtml = absolutizeImages(article.html, target.link);
     if (!/<img\b/i.test(fullHtml)) {
       const gallery = pageImages(res.text, target.link);
       if (gallery.length) {
@@ -2220,6 +2220,14 @@ function usableImage(url) {
  * Картинки статьи из сырой страницы: нужно для сайтов с табличной вёрсткой
  * (batona.net и подобные), где разбор статьи теряет изображения.
  */
+/** Делает относительные адреса картинок абсолютными: иначе они бьются о наш сайт. */
+function absolutizeImages(html, base) {
+  return String(html ?? '').replace(/(<img\b[^>]*\bsrc=")([^"]+)(")/gi, (all, head, src, tail) => {
+    const value = src.trim();
+    if (!value || /^(https?:|data:|\/api\/)/i.test(value)) return all;
+    try { return head + new URL(value, base).href + tail; } catch { return all; }
+  });
+}
 function pageImages(html, base) {
   const out = [];
   const seen = new Set();

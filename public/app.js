@@ -1003,7 +1003,11 @@ function bodyHtml(item) {
   }
   // Лента «только картинки»: разметка сайта не нужна, оставляем сами изображения.
   if (feedById(item.feedId)?.imagesOnly && html) {
-    const sources = [...new Set([...html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]))];
+      // Ссылки бывают относительными (/uploads/posts/…): без resolve() они
+      // запрашивались у нашего сайта и, конечно, не находились.
+      const sources = [...new Set([...html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)]
+        .map((m) => (m[1].startsWith('/api/') ? m[1] : resolve(m[1])))
+        .filter(Boolean))];
     if (!sources.length) return column(note || '<div class="a-note">В этой статье нет картинок.</div>');
     const pictures = sources.map((src) => `<p class="img-alone"><img src="${esc(src)}" alt="" loading="lazy"></p>`).join('');
     return column(note + pictures);
