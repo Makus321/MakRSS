@@ -487,7 +487,7 @@ function resetSnapshot() {
  *  иначе фильтр «Видео» в ленте «…и видео приколы» скрывал бы все статьи сразу.
  *  У постов Telegram заголовок — это имя канала, поэтому смотрим только текст. */
 function articleHaystack(item) {
-  const telegram = (item.categories ?? []).includes('telegram');
+  const telegram = Boolean(item.tg);
   // Автор — часть текста статьи для фильтров: по нему удобно скрывать или
   // наоборот оставлять материалы конкретного человека (есть у Mobile-Review).
   return `${telegram ? '' : item.title ?? ''} ${item.author ?? ''} ${item.excerpt ?? ''}`.toLowerCase();
@@ -495,7 +495,7 @@ function articleHaystack(item) {
 
 /** Текст для поиска: к тексту статьи добавляем ленту и категории — так ищут и по ленте. */
 function searchHaystack(item) {
-  return `${articleHaystack(item)} ${item.feedTitle ?? ''} ${(item.categories ?? []).join(' ')}`.toLowerCase();
+  return ` ${articleHaystack(item)} ${feedById(item.feedId)?.title ?? ''}`.toLowerCase();
 }
 
 /** Фильтры ленты: какие слова скрывать и какие показывать только. */
@@ -1472,9 +1472,9 @@ function articleHtml(item) {
       <div class="a-main">
         <h3 class="a-title">${title}</h3>
         <div class="a-meta">
-          <span class="src">${esc(item.feedTitle)}</span>
+          <span class="src">${esc(feedById(item.feedId)?.title ?? '')}</span>
           <span data-time="${esc(item.date ?? '')}">${esc(timeAgo(item.date))}</span>
-          ${item.author && item.author !== item.feedTitle ? `<span>${esc(item.author)}</span>` : ''}
+          ${item.author && item.author !== feedById(item.feedId)?.title ? `<span>${esc(item.author)}</span>` : ''}
           ${downloaded ? '<span class="flag">скачан</span>' : ''}
           ${item.read ? '<span class="flag read-mark">✓ прочитано</span>' : ''}
           ${item.comments

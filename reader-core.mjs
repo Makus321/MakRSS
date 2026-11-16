@@ -1404,14 +1404,14 @@ function payloadItem(feed, item) {
     // Клиенту нужен только факт наличия картинки: превью он берёт по своему id.
     image: usableImage(item.image) ? 1 : undefined,
     video: item.video || undefined,
-    categories: item.categories?.length ? item.categories : undefined,
+    tg: (item.categories ?? []).includes('telegram') || undefined,
     hasFull: Boolean(item.hasFull) || undefined,
     comments: Boolean(commentsProviderFor(feed, item)) || undefined,
     commentsCount: Number.isFinite(item.commentsCount) ? item.commentsCount : null,
     commentsSeenMaxId: Number.isFinite(item.commentsSeenMaxId) ? item.commentsSeenMaxId : undefined,
     commentsSeenCount: Number.isFinite(item.commentsSeenCount) ? item.commentsSeenCount : undefined,
     feedId: feed.id,
-    feedTitle: feed.title,
+
     read: Boolean(db.read[item.id]) || undefined,
     starred: Boolean(db.starred[item.id]) || undefined,
     starredAt: Number(db.starred[item.id]) || undefined,   // старые отметки без времени — в конце
@@ -1442,7 +1442,8 @@ function buildPayload() {
         excerpt: shortExcerpt(item.excerpt),
         image: usableImage(item.image) ? 1 : undefined,
         video: item.video || undefined,
-        categories: item.categories?.length ? item.categories : undefined,
+        // Метки ленты весят сотни килобайт, а клиенту нужен только признак Telegram.
+        tg: (item.categories ?? []).includes('telegram') || undefined,
         hasFull: Boolean(item.hasFull) || undefined,
         comments: Boolean(commentsProviderFor(feed, item)) || undefined,
         commentsCount: Number.isFinite(item.commentsCount) ? item.commentsCount : undefined,
@@ -1451,7 +1452,7 @@ function buildPayload() {
         commentsSeenMaxId: Number.isFinite(item.commentsSeenMaxId) ? item.commentsSeenMaxId : undefined,
         commentsSeenCount: Number.isFinite(item.commentsSeenCount) ? item.commentsSeenCount : undefined,
         feedId: feed.id,
-        feedTitle: feed.title,
+
         read: Boolean(db.read[item.id]) || undefined,
         starred: Boolean(db.starred[item.id]) || undefined,
     starredAt: Number(db.starred[item.id]) || undefined,   // старые отметки без времени — в конце
