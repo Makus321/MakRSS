@@ -1676,6 +1676,9 @@ function flushScrollWork() {
  */
 function markBrokenImages(root = document) {
   for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
+    // Картинки в «местах под картинку» грузятся своим кодом: у них ещё нет src,
+    // и проверка ошибочно помечала их битыми, после чего CSS их скрывал навсегда.
+    if (img.hasAttribute('data-lazy-img') || img.closest('.img-slot')) continue;
     if (img.dataset.brokenCheck === '1') continue;
     img.dataset.brokenCheck = '1';
     const kill = () => {
@@ -4570,6 +4573,7 @@ function loadSlotImage(slot, force = false) {
   img.src = force ? `${src}${src.includes('?') ? '&' : '?'}n=${Date.now()}` : src;
   img.onload = () => {
     img.hidden = false;
+    img.classList.remove('broken');
     slot.dataset.state = 'ready';
     slot.classList.add('ready');
     const button = slot.querySelector('.img-load');
