@@ -2615,7 +2615,8 @@ async function api(req, res, url) {
     // Временная диагностика: сколько тел просили, сколько отдали и за какое время.
     const startedAt = Date.now();
     const bodies = await bodiesFor(ids);
-    const filled = bodies.filter((b) => b && (b.fullHtml || b.content)).length;
+    const values = Object.values(bodies ?? {});
+    const filled = values.filter((b) => b && (b.fullHtml || b.content)).length;
     log(`тела: просили ${ids.length}, отдали ${filled}, байт ${JSON.stringify(bodies).length}, мс ${Date.now() - startedAt}`);
     return json(res, 200, { ok: true, bodies });
   }
