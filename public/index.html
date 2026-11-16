@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MAK RSS Reader</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f97316'/><circle cx='10' cy='22' r='3' fill='white'/><path d='M7 14a11 11 0 0 1 11 11' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/><path d='M7 7a18 18 0 0 1 18 18' stroke='white' stroke-width='3.4' fill='none' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="/style.css?v=180">
+<link rel="stylesheet" href="/style.css?v=175">
 <!-- Установка на домашний экран телефона (PWA) -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -22,7 +22,6 @@
     <div class="brand">
       <span class="logo" aria-hidden="true">◔</span>
       <h1>MAK RSS Reader</h1>
-      <span class="countdown" id="refresh-countdown" title="До следующего обновления лент">—</span>
       <button class="icon-btn" id="refresh-all" title="Обновить все ленты (r)">⟳</button>
       <button class="icon-btn" id="open-settings" title="Настройки">⚙</button>
     </div>
@@ -99,6 +98,7 @@
           <span id="width-value" class="muted">100%</span>
           <button class="icon-btn" id="width-plus" aria-label="Шире текст">+</button>
         </span>
+        <span class="countdown" id="refresh-countdown" title="До следующего обновления лент">—</span>
         <button class="icon-btn tune-btn" id="install-top" title="Установить приложение на телефон" aria-label="Установить приложение" hidden>📱</button>
         <button class="icon-btn tune-btn" id="tune-btn" title="Вид и фильтры" aria-label="Вид и фильтры">⋯</button>
         <button class="icon-btn tune-btn" id="refresh-top" title="Обновить ленту" aria-label="Обновить ленту">⟳</button>
@@ -542,6 +542,6 @@
 </div>
 
 <div class="toast" id="toast" hidden></div>
-<script src="/app.js?v=281" type="module"></script>
+<script src="/app.js?v=268" type="module"></script>
 </body>
 </html>

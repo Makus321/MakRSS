@@ -137,7 +137,7 @@ async function refreshVersion() {
 const PARSER_VERSION = 18;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
-const BODY_VERSION = 17;   // 16: добираем картинки из страницы, если разбор их потерял   // 15: короткие заголовки разделов не теряются
+const BODY_VERSION = 15;   // 15: короткие заголовки разделов не теряются
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -964,17 +964,8 @@ async function fetchFullText(feedId, itemId) {
       store.saveStateSoon(400, { bump: false });
       return { ok: false, error: 'текст страницы короче текста ленты' };
     }
-    // Табличные вёрстки (batona.net и подобные): разбор статьи не находит картинок,
-    // хотя они есть на странице. Тогда добираем их прямо из сырого HTML.
-    let fullHtml = article.html;
-    if (!/<img\b/i.test(fullHtml)) {
-      const gallery = pageImages(res.text, target.link);
-      if (gallery.length) {
-        fullHtml += "\n" + gallery.map((src) => `<p><img src="${src}" alt=""></p>`).join("\n");
-      }
-    }
     await store.setBody(feedId, itemId, {
-      fullHtml,
+      fullHtml: article.html,
       fullFetchedAt: new Date().toISOString(),
       fullSource: target.link,
       bodyVersion: BODY_VERSION,        // чтобы старые тексты перекачались после правок разбора
@@ -2206,65 +2197,15 @@ async function pruneMediaCache() {
 }
 
 /**
- * Годится ли адрес как обложка статьи. Служебные превью Хабра
- * («share/publication/…») — обычные картинки: часть живая, часть отдаёт 404.
- * Поэтому годность проверяем запросом (reachableImage), а не списком запретов.
+ * Годится ли адрес как обложка статьи. У Хабра вместо обложки иногда приходит
+ * служебная картинка «share/publication/…» — она отдаёт 404, поэтому в карточке
+ * вместо неё оставалось пустое место, которое потом пропадало.
  */
 function usableImage(url) {
   const value = String(url ?? '').trim();
   if (!/^https?:\/\//i.test(value)) return false;
-  if (/^data:|\.svg($|\?)/i.test(value)) return false;
+  if (/habr\.com\/share\/|data:|\.svg($|\?)/i.test(value)) return false;
   return true;
-}
-
-/** Отвечает ли адрес картинкой: сначала HEAD, при 403/405 — короткий GET. */
-async function reachableImage(url) {
-  if (!usableImage(url)) return false;
-  try {
-    const head = await fetch(url, {
-      method: 'HEAD',
-      headers: { 'user-agent': UA, accept: 'image/*', referer: 'https://habr.com/' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (head.ok) return /^image\//i.test(String(head.headers.get('content-type') ?? 'image/'));
-    if (head.status !== 403 && head.status !== 405) return false;
-  } catch { /* ниже пробуем GET */ }
-  try {
-    const get = await fetch(url, {
-      headers: { 'user-agent': UA, accept: 'image/*', referer: 'https://habr.com/' },
-      signal: AbortSignal.timeout(8000),
-    });
-    return get.ok && /^image\//i.test(String(get.headers.get('content-type') ?? ''));
-  } catch {
-    return false;
-  }
-}
-/**
- * Картинки статьи из сырой страницы. Нужно для сайтов с табличной вёрсткой
- * (batona.net и подобные): разбор статьи теряет их, и текст остаётся без картинок.
- */
-function pageImages(html, base) {
-  const out = [];
-  const seen = new Set();
-  const raw = String(html ?? '');
-  for (const match of raw.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)) {
-    let src = match[1].replace(/&amp;/g, '&').trim();
-    if (!src) continue;
-    if (!/^https?:/i.test(src)) {
-      try { src = new URL(src, base).href; } catch { continue; }
-    }
-    if (!usableImage(src)) continue;
-    // Служебная графика шаблона: логотипы, значки, смайлы, аватары.
-    if (/\/(?:templates|smiles|emoji|avatars?)\//i.test(src)) continue;
-    if (/\/(?:logo|banner|spacer|pixel|bn)\.(?:png|gif|jpe?g|webp)$/i.test(src)) continue;
-    // Берём только типичные папки загрузок — так отсекается обвязка сайта.
-    if (!/\/(?:uploads?|files|posts|content|images\/20\d\d)\//i.test(src)) continue;
-    if (seen.has(src)) continue;
-    seen.add(src);
-    out.push(src);
-    if (out.length >= 60) break;
-  }
-  return out;
 }
 /** Первая подходящая картинка в HTML статьи. */
 function firstImageInHtml(html) {
@@ -3188,14 +3129,10 @@ async function api(req, res, url) {
     const stored = (await store.body(feed.id, item.id)) ?? {};
     const fromStored = firstImageInHtml(stored.fullHtml) || firstImageInHtml(stored.content);
     if (fromStored) {
-      // Превью Хабра бывают битыми: ставим обложку, только если она реально
-      // отдаётся, иначе в карточке мигало пустое место и пропадало.
-      if (await reachableImage(fromStored)) {
-        item.image = fromStored;
-        item.coverTriedAt = new Date().toISOString();
-        store.saveStateSoon(400, { bump: false });
-        return json(res, 200, { ok: true, image: fromStored });
-      }
+      item.image = fromStored;
+      item.coverTriedAt = new Date().toISOString();
+      store.saveStateSoon(400, { bump: false });
+      return json(res, 200, { ok: true, image: fromStored });
     }
     const triedAt = item.coverTriedAt ? Date.parse(item.coverTriedAt) : 0;
     if (triedAt && Date.now() - triedAt < 7 * 86400000) {
@@ -3405,8 +3342,8 @@ export async function init(options = {}) {
   // Однократная чистка обложек: служебные картинки Хабра («share/publication/…»)
   // отдают 404 — в карточке от них оставалось пустое место, которое пропадало.
   // Заодно снимаем отметку «пробовали», чтобы обложки подтянулись заново.
-  if (db.coverVersion !== 5) {
-    db.coverVersion = 5;
+  if (db.coverVersion !== 4) {
+    db.coverVersion = 4;
     for (const list of Object.values(db.items ?? {})) {
       for (const item of list ?? []) {
         if (!item) continue;
