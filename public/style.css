@@ -1348,3 +1348,6 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 }
 .img-slot .img-load:hover { border-color: var(--accent); }
 .img-slot[data-failed] { border-color: #e5573f; }
+/* Слот внутри «ряда картинок» должен быть виден всегда: ряд прячет свои дети,
+   пока грузятся картинки, и заглушка иначе исчезала совсем. */
+.img-row .img-slot { display: flex; flex: 1 1 auto; }

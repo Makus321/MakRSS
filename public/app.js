@@ -4509,9 +4509,7 @@ function slotifyImages(root) {
   for (const img of [...root.querySelectorAll('img')]) {
     const src = img.getAttribute('src') ?? '';
     if (!src || img.closest('.img-slot')) continue;
-    // Внутри «ряда картинок» (.img-row) своя логика показа: ряд прячет детей,
-    // пока все не загрузились. Слот там остался бы невидимым навсегда.
-    if (img.closest('.img-row')) continue;
+
     if (/^data:/i.test(src)) continue;
     const slot = document.createElement('div');
     slot.className = 'img-slot';
@@ -4586,6 +4584,8 @@ function loadSlotImage(slot, force = false) {
       slot.append(button);
     }
     button.textContent = 'Не загрузилась — повторить';
+    // Ряд картинок ждёт всех: иначе он оставался «в ожидании» и прятал слоты.
+    if (slot.closest('.img-row')) slot.closest('.img-row').classList.add('ready');
   };
 }
 
