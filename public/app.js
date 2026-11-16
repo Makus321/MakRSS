@@ -2233,6 +2233,11 @@ async function expandItem(id) {
   state.commentsOnly.delete(id);
   state.collapsedItems.delete(id);
   state.expandedItems.add(id);
+  // Пока статья раскрыта, она остаётся в ленте даже после отметки «прочитано»:
+  // иначе в фильтре непрочитанных карточка исчезала прямо из-под чтения.
+  keepReadVisible.add(id);
+  const current = state.data.items.find((i) => i.id === id);
+  if (current) keepReadItems.set(id, { ...current });
   if (!item.read && state.prefs.readOnExpand && autoReadAllowed(id)) markRead([id], true);
   if (feverMode()) { state.bodiesAllowed = true; ensureBodiesNeeded(true); }
   if (!isBodyLoaded(id)) {
@@ -2246,6 +2251,9 @@ async function expandItem(id) {
 
 function collapseItem(id) {
   state.expandedItems.delete(id);
+  // Свернули — больше не держим принудительно: в непрочитанных ей места нет.
+  keepReadVisible.delete(id);
+  keepReadItems.delete(id);
   state.commentsOnly.delete(id);
   state.collapsedItems.add(id);
   // Свернул — значит закончил: в фильтре непрочитанных статья больше не удерживается.
