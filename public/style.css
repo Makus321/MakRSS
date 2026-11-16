@@ -936,16 +936,19 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   gap: 6px;
   margin: 10px 0;
 }
-.a-body .img-row, .comment-body .img-row { align-items: stretch; }
+.a-body .img-row, .comment-body .img-row { align-items: center; }
 /* Высота ряда — по самой высокой картинке: остальные под неё подрезаются,
    поэтому ряд получается ровным, а не «лесенкой». */
+/* Картинки в ряду показываются целиком: раньше width: 100% вместе с
+   object-fit: cover обрезало кадры по высоте и растягивало их шире текста. */
 .a-body .img-row img, .comment-body .img-row img {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   height: auto;
   max-height: 70vh;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 8px;
-  margin: 0;
+  margin: 0 auto;
 }
 
 /* Пока картинка не пришла, под неё держим место: иначе текст прыгает. */
@@ -1027,7 +1030,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Одна картинка в ряду — на всю ширину: иначе она жмётся влево, а справа
    остаётся пустое место. */
 .a-body .img-row > *:only-child, .comment-body .img-row > *:only-child { flex-basis: 100%; }
-.a-body .img-row img, .comment-body .img-row img { width: 100%; }
+.a-body .img-row img, .comment-body .img-row img { width: auto; max-width: 100%; }
 
 /* Ряд, в котором есть широкий кадр («во всю ширину текста» на сайте): ставим
    картинки в столбик, каждую — на всю ширину колонки и по центру. */
