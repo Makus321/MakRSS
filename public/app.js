@@ -1427,13 +1427,24 @@ function imageSrc(item) {
 function articleHtml(item) {
   const commentsOnly = state.commentsOnly.has(item.id);
   const expanded = isExpanded(item) || commentsOnly;
-  const mode = feedMode(item.feedId);
+  // Вид карточки берём у ТЕКУЩЕГО раздела, а не у ленты статьи: в «Избранном»
+  // иначе каждая карточка показывалась так, как настроена её лента, и выбор
+  // «кратко / кратко + картинка» в шапке ни на что не влиял.
+  const mode = state.view.type === 'feed'
+    ? feedMode(state.view.id)
+    : (state.settings.defaultView ?? 'compact-thumb');
   const kind = feedById(item.feedId)?.kind;
   const body = state.bodies.get(item.id);
   const bodyEmpty = Boolean(body) && !(body.fullHtml || body.content);
   const downloaded = item.hasFull && !bodyEmpty;
   const feed = feedById(item.feedId);
-  const lines = Math.min(12, Math.max(1, Number(feed?.lines ?? state.settings.defaultLines ?? 2)));
+  // Число строк краткого вида — тоже по текущему разделу, иначе в «Избранном»
+  // карточки использовали настройку своей ленты.
+  const lines = Math.min(12, Math.max(1, Number(
+    state.view.type === 'feed'
+      ? (feed?.lines ?? state.settings.defaultLines ?? 2)
+      : (state.settings.defaultLines ?? 2),
+  )));
   // Ширина задаётся карточке целиком — сужается и текст, и заголовок.
   const width = textWidth();
   // Если наша миниатюра не отдалась (сайт закрыл доступ, истёк токен), пробуем
