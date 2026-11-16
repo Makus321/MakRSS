@@ -964,17 +964,8 @@ async function fetchFullText(feedId, itemId) {
       store.saveStateSoon(400, { bump: false });
       return { ok: false, error: 'текст страницы короче текста ленты' };
     }
-    // Табличные вёрстки (batona.net и подобные): разбор статьи не находит картинок,
-    // хотя на странице они есть. Тогда добираем их прямо из сырого HTML.
-    let fullHtml = absolutizeImages(article.html, target.link);
-    if (!/<img\b/i.test(fullHtml)) {
-      const gallery = pageImages(res.text, target.link);
-      if (gallery.length) {
-        fullHtml += "\n" + gallery.map((src) => `<p><img src="${src}" alt=""></p>`).join("\n");
-      }
-    }
     await store.setBody(feedId, itemId, {
-      fullHtml,
+      fullHtml: article.html,
       fullFetchedAt: new Date().toISOString(),
       fullSource: target.link,
       bodyVersion: BODY_VERSION,        // чтобы старые тексты перекачались после правок разбора
@@ -2215,38 +2206,6 @@ function usableImage(url) {
   if (!/^https?:\/\//i.test(value)) return false;
   if (/habr\.com\/share\/|data:|\.svg($|\?)/i.test(value)) return false;
   return true;
-}
-/**
- * Картинки статьи из сырой страницы: нужно для сайтов с табличной вёрсткой
- * (batona.net и подобные), где разбор статьи теряет изображения.
- */
-/** Делает относительные адреса картинок абсолютными: иначе они бьются о наш сайт. */
-function absolutizeImages(html, base) {
-  return String(html ?? '').replace(/(<img\b[^>]*\bsrc=")([^"]+)(")/gi, (all, head, src, tail) => {
-    const value = src.trim();
-    if (!value || /^(https?:|data:|\/api\/)/i.test(value)) return all;
-    try { return head + new URL(value, base).href + tail; } catch { return all; }
-  });
-}
-function pageImages(html, base) {
-  const out = [];
-  const seen = new Set();
-  for (const match of String(html ?? '').matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)) {
-    let src = match[1].replace(/&amp;/g, '&').trim();
-    if (!src) continue;
-    if (!/^https?:/i.test(src)) {
-      try { src = new URL(src, base).href; } catch { continue; }
-    }
-    if (!usableImage(src)) continue;
-    if (/\/(?:templates|smiles|emoji|avatars?)\//i.test(src)) continue;
-    if (/\/(?:logo|banner|spacer|pixel|bn)\.(?:png|gif|jpe?g|webp)$/i.test(src)) continue;
-    if (!/\/(?:uploads?|files|posts|content|images\/20\d\d)\//i.test(src)) continue;
-    if (seen.has(src)) continue;
-    seen.add(src);
-    out.push(src);
-    if (out.length >= 60) break;
-  }
-  return out;
 }
 /** Первая подходящая картинка в HTML статьи. */
 function firstImageInHtml(html) {
