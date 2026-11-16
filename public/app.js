@@ -2622,7 +2622,16 @@ async function toggleStar(id, event) {
       state.snapshot?.ids?.delete(id);
       updateStarVisual(id, !next);
       renderToolbar();
-      toast(payload.missing ? 'Статьи уже нет в ленте — в избранное не добавили' : 'Не удалось сохранить избранное', true);
+      if (payload.missing) {
+        // Статьи на сервере уже нет (её убрала чистка прочитанного): убираем и карточку,
+        // чтобы не оставалось «мёртвых» записей, которые нельзя ни открыть, ни сохранить.
+        state.data.items = (state.data.items ?? []).filter((i) => i.id !== id);
+        if (state.snapshot?.ids) state.snapshot.ids.delete(id);
+        renderList();
+        toast('Статьи уже нет в ленте — карточка убрана', true);
+        return;
+      }
+      toast('Не удалось сохранить избранное', true);
       return;
     }
     if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
