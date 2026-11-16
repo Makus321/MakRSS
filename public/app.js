@@ -2519,6 +2519,10 @@ async function toggleStar(id, event) {
   // Сначала показываем результат, потом отправляем: иначе при медленной сети
   // нажатие выглядело как «ничего не произошло».
   item.starred = next;
+  // Время добавления в избранное: по нему «Избранное» сортируется, и без него
+  // свежая закладка уезжала в конец списка.
+  if (next) item.starredAt = Date.now();
+  else delete item.starredAt;
   if (state.data?.counts) {
     state.data.counts.starred = Math.max(0, Number(state.data.counts.starred ?? 0) + (next ? 1 : -1));
   }
