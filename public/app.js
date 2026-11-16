@@ -2408,12 +2408,27 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', flushNow);
 
+/**
+ * Немедленно отражает отметку на кнопке статьи: без этого при прокрутке текст
+ * уходил из списка, а кнопка продолжала показывать прежнее состояние.
+ */
+function syncReadButton(id, read) {
+  const row = document.querySelector(`.article[data-item="${id}"]`);
+  const button = row?.querySelector('[data-read]');
+  if (!button) return;
+  button.dataset.value = read ? '0' : '1';
+  button.textContent = read ? '●' : '○';
+  button.title = read ? 'Отметить непрочитанной (m)' : 'Отметить прочитанной (m)';
+  row.classList.toggle('read', read);
+  row.classList.toggle('unread', !read);
+}
 async function markRead(ids, read, { silent = false } = {}) {
   if (!ids.length) return;
   // Сразу отмечаем локально и запоминаем в очереди: при плохой связи это главное —
   // интерфейс не должен ждать сервер и не должен «терять» отметку.
   const items = state.data.items ?? [];
   for (const item of items) if (ids.includes(item.id)) item.read = read;
+  for (const id of ids) syncReadButton(id, read);   // метка на кнопке — сразу
   for (const id of ids) pendingReads.set(id, read);
   for (const id of ids) {
     if (read) {
