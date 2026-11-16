@@ -1134,7 +1134,7 @@ async function loadComments(id, force = false, options = {}) {
   const page = Number(options.page) || 0;
   if (!page) {
     state.comments.set(id, { loading: true });
-    patchCard(id);
+    if (!patchComments(id)) patchCard(id);
   }
   try {
     const query = `/api/comments?id=${encodeURIComponent(id)}${force ? '&force=1' : ''}${page ? `&page=${page}` : ''}`;
@@ -1188,7 +1188,7 @@ async function loadComments(id, force = false, options = {}) {
   } catch (err) {
     state.comments.set(id, { ...(previous ?? {}), loading: false, ok: false, error: err.message });
   }
-  patchCard(id);   // список не пересобираем: человек читает в нём же
+  if (!patchComments(id)) patchCard(id);   // список не пересобираем
 }
 
 // Статьи, у которых прямо сейчас догружаются следующие страницы комментариев.
@@ -1730,6 +1730,31 @@ async function pumpCoverQueue() {
  * ленту, список пересобираться не должен: полная перерисовка сбрасывала позицию
  * и «проматывала» статьи в прочитанные.
  */
+/**
+ * Перерисовывает только блок комментариев, не трогая карточку целиком: замена
+ * карточки меняла её высоту, и список «прыгал» вниз при нажатии «Обновить».
+ */
+function patchComments(id) {
+  const row = document.querySelector(`#list .article[data-item="${id}"]`);
+  const item = state.data.items.find((i) => i.id === id);
+  if (!row || !item) return false;
+  const block = row.querySelector('.a-comments');
+  if (!block) return false;
+  const holder = document.createElement('div');
+  holder.innerHTML = commentsHtml(item);
+  const fresh = holder.firstElementChild;
+  if (!fresh) return false;
+  const list = $('#list');
+  const top = block.getBoundingClientRect().top;
+  block.replaceWith(fresh);
+  const after = row.querySelector('.a-comments');
+  if (after && list) {
+    const delta = after.getBoundingClientRect().top - top;
+    if (Math.abs(delta) > 1) list.scrollTop += delta;   // кнопка остаётся под курсором
+  }
+  return true;
+}
+
 function patchCard(id) {
   const row = document.querySelector(`#list .article[data-item="${id}"]`);
   const item = state.data.items.find((i) => i.id === id);
