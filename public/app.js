@@ -4468,8 +4468,10 @@ function sanitize(html, baseUrl) {
  */
 function trimPromoTail(root) {
   const nodes = [...root.children];
-  const from = Math.max(0, nodes.length - 8);
-  for (let i = nodes.length - 1; i >= from; i -= 1) {
+  const from = Math.max(0, nodes.length - 12);
+  // Идём от начала хвоста вниз: нужен САМЫЙ РАННИЙ заголовок-анонс, иначе
+  // вырежется только последняя ссылка, а список останется.
+  for (let i = from; i < nodes.length; i += 1) {
     const node = nodes[i];
     if (!/^H[1-4]$/.test(node.tagName)) continue;
     const links = node.querySelectorAll('a');
