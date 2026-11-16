@@ -2258,12 +2258,11 @@ async function expandItem(id) {
 
 function collapseItem(id) {
   state.expandedItems.delete(id);
-  // Свернули — больше не держим принудительно: в непрочитанных ей места нет.
-  keepReadVisible.delete(id);
-  keepReadItems.delete(id);
+  // Свёрнутая статья остаётся в ленте до смены раздела: иначе она исчезала
+  // прямо под курсором сразу после сворачивания.
   state.commentsOnly.delete(id);
   state.collapsedItems.add(id);
-  // Свернул — значит закончил: в фильтре непрочитанных статья больше не удерживается.
+
   if (state.selectedId === id) state.selectedId = null;
   renderList();
 }
