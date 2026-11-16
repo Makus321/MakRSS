@@ -1833,6 +1833,18 @@ function refreshTimes() {
  * Если список не прокручивали, а просто перерисовали (подгрузился текст, картинка),
  * рамка остаётся на прежней статье — так она не моргает.
  */
+/** Числа в подвале: сколько статей считаем прочитанными и сколько отметок в очереди. */
+function updateFooterStats() {
+  const label = $('#sidebar-version');
+  if (!label) return;
+  const styleTag = document.querySelector('link[rel="stylesheet"]');
+  const styleVersion = /v=(\d+)/.exec(styleTag?.href ?? '')?.[1] ?? '?';
+  const readCount = (state.data.items ?? []).filter((i) => i.read).length;
+  const pendingCount = pendingReads.size;
+  label.textContent = 'Версия ' + APP_VERSION + ' · стили v' + styleVersion
+    + ' · прочитано ' + readCount + ' · в очереди ' + pendingCount
+    + (state.lastError ? ' · ошибка: ' + state.lastError : ' · ошибок нет');
+}
 function updateActiveArticle() {
   const list = $('#list');
   if (!list) return;
@@ -2389,7 +2401,9 @@ function applyPendingReads(items) {
 
 /** Отправляет накопленные отметки. Без сети просто попробуем позже. */
 async function flushPendingReads() {
-  if (!pendingReads.size || !navigator.onLine) return;
+  // navigator.onLine врёт за прокси, VPN и в PWA: отметки копились в очереди и
+  // никогда не уходили. Пробуем отправлять всегда, а ошибку просто игнорируем.
+  if (!pendingReads.size) return;
   const byValue = new Map([[true, []], [false, []]]);
   for (const [id, read] of pendingReads) byValue.get(read).push(id);
   for (const [read, ids] of byValue) {
@@ -2414,7 +2428,7 @@ window.addEventListener('online', () => { flushPendingReads(); });
 const flushNow = () => { flushPendingReads().catch(() => {}); };
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
-    if (pendingReads.size && navigator.onLine) {
+    if (pendingReads.size) {
       for (const [read, ids] of [[true, []], [false, []]]) {
         const list = [...pendingReads].filter(([, value]) => value === read).map(([id]) => id);
         if (!list.length) continue;
@@ -2454,6 +2468,7 @@ async function markRead(ids, read, { silent = false } = {}) {
   const items = state.data.items ?? [];
   for (const item of items) if (ids.includes(item.id)) item.read = read;
   for (const id of ids) syncReadButton(id, read);   // метка на кнопке — сразу
+  updateFooterStats();
   for (const id of ids) pendingReads.set(id, read);
   for (const id of ids) {
     if (read) {
@@ -4205,9 +4220,7 @@ function setupPwa() {
     // отметок ещё не ушло на сервер — по этим числам понятно, где теряется состояние.
     const readCount = (state.data.items ?? []).filter((i) => i.read).length;
     const pendingCount = pendingReads.size;
-    sidebarVersion.textContent = 'Версия ' + APP_VERSION + ' · стили v' + styleVersion
-      + ' · прочитано ' + readCount + ' · в очереди ' + pendingCount
-      + (state.lastError ? ' · ошибка: ' + state.lastError : ' · ошибок нет');
+    updateFooterStats();
   }
 
   // Кнопка «Обновить приложение» нужна только когда браузер уже скачал новую
