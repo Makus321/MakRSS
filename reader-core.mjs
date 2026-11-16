@@ -2834,6 +2834,11 @@ async function api(req, res, url) {
   if (route === 'POST /api/state') {
     const body = await readJson(req);
     const ids = Array.isArray(body.ids) ? body.ids.slice(0, 500) : [];
+    // Каких статей уже нет: клиент показывал «мёртвые» карточки, у которых сервер
+    // удалил и статью, и текст (чистка прочитанного). Просим их убрать из списка.
+    const existing = new Set();
+    for (const list of Object.values(db.items ?? {})) for (const item of list) existing.add(item.id);
+    const missing = ids.filter((id) => !existing.has(id));
     const items = {};
     for (const id of ids) items[id] = { r: Boolean(db.read[id]), s: Boolean(db.starred[id]) };
     const allItems = Object.values(db.items ?? {}).reduce((sum, list) => sum + list.length, 0);
@@ -2847,6 +2852,7 @@ async function api(req, res, url) {
       counts: { all: allItems, unread: allItems - Object.keys(db.read ?? {}).length, starred: Object.keys(db.starred ?? {}).length },
       feedUnread,
       items,
+      missing,
       // Сколько новых статей пришло при последней синхронизации по лентам:
       // без этого не появлялась плашка «Новых статей: N».
       addedByFeed: lastAddedByFeed,

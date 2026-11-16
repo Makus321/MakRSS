@@ -3948,6 +3948,13 @@ async function loadData({ poll = false } = {}) {
         if (flags.r !== Boolean(item.read)) { item.read = flags.r; touched.push(item.id); }
         if (flags.s !== Boolean(item.starred)) { item.starred = flags.s; touched.push(item.id); }
       }
+      // Сервер сообщает, каких статей уже нет: убираем их карточки, иначе они висят
+      // без текста и не открываются («статьи уже нет в ленте»).
+      if (Array.isArray(state_.missing) && state_.missing.length) {
+        const gone = new Set(state_.missing);
+        state.data.items = (state.data.items ?? []).filter((item) => !gone.has(item.id));
+        for (const id of gone) state.snapshot?.ids?.delete(id);
+      }
       if (state_.counts) state.data.counts = state_.counts;
       if (state_.feedUnread && Array.isArray(state.data.feeds)) {
         for (const feed of state.data.feeds) {
