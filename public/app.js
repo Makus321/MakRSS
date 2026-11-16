@@ -2250,7 +2250,9 @@ async function expandItem(id) {
     await ensureBodiesNeeded();
   }
   const body = state.bodies.get(id);
-  if (!body?.fullHtml && !body?.content && item.link && !item.hasFull) await fetchFull(id, true);
+  // Текст мог быть удалён чисткой, хотя отметка «скачан» осталась. Раньше из-за
+  // этого статья открывалась пустой и предлагала «докачать» без картинок.
+  if (!body?.fullHtml && !body?.content && item.link) await fetchFull(id, true);
   renderList();
 }
 
