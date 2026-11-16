@@ -2088,6 +2088,14 @@ let scrollSettleTimer = null;   // проверка после остановк�
 // На телефоне после отпускания пальца список ещё катится по инерции: события
 // touchmove при этом не приходят, и прокрутка переставала считаться «своей».
 // Запоминаем касание и продолжаем считать движение руки свежим.
+// Временная диагностика: последняя ошибка клиента видна в подвале.
+window.addEventListener('error', (event) => {
+  state.lastError = String(event.message ?? 'ошибка').slice(0, 80);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  state.lastError = String(reason?.message ?? reason ?? 'отказ').slice(0, 80);
+});
 let lastTouchAt = 0;
 document.getElementById('list')?.addEventListener('scroll', () => {
   if (lastTouchAt && Date.now() - lastTouchAt < 1500) userScrollAt = Date.now();
@@ -4198,7 +4206,8 @@ function setupPwa() {
     const readCount = (state.data.items ?? []).filter((i) => i.read).length;
     const pendingCount = pendingReads.size;
     sidebarVersion.textContent = 'Версия ' + APP_VERSION + ' · стили v' + styleVersion
-      + ' · прочитано ' + readCount + ' · в очереди ' + pendingCount;
+      + ' · прочитано ' + readCount + ' · в очереди ' + pendingCount
+      + (state.lastError ? ' · ошибка: ' + state.lastError : ' · ошибок нет');
   }
 
   // Кнопка «Обновить приложение» нужна только когда браузер уже скачал новую
