@@ -452,6 +452,15 @@ const feedById = (id) => state.data.feeds.find((f) => f.id === id) ?? null;
 /** Режим показа для канала: своя настройка либо общая по умолчанию. */
 const feedMode = (feedId) => feedById(feedId)?.view ?? state.settings.defaultView ?? 'compact-thumb';
 
+/**
+ * Вид карточек у ТЕКУЩЕГО раздела. В ленте — её настройка, в остальных разделах
+ * («Избранное», «Непрочитанные», папки) — общая, выбранная в шапке. Раньше везде
+ * бралась настройка ленты статьи, и в избранном выбор вида ни на что не влиял.
+ */
+const viewMode = () => (state.view.type === 'feed'
+  ? feedMode(state.view.id)
+  : (state.settings.defaultView ?? 'compact-thumb'));
+
 /** Порядок статей: у каждого канала свой, иначе общий из настроек. */
 const sortDir = () => (state.view.type === 'feed'
   ? (viewFeed()?.sort ?? state.settings.defaultSort ?? 'desc')
@@ -707,7 +716,7 @@ function renderToolbar() {
   $('#unread-mode-wrap').hidden = state.view.type === 'starred';
   $('#view-refresh').classList.toggle('spin', Boolean(state.data.refreshing));
 
-  const mode = state.view.type === 'feed' ? feedMode(state.view.id) : (state.settings.defaultView ?? 'compact-thumb');
+  const mode = viewMode();
   const modeSelect = $('#view-switch');
   if (modeSelect) modeSelect.value = mode;
   const lines = Math.min(12, Math.max(1, Number(
@@ -861,7 +870,7 @@ function renderFilterRow() {
 function isExpanded(item) {
   if (state.collapsedItems.has(item.id)) return false;
   if (state.expandedItems.has(item.id)) return true;
-  return feedMode(item.feedId) === 'full';
+  return viewMode() === 'full';
 }
 
 /**
@@ -1430,9 +1439,7 @@ function articleHtml(item) {
   // Вид карточки берём у ТЕКУЩЕГО раздела, а не у ленты статьи: в «Избранном»
   // иначе каждая карточка показывалась так, как настроена её лента, и выбор
   // «кратко / кратко + картинка» в шапке ни на что не влиял.
-  const mode = state.view.type === 'feed'
-    ? feedMode(state.view.id)
-    : (state.settings.defaultView ?? 'compact-thumb');
+  const mode = viewMode();
   const kind = feedById(item.feedId)?.kind;
   const body = state.bodies.get(item.id);
   const bodyEmpty = Boolean(body) && !(body.fullHtml || body.content);
@@ -4002,7 +4009,7 @@ function setupMobile() {
   const headMenu = $('#head-menu');
   const closeHeadMenu = () => { headMenu.hidden = true; };
   const syncHeadMenu = () => {
-    const mode = state.view.type === 'feed' ? feedMode(state.view.id) : (state.settings.defaultView ?? 'compact-thumb');
+    const mode = viewMode();
     const select = $('#menu-view-mode');
     if (select) select.value = mode;
     // Текущие значения «непрочитанные/все» и «строк» — те же, что в шапке.
