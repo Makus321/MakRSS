@@ -452,6 +452,15 @@ const feedById = (id) => state.data.feeds.find((f) => f.id === id) ?? null;
 /** Режим показа для канала: своя настройка либо общая по умолчанию. */
 const feedMode = (feedId) => feedById(feedId)?.view ?? state.settings.defaultView ?? 'compact-thumb';
 
+/**
+ * Вид карточек у ТЕКУЩЕГО раздела: в ленте — её настройка, в «Избранном» и прочих
+ * разделах — общий вид из шапки. Раньше везде бралась настройка ленты статьи, и в
+ * избранном выбор вида ни на что не влиял.
+ */
+const viewMode = () => (state.view.type === 'feed'
+  ? feedMode(state.view.id)
+  : (state.settings.defaultView ?? 'compact-thumb'));
+
 /** Порядок статей: у каждого канала свой, иначе общий из настроек. */
 const sortDir = () => (state.view.type === 'feed'
   ? (viewFeed()?.sort ?? state.settings.defaultSort ?? 'desc')
@@ -707,7 +716,7 @@ function renderToolbar() {
   $('#unread-mode-wrap').hidden = state.view.type === 'starred';
   $('#view-refresh').classList.toggle('spin', Boolean(state.data.refreshing));
 
-  const mode = state.view.type === 'feed' ? feedMode(state.view.id) : (state.settings.defaultView ?? 'compact-thumb');
+  const mode = viewMode();
   const modeSelect = $('#view-switch');
   if (modeSelect) modeSelect.value = mode;
   const lines = Math.min(12, Math.max(1, Number(
@@ -861,7 +870,7 @@ function renderFilterRow() {
 function isExpanded(item) {
   if (state.collapsedItems.has(item.id)) return false;
   if (state.expandedItems.has(item.id)) return true;
-  return feedMode(item.feedId) === 'full';
+  return viewMode() === 'full';
 }
 
 /**
@@ -1420,7 +1429,7 @@ function imageSrc(item) {
 function articleHtml(item) {
   const commentsOnly = state.commentsOnly.has(item.id);
   const expanded = isExpanded(item) || commentsOnly;
-  const mode = feedMode(item.feedId);
+  const mode = viewMode();
   const kind = feedById(item.feedId)?.kind;
   const body = state.bodies.get(item.id);
   const bodyEmpty = Boolean(body) && !(body.fullHtml || body.content);
@@ -2551,6 +2560,10 @@ async function toggleStar(id, event) {
   // Сначала показываем результат, потом отправляем: иначе при медленной сети
   // нажатие выглядело как «ничего не произошло».
   item.starred = next;
+  // Запоминаем время добавления: по нему «Избранное» сортируется, иначе свежая
+  // закладка уезжала вниз списка.
+  if (next) item.starredAt = Date.now();
+  else delete item.starredAt;
   if (state.data?.counts) {
     state.data.counts.starred = Math.max(0, Number(state.data.counts.starred ?? 0) + (next ? 1 : -1));
   }
@@ -4019,7 +4032,7 @@ function setupMobile() {
   const headMenu = $('#head-menu');
   const closeHeadMenu = () => { headMenu.hidden = true; };
   const syncHeadMenu = () => {
-    const mode = state.view.type === 'feed' ? feedMode(state.view.id) : (state.settings.defaultView ?? 'compact-thumb');
+    const mode = viewMode();
     const select = $('#menu-view-mode');
     if (select) select.value = mode;
     // Текущие значения «непрочитанные/все» и «строк» — те же, что в шапке.
@@ -4290,9 +4303,11 @@ function updateCountdown() {
   const minutes = Math.floor(left / 60_000);
   const seconds = Math.floor((left % 60_000) / 1000);
   // Ноль показываем только мгновение: дальше честно пишем, что идёт обновление.
-  el.textContent = left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 3000
-    ? '⏱ обновляю…'
-    : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
+  const spinning = left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 3000;
+  // Вместо длинного «обновляю…» — компактная стрелка: слово раздвигало строку дерева.
+  el.textContent = spinning ? '⟳' : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
+  el.title = spinning ? 'Обновляю ленты…' : 'До следующего обновления лент';
+  el.classList.toggle('spinning', spinning);
 
   // Отсчёт дошёл до нуля — сразу спрашиваем сервер и, если он ещё не обновил
   // ленты, просим обновить (не чаще раза в минуту).

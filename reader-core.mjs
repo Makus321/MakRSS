@@ -2207,6 +2207,24 @@ function usableImage(url) {
   if (/habr\.com\/share\/|data:|\.svg($|\?)/i.test(value)) return false;
   return true;
 }
+/**
+ * Проверяет, что картинка реально отдаётся. Нужно для служебных превью Хабра
+ * (habr.com/share/publication/…): часть из них отдаёт 404, часть работает.
+ */
+async function reachableImage(url) {
+  const value = String(url ?? '').trim();
+  if (!/^https?:\/\//i.test(value)) return false;
+  const headers = { 'user-agent': 'Mozilla/5.0 (compatible; MakRSS/1.0)', accept: 'image/*' };
+  try {
+    const head = await fetch(value, { method: 'HEAD', headers, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+    if (head.ok && /^image\//i.test(head.headers.get('content-type') || '')) return true;
+    if (head.status !== 403 && head.status !== 405) return false;
+  } catch { /* пробуем обычным запросом */ }
+  try {
+    const get = await fetch(value, { headers: { ...headers, range: 'bytes=0-1024' }, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+    return get.ok && /^image\//i.test(get.headers.get('content-type') || '');
+  } catch { return false; }
+}
 /** Первая подходящая картинка в HTML статьи. */
 function firstImageInHtml(html) {
   const text = String(html ?? '');
@@ -3125,6 +3143,11 @@ async function api(req, res, url) {
     if (!found) return json(res, 404, { ok: false, error: 'статья не найдена' });
     const { feed, item } = found;
     if (usableImage(item.image)) return json(res, 200, { ok: true, image: item.image });
+    // Служебные превью Хабра не отбрасываем огульно: часть из них отдаёт нормальную
+    // картинку, и тогда карточка получает обложку вместо пустого места.
+    if (item.image && /habr\.com\/share\//i.test(item.image) && await reachableImage(item.image)) {
+      return json(res, 200, { ok: true, image: item.image });
+    }
     // Уже скачанный текст статьи: картинку можно взять прямо оттуда, без сети.
     const stored = (await store.body(feed.id, item.id)) ?? {};
     const fromStored = firstImageInHtml(stored.fullHtml) || firstImageInHtml(stored.content);
