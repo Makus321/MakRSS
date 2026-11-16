@@ -635,6 +635,7 @@ function renderSidebar() {
   $('#badge-starred').textContent = starredAll || '';
   $('#feed-count').textContent = feeds.length ? `${feeds.length}` : '';
   for (const btn of document.querySelectorAll('.nav-item')) btn.classList.toggle('active', state.view.type === btn.dataset.view);
+  updateFooterStats();   // числа в подвале — сразу после отрисовки дерева
 
   const feedRow = (feed) => {
     const active = state.view.type === 'feed' && state.view.id === feed.id;
@@ -2415,7 +2416,7 @@ async function flushPendingReads() {
       for (const id of ids) pendingReads.delete(id);
       savePendingReads();
       if (payload?.data) rememberData(payload.data);
-    if (next) pendingUnstar.delete(id);
+      updateFooterStats();   // очередь уменьшилась — показываем сразу
     } catch { /* нет сети — повторим позже */ }
   }
 }
