@@ -4250,10 +4250,12 @@ function updateCountdown() {
   const left = Math.max(0, at - Date.now());
   const minutes = Math.floor(left / 60_000);
   const seconds = Math.floor((left % 60_000) / 1000);
-  // Ноль показываем только мгновение: дальше честно пишем, что идёт обновление.
-  el.textContent = left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 3000
-    ? '⏱ обновляю…'
-    : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
+  // Ноль показываем только мгновение. Дальше — не слово «обновляю…» (оно длинное
+  // и раздвигало строку дерева), а компактная вращающаяся стрелка с подсказкой.
+  const spinning = left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 3000;
+  el.textContent = spinning ? '⟳' : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
+  el.title = spinning ? 'Обновляю ленты…' : 'До следующего обновления лент';
+  el.classList.toggle('spinning', spinning);
 
   // Отсчёт дошёл до нуля — сразу спрашиваем сервер и, если он ещё не обновил
   // ленты, просим обновить (не чаще раза в минуту).
