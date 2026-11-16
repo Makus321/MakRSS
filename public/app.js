@@ -4193,7 +4193,12 @@ function setupPwa() {
     // Показываем заодно версии стилей и кэша: по ним видно, обновилось ли приложение.
     const styleTag = document.querySelector('link[rel="stylesheet"]');
     const styleVersion = /v=(\d+)/.exec(styleTag?.href ?? '')?.[1] ?? '?';
-    sidebarVersion.textContent = 'Версия ' + APP_VERSION + ' · стили v' + styleVersion;
+    // Диагностика: видно, сколько статей клиент считает прочитанными и сколько
+    // отметок ещё не ушло на сервер — по этим числам понятно, где теряется состояние.
+    const readCount = (state.data.items ?? []).filter((i) => i.read).length;
+    const pendingCount = pendingReads.size;
+    sidebarVersion.textContent = 'Версия ' + APP_VERSION + ' · стили v' + styleVersion
+      + ' · прочитано ' + readCount + ' · в очереди ' + pendingCount;
   }
 
   // Кнопка «Обновить приложение» нужна только когда браузер уже скачал новую
