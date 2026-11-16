@@ -1824,6 +1824,7 @@ function renderList() {
   requestCommentCounts();
   fillViewport();          // если карточек меньше экрана — догружаем сразу
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
+  setupImageSlots(listEl); // места под картинки статьи: кнопка «загрузить» по клику
   markBrokenImages(listEl); // пустое место от не загрузившихся картинок
   queueCoverFetches();    // карточки без обложки — догружаем по одной
   // Класс text-under-thumb больше не переключается: он менял высоту карточки
@@ -2785,6 +2786,13 @@ $('#list').addEventListener('click', async (event) => {
   if (seenBtn) {
     event.stopPropagation();
     await markCommentsSeen(seenBtn.dataset.commentsSeen, Number(seenBtn.dataset.maxId) || 0);
+    return;
+  }
+  const imgLoad = event.target.closest('[data-img-load]');
+  if (imgLoad) {
+    event.stopPropagation();
+    const slot = imgLoad.closest('.img-slot');
+    if (slot) { imgLoad.textContent = 'Загружаю…'; loadSlotImage(slot, true); }
     return;
   }
   const moreBtn = event.target.closest('[data-comments-more]');
@@ -4486,8 +4494,92 @@ function sanitize(html, baseUrl) {
   }
   flush();
 
+  slotifyImages(root);
   trimPromoTail(root);
   return root.innerHTML;
+}
+
+/**
+ * Каждую картинку статьи превращаем в «место под картинку» с кнопкой.
+ * Пока картинка не загрузилась (или сервер не смог её достать), видно рамку с
+ * кнопкой «Загрузить картинку» — по клику пробуем ещё раз. Иначе в длинных
+ * статьях часть картинок молча отсутствовала и место под них не резервировалось.
+ */
+function slotifyImages(root) {
+  for (const img of [...root.querySelectorAll('img')]) {
+    const src = img.getAttribute('src') ?? '';
+    if (!src || img.closest('.img-slot')) continue;
+    if (/^data:/i.test(src)) continue;
+    const slot = document.createElement('div');
+    slot.className = 'img-slot';
+    slot.dataset.src = src;
+    const alt = (img.getAttribute('alt') ?? '').slice(0, 80);
+    if (alt) slot.dataset.alt = alt;
+    const hidden = img.cloneNode(false);
+    hidden.removeAttribute('src');
+    hidden.setAttribute('data-lazy-img', '1');
+    hidden.setAttribute('hidden', '');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'img-load';
+    button.setAttribute('data-img-load', '1');
+    button.textContent = 'Загрузить картинку';
+    slot.append(hidden, button);
+    img.replaceWith(slot);
+  }
+}
+
+/** Подключает «места под картинки»: подгружаем близкие к экрану, остальные — по клику. */
+let slotObserver = null;
+function setupImageSlots(root = document) {
+  if (!slotObserver) {
+    slotObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        slotObserver.unobserve(entry.target);
+        loadSlotImage(entry.target);
+      }
+    }, { root: $('#list') ?? null, rootMargin: '600px 0px' });
+  }
+  for (const slot of root.querySelectorAll('.img-slot:not([data-state])')) {
+    slot.dataset.state = 'wait';
+    slotObserver.observe(slot);
+  }
+}
+
+/** Грузит картинку в конкретное место. force — повторная попытка по кнопке. */
+function loadSlotImage(slot, force = false) {
+  const img = slot.querySelector('img[data-lazy-img]');
+  const src = slot.dataset.src;
+  if (!img || !src) return;
+  slot.dataset.state = 'loading';
+  if (force) slot.removeAttribute('data-failed');
+  // Принудительная загрузка идёт с меткой времени: сервер не отдаёт старый
+  // неудачный ответ из кэша и пробует достать картинку заново.
+  img.src = force ? `${src}${src.includes('?') ? '&' : '?'}n=${Date.now()}` : src;
+  img.onload = () => {
+    img.hidden = false;
+    slot.dataset.state = 'ready';
+    slot.classList.add('ready');
+    const button = slot.querySelector('.img-load');
+    if (button) button.remove();
+    if (slot.closest('.img-row')) slot.closest('.img-row').classList.add('ready');
+  };
+  img.onerror = () => {
+    img.hidden = true;
+    slot.dataset.state = 'failed';
+    slot.setAttribute('data-failed', '1');
+    let button = slot.querySelector('.img-load');
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'img-load';
+      button.setAttribute('data-img-load', '1');
+      button.textContent = 'Загрузить картинку';
+      slot.append(button);
+    }
+    button.textContent = 'Не загрузилась — повторить';
+  };
 }
 
 /**

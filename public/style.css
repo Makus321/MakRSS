@@ -1321,3 +1321,30 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 
 /* «+3» у счётчика комментариев в карточке: сколько прибавилось после отметки. */
 .comment-delta { color: var(--accent); font-weight: 700; }
+/* Место под картинку статьи: пока картинка не загрузилась, видно рамку с кнопкой.
+   Так в длинных статьях понятно, где будет изображение, и его можно догрузить. */
+.img-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.img-slot img { display: block; max-width: 100%; height: auto; }
+.img-slot.ready { border: 0; padding: 0; background: none; min-height: 0; }
+.img-slot .img-load {
+  font: inherit;
+  font-size: calc(12.5px * var(--ui-scale, 1));
+  color: var(--accent);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.img-slot .img-load:hover { border-color: var(--accent); }
+.img-slot[data-failed] { border-color: #e5573f; }
