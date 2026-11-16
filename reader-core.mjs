@@ -2612,7 +2612,12 @@ async function api(req, res, url) {
   if (route === 'POST /api/bodies') {
     const body = await readJson(req);
     const ids = Array.isArray(body.ids) ? body.ids.filter((x) => typeof x === 'string').slice(0, 80) : [];
-    return json(res, 200, { ok: true, bodies: await bodiesFor(ids) });
+    // Временная диагностика: сколько тел просили, сколько отдали и за какое время.
+    const startedAt = Date.now();
+    const bodies = await bodiesFor(ids);
+    const filled = bodies.filter((b) => b && (b.fullHtml || b.content)).length;
+    log(`тела: просили ${ids.length}, отдали ${filled}, байт ${JSON.stringify(bodies).length}, мс ${Date.now() - startedAt}`);
+    return json(res, 200, { ok: true, bodies });
   }
 
   // Комментарии к статье (Хабр — через его JSON-API; для остальных сайтов не поддерживается).
