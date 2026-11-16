@@ -4457,5 +4457,29 @@ function sanitize(html, baseUrl) {
   }
   flush();
 
+  trimPromoTail(root);
   return root.innerHTML;
+}
+
+/**
+ * Убирает хвостовые «анонсы» Хабра: заголовок, состоящий из одной ссылки на другую
+ * статью, и всё, что идёт после него (пересказ и список таких же ссылок).
+ * В самом тексте статьи ссылки не трогаем — только этот концевой блок.
+ */
+function trimPromoTail(root) {
+  const nodes = [...root.children];
+  const from = Math.max(0, nodes.length - 8);
+  for (let i = nodes.length - 1; i >= from; i -= 1) {
+    const node = nodes[i];
+    if (!/^H[1-4]$/.test(node.tagName)) continue;
+    const links = node.querySelectorAll('a');
+    if (links.length !== 1) continue;
+    const text = node.textContent.replace(/\s+/g, ' ').trim();
+    const linkText = links[0].textContent.replace(/\s+/g, ' ').trim();
+    if (!text || text !== linkText) continue;              // заголовок целиком из ссылки
+    const href = links[0].getAttribute('href') ?? '';
+    if (!/\/articles\/\d+/.test(href)) continue;            // ссылка на другую статью
+    for (let j = nodes.length - 1; j >= i; j -= 1) nodes[j].remove();
+    break;
+  }
 }
