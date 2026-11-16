@@ -375,7 +375,7 @@ const toMeta = (item) => ({
   // текст берём из содержимого статьи, иначе карточка показывала только
   // «Нажмите, чтобы раскрыть статью».
   excerpt: shortExcerpt(item.excerpt || htmlToText(item.content ?? '')),
-  image: item.image,
+  image: usableImage(item.image) ? item.image : undefined,
   categories: item.categories ?? [],
   hasFull: Boolean(item.hasFull),
   fullTriedAt: item.fullTriedAt ?? null,
@@ -921,7 +921,7 @@ async function fetchFullText(feedId, itemId) {
     }
     // У старых избранных статей не было превью — берём картинку из текста.
     if (!target.image) {
-      const firstImage = /<img[^>]+src="([^"]+)"/i.exec(body.fullHtml ?? '')?.[1];
+      const firstImage = firstImageInHtml(body.fullHtml);
       if (firstImage) { target.image = firstImage; store.saveStateSoon(400, { bump: false }); }
     }
     return { ok: true, cached: true };
@@ -974,7 +974,7 @@ async function fetchFullText(feedId, itemId) {
     await store.flushFeed(feedId);
     target.hasFull = true;
     target.fullTriedAt = new Date().toISOString();
-    if (!target.image && article.image) target.image = article.image;
+    if (!target.image && usableImage(article.image)) target.image = article.image;
     if (!target.excerpt) target.excerpt = htmlToText(article.html).slice(0, 400);
     store.saveStateSoon(400, { bump: false });
     fullTextDone += 1;
@@ -1402,7 +1402,7 @@ function payloadItem(feed, item) {
     author: item.author || undefined,
     excerpt: shortExcerpt(item.excerpt),
     // Клиенту нужен только факт наличия картинки: превью он берёт по своему id.
-    image: item.image ? 1 : undefined,
+    image: usableImage(item.image) ? 1 : undefined,
     video: item.video || undefined,
     categories: item.categories?.length ? item.categories : undefined,
     hasFull: Boolean(item.hasFull) || undefined,
@@ -1440,7 +1440,7 @@ function buildPayload() {
         date: item.date,
         author: item.author || undefined,
         excerpt: shortExcerpt(item.excerpt),
-        image: item.image ? 1 : undefined,
+        image: usableImage(item.image) ? 1 : undefined,
         video: item.video || undefined,
         categories: item.categories?.length ? item.categories : undefined,
         hasFull: Boolean(item.hasFull) || undefined,
@@ -1677,7 +1677,7 @@ async function backfillStarredImages(limit = 200) {
       if (fixed >= limit) break;
       if (!db.starred[item.id] || item.image) continue;
       const body = (await store.body(feed.id, item.id)) ?? {};
-      const firstImage = /<img[^>]+src="([^"]+)"/i.exec(body.fullHtml ?? body.content ?? '')?.[1];
+      const firstImage = firstImageInHtml(body.fullHtml) || firstImageInHtml(body.content);
       if (!firstImage) continue;
       item.image = firstImage;
       fixed += 1;
@@ -2196,6 +2196,27 @@ async function pruneMediaCache() {
   } catch { /* не критично */ }
 }
 
+/**
+ * Годится ли адрес как обложка статьи. У Хабра вместо обложки иногда приходит
+ * служебная картинка «share/publication/…» — она отдаёт 404, поэтому в карточке
+ * вместо неё оставалось пустое место, которое потом пропадало.
+ */
+function usableImage(url) {
+  const value = String(url ?? '').trim();
+  if (!/^https?:\/\//i.test(value)) return false;
+  if (/habr\.com\/share\/|data:|\.svg($|\?)/i.test(value)) return false;
+  return true;
+}
+/** Первая подходящая картинка в HTML статьи. */
+function firstImageInHtml(html) {
+  const text = String(html ?? '');
+  if (!text) return '';
+  for (const match of text.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)) {
+    const src = match[1].replace(/&amp;/g, '&');
+    if (usableImage(src)) return src;
+  }
+  return '';
+}
 /** Реферер для картинки: страница статьи, если она с того же сайта, иначе главная. */
 function pageReferer(imageUrl, reqUrl) {
   const page = String(reqUrl.searchParams.get('r') ?? '');
@@ -3103,7 +3124,16 @@ async function api(req, res, url) {
     const found = findItem(id);
     if (!found) return json(res, 404, { ok: false, error: 'статья не найдена' });
     const { feed, item } = found;
-    if (item.image) return json(res, 200, { ok: true, image: item.image });
+    if (usableImage(item.image)) return json(res, 200, { ok: true, image: item.image });
+    // Уже скачанный текст статьи: картинку можно взять прямо оттуда, без сети.
+    const stored = (await store.body(feed.id, item.id)) ?? {};
+    const fromStored = firstImageInHtml(stored.fullHtml) || firstImageInHtml(stored.content);
+    if (fromStored) {
+      item.image = fromStored;
+      item.coverTriedAt = new Date().toISOString();
+      store.saveStateSoon(400, { bump: false });
+      return json(res, 200, { ok: true, image: fromStored });
+    }
     const triedAt = item.coverTriedAt ? Date.parse(item.coverTriedAt) : 0;
     if (triedAt && Date.now() - triedAt < 7 * 86400000) {
       return json(res, 200, { ok: false, image: null, cached: true });
@@ -3307,6 +3337,21 @@ export async function init(options = {}) {
     db.payloadVersion = 2;
     db.revision = Number(db.revision || 0) + 1;
     store.saveStateSoon(200);
+  }
+
+  // Однократная чистка обложек: служебные картинки Хабра («share/publication/…»)
+  // отдают 404 — в карточке от них оставалось пустое место, которое пропадало.
+  // Заодно снимаем отметку «пробовали», чтобы обложки подтянулись заново.
+  if (db.coverVersion !== 4) {
+    db.coverVersion = 4;
+    for (const list of Object.values(db.items ?? {})) {
+      for (const item of list ?? []) {
+        if (!item) continue;
+        if (item.image && !usableImage(item.image)) delete item.image;
+        if (!item.image) delete item.coverTriedAt;
+      }
+    }
+    store.saveStateSoon(300);
   }
 
   // Вход и пароли ведёт контроллер; здесь остаётся только ключ Fever этого пользователя.
