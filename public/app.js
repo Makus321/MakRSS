@@ -1743,6 +1743,12 @@ function patchCard(id) {
     const delta = after.getBoundingClientRect().top - top;
     if (Math.abs(delta) > 1) list.scrollTop += delta;   // сохраняем позицию чтения
   }
+  // Свежая карточка могла принести новые картинки (докачался текст, пришла
+  // обложка): подключаем их к наблюдателю, иначе слоты оставались заглушками.
+  if (after) {
+    setupImageSlots(after);
+    setupReadObservers();
+  }
   return true;
 }
 
