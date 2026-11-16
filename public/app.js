@@ -3879,7 +3879,7 @@ async function loadSettings() {
   try { state.settings = (await api('/api/settings')).settings; } catch { /* недоступно до входа */ }
 }
 
-async function loadData({ poll = false } = {}) {
+async function loadData({ poll = false, silent = false } = {}) {
   try {
     if (PAGED_DATA) {
       if (poll && state.revision) {
@@ -3938,6 +3938,8 @@ async function loadData({ poll = false } = {}) {
           state.data.lastRefreshAdded = state_.lastRefreshAdded;
           if (state_.addedByFeed) state.data.addedByFeed = state_.addedByFeed;
         }
+        await loadData({ poll: false, silent: true });
+        return;
       }
       if (state_.lastRefresh) state.data.lastRefreshSeen = state_.lastRefresh;
       if (state_.lastRefreshAdded !== undefined) state.data.lastRefreshAdded = state_.lastRefreshAdded;
@@ -3978,6 +3980,12 @@ async function loadData({ poll = false } = {}) {
       return;
     }
     if (!rememberData(payload)) return;         // ответ без данных не применяем
+    if (silent) {
+      renderSidebar();
+      renderToolbar();
+      renderNewRow();
+      return;
+    }
     render();
     flushPendingReads();                        // заодно отправим отложенные отметки
   } catch (err) {
