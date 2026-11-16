@@ -4509,6 +4509,9 @@ function slotifyImages(root) {
   for (const img of [...root.querySelectorAll('img')]) {
     const src = img.getAttribute('src') ?? '';
     if (!src || img.closest('.img-slot')) continue;
+    // Внутри «ряда картинок» (.img-row) своя логика показа: ряд прячет детей,
+    // пока все не загрузились. Слот там остался бы невидимым навсегда.
+    if (img.closest('.img-row')) continue;
     if (/^data:/i.test(src)) continue;
     const slot = document.createElement('div');
     slot.className = 'img-slot';
