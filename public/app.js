@@ -4330,9 +4330,11 @@ function updateCountdown() {
   const minutes = Math.floor(left / 60_000);
   const seconds = Math.floor((left % 60_000) / 1000);
   // Ноль показываем только мгновение: дальше честно пишем, что идёт обновление.
-  el.textContent = left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 3000
-    ? '⏱ обновляю…'
-    : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
+  const spinning = left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 3000;
+  // Вместо длинного «обновляю…» — компактная стрелка: слово раздвигало строку.
+  el.textContent = spinning ? '⟳' : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
+  el.title = spinning ? 'Обновляю ленты…' : 'До следующего обновления лент';
+  el.classList.toggle('spinning', spinning);
 
   // Отсчёт дошёл до нуля — сразу спрашиваем сервер и, если он ещё не обновил
   // ленты, просим обновить (не чаще раза в минуту).
