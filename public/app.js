@@ -1844,7 +1844,8 @@ function updateFooterStats() {
   const pendingCount = pendingReads.size;
   // Иконки вместо слов: подвал компактный, пояснения — в подсказке при наведении.
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
-  label.innerHTML = 'Версия ' + APP_VERSION + ' · стили v' + styleVersion
+  // Версия и стили одним числом: 1.0.277.178 (сборка · стили) — коротко и понятно.
+  label.innerHTML = APP_VERSION + '.' + styleVersion
     + ' · ' + icon('●', 'Прочитано статей в данных') + ' ' + readCount
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
     + ' · ' + (state.lastError
