@@ -939,16 +939,19 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   gap: 6px;
   margin: 10px 0;
 }
-.a-body .img-row, .comment-body .img-row { align-items: stretch; }
+.a-body .img-row, .comment-body .img-row { align-items: center; }
 /* Высота ряда — по самой высокой картинке: остальные под неё подрезаются,
    поэтому ряд получается ровным, а не «лесенкой». */
+/* Картинки в ряду показываем целиком: раньше width: 100% вместе с
+   object-fit: cover обрезало кадры по высоте и растягивало их шире текста. */
 .a-body .img-row img, .comment-body .img-row img {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   height: auto;
   max-height: 70vh;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 8px;
-  margin: 0;
+  margin: 0 auto;
 }
 
 /* Пока картинка не пришла, под неё держим место: иначе текст прыгает. */
@@ -1030,7 +1033,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Одна картинка в ряду — на всю ширину: иначе она жмётся влево, а справа
    остаётся пустое место. */
 .a-body .img-row > *:only-child, .comment-body .img-row > *:only-child { flex-basis: 100%; }
-.a-body .img-row img, .comment-body .img-row img { width: 100%; }
+.a-body .img-row img, .comment-body .img-row img { width: auto; max-width: 100%; }
 
 /* Ряд, в котором есть широкий кадр («во всю ширину текста» на сайте): ставим
    картинки в столбик, каждую — на всю ширину колонки и по центру. */
@@ -1324,3 +1327,21 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 
 /* «+3» у счётчика комментариев в карточке: сколько прибавилось после отметки. */
 .comment-delta { color: var(--accent); font-weight: 700; }
+/* Место под картинку статьи: пока её нет, видно рамку с кнопкой «Загрузить».
+   Так в длинных статьях понятно, где будет изображение, и его можно догрузить. */
+.img-slot {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 96px; margin: 10px 0; padding: 10px;
+  border: 1px dashed var(--line); border-radius: 8px; background: var(--panel-2);
+}
+.img-slot img { display: block; max-width: 100%; height: auto; }
+.img-slot.ready { border: 0; padding: 0; background: none; min-height: 0; }
+.img-slot .img-load {
+  font: inherit; font-size: calc(12.5px * var(--ui-scale, 1));
+  color: var(--accent); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer;
+}
+.img-slot .img-load:hover { border-color: var(--accent); }
+.img-slot[data-failed] { border-color: #e5573f; }
+/* В «ряду картинок» ряд прячет детей до готовности — слот должен быть виден всегда. */
+.img-row .img-slot { display: flex; flex: 1 1 auto; }
