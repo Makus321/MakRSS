@@ -2197,15 +2197,38 @@ async function pruneMediaCache() {
 }
 
 /**
- * Годится ли адрес как обложка статьи. У Хабра вместо обложки иногда приходит
- * служебная картинка «share/publication/…» — она отдаёт 404, поэтому в карточке
- * вместо неё оставалось пустое место, которое потом пропадало.
+ * Годится ли адрес как обложка статьи. Служебные превью Хабра
+ * («share/publication/…») — обычные картинки: часть живая, часть отдаёт 404.
+ * Поэтому годность проверяем запросом (reachableImage), а не списком запретов.
  */
 function usableImage(url) {
   const value = String(url ?? '').trim();
   if (!/^https?:\/\//i.test(value)) return false;
-  if (/habr\.com\/share\/|data:|\.svg($|\?)/i.test(value)) return false;
+  if (/^data:|\.svg($|\?)/i.test(value)) return false;
   return true;
+}
+
+/** Отвечает ли адрес картинкой: сначала HEAD, при 403/405 — короткий GET. */
+async function reachableImage(url) {
+  if (!usableImage(url)) return false;
+  try {
+    const head = await fetch(url, {
+      method: 'HEAD',
+      headers: { 'user-agent': UA, accept: 'image/*', referer: 'https://habr.com/' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (head.ok) return /^image\//i.test(String(head.headers.get('content-type') ?? 'image/'));
+    if (head.status !== 403 && head.status !== 405) return false;
+  } catch { /* ниже пробуем GET */ }
+  try {
+    const get = await fetch(url, {
+      headers: { 'user-agent': UA, accept: 'image/*', referer: 'https://habr.com/' },
+      signal: AbortSignal.timeout(8000),
+    });
+    return get.ok && /^image\//i.test(String(get.headers.get('content-type') ?? ''));
+  } catch {
+    return false;
+  }
 }
 /** Первая подходящая картинка в HTML статьи. */
 function firstImageInHtml(html) {
@@ -3129,10 +3152,14 @@ async function api(req, res, url) {
     const stored = (await store.body(feed.id, item.id)) ?? {};
     const fromStored = firstImageInHtml(stored.fullHtml) || firstImageInHtml(stored.content);
     if (fromStored) {
-      item.image = fromStored;
-      item.coverTriedAt = new Date().toISOString();
-      store.saveStateSoon(400, { bump: false });
-      return json(res, 200, { ok: true, image: fromStored });
+      // Превью Хабра бывают битыми: ставим обложку, только если она реально
+      // отдаётся, иначе в карточке мигало пустое место и пропадало.
+      if (await reachableImage(fromStored)) {
+        item.image = fromStored;
+        item.coverTriedAt = new Date().toISOString();
+        store.saveStateSoon(400, { bump: false });
+        return json(res, 200, { ok: true, image: fromStored });
+      }
     }
     const triedAt = item.coverTriedAt ? Date.parse(item.coverTriedAt) : 0;
     if (triedAt && Date.now() - triedAt < 7 * 86400000) {
@@ -3342,8 +3369,8 @@ export async function init(options = {}) {
   // Однократная чистка обложек: служебные картинки Хабра («share/publication/…»)
   // отдают 404 — в карточке от них оставалось пустое место, которое пропадало.
   // Заодно снимаем отметку «пробовали», чтобы обложки подтянулись заново.
-  if (db.coverVersion !== 4) {
-    db.coverVersion = 4;
+  if (db.coverVersion !== 5) {
+    db.coverVersion = 5;
     for (const list of Object.values(db.items ?? {})) {
       for (const item of list ?? []) {
         if (!item) continue;
