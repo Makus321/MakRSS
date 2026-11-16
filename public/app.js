@@ -1842,9 +1842,14 @@ function updateFooterStats() {
   const styleVersion = /v=(\d+)/.exec(styleTag?.href ?? '')?.[1] ?? '?';
   const readCount = (state.data.items ?? []).filter((i) => i.read).length;
   const pendingCount = pendingReads.size;
-  label.textContent = 'Версия ' + APP_VERSION + ' · стили v' + styleVersion
-    + ' · прочитано ' + readCount + ' · в очереди ' + pendingCount
-    + (state.lastError ? ' · ошибка: ' + state.lastError : ' · ошибок нет');
+  // Иконки вместо слов: подвал компактный, пояснения — в подсказке при наведении.
+  const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
+  label.innerHTML = 'Версия ' + APP_VERSION + ' · стили v' + styleVersion
+    + ' · ' + icon('●', 'Прочитано статей в данных') + ' ' + readCount
+    + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
+    + ' · ' + (state.lastError
+      ? icon('⚠', 'Последняя ошибка: ' + esc(state.lastError), ' warn')
+      : icon('✓', 'Ошибок нет', ' ok'));
 }
 function updateActiveArticle() {
   const list = $('#list');

@@ -1324,3 +1324,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 
 /* «+3» у счётчика комментариев в карточке: сколько прибавилось после отметки. */
 .comment-delta { color: var(--accent); font-weight: 700; }
+/* Значки в подвале: прочитано, очередь отправки, состояние ошибок. */
+.foot-ico { opacity: .8; cursor: help; }
+.foot-ico.ok { color: #4a9c62; }
+.foot-ico.warn { color: #e5573f; }
