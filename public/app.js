@@ -2407,6 +2407,9 @@ async function markRead(ids, read, { silent = false } = {}) {
     } else {
       keepReadVisible.delete(id);
       keepReadItems.delete(id);
+      // Вернули «непрочитано» — статья должна остаться в списке на своём месте:
+      // иначе она выпадала из снимка и пропадала из ленты.
+      if (state.snapshot?.ids) state.snapshot.ids.add(id);
     }
   }
   savePendingReads();
