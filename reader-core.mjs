@@ -3108,6 +3108,8 @@ async function api(req, res, url) {
         }
       }
     }
+    // Временная диагностика: видно, доходит ли запрос отметок и сколько в нём id.
+    log(`отметки: пришло ${ids.length} id, read=${read}, light=${Boolean(body.light)}, неизвестных ${ids.filter((id) => !findItem(id)).length}`);
     const stamp = Date.now();
     for (const id of ids) {
       if (read) db.read[id] = stamp;
