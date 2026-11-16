@@ -365,6 +365,8 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
 /* Списки в шапке компактнее, но справа оставляем место под свою стрелку. */
 .mini-field select { padding: 3px 20px 3px 8px; font-size: calc(12px * var(--ui-scale, 1)); }
 .countdown { font-size: calc(12px * var(--ui-scale, 1)); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Таймер переехал из шапки в дерево: держим его узким, чтобы не сдвигать кнопки. */
+.brand .countdown { font-size: calc(11.5px * var(--ui-scale, 1)); opacity: .85; min-width: 3.2em; text-align: right; }
 /* Ширина текста статьи: «−» и «+» рядом с «Кратко/Полностью», значение своё для каждой ленты. */
 .width-controls { display: inline-flex; align-items: center; gap: 2px; }
 .width-controls .icon-btn { width: 22px; height: 22px; font-size: calc(14px * var(--ui-scale, 1)); line-height: 1; }
