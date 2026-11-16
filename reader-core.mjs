@@ -2225,6 +2225,17 @@ async function reachableImage(url) {
     return get.ok && /^image\//i.test(get.headers.get('content-type') || '');
   } catch { return false; }
 }
+/** Все картинки из HTML, включая служебные превью Хабра (их проверим отдельно). */
+function imageCandidatesFrom(html) {
+  const out = [];
+  for (const match of String(html ?? '').matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)) {
+    const src = match[1].replace(/&amp;/g, '&').trim();
+    if (!src || /^data:/i.test(src) || /\.svg($|\?)/i.test(src)) continue;
+    if (!/^https?:\/\//i.test(src)) continue;
+    if (!out.includes(src)) out.push(src);
+  }
+  return out;
+}
 /** Первая подходящая картинка в HTML статьи. */
 function firstImageInHtml(html) {
   const text = String(html ?? '');
@@ -3150,7 +3161,16 @@ async function api(req, res, url) {
     }
     // Уже скачанный текст статьи: картинку можно взять прямо оттуда, без сети.
     const stored = (await store.body(feed.id, item.id)) ?? {};
-    const fromStored = firstImageInHtml(stored.fullHtml) || firstImageInHtml(stored.content);
+    // У Хабра в тексте единственная картинка — служебное превью share/publication.
+    // usableImage() её отбрасывает, поэтому проверяем кандидатов по одному: если
+    // адрес реально отдаёт изображение, обложка берётся оттуда.
+    let fromStored = firstImageInHtml(stored.fullHtml) || firstImageInHtml(stored.content);
+    if (!fromStored) {
+      for (const candidate of imageCandidatesFrom(stored.fullHtml).concat(imageCandidatesFrom(stored.content))) {
+        if (usableImage(candidate)) { fromStored = candidate; break; }
+        if (/habr\.com\/share\//i.test(candidate) && await reachableImage(candidate)) { fromStored = candidate; break; }
+      }
+    }
     if (fromStored) {
       item.image = fromStored;
       item.coverTriedAt = new Date().toISOString();
