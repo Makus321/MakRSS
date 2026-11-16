@@ -2383,6 +2383,30 @@ async function flushPendingReads() {
 
 loadPendingReads();
 window.addEventListener('online', () => { flushPendingReads(); });
+// На телефоне страница замирает, как только её скрывают: неотправленные отметки
+// могли потеряться. Отправляем их при уходе и при возврате, в том числе через
+// sendBeacon — он переживает закрытие вкладки.
+const flushNow = () => { flushPendingReads().catch(() => {}); };
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    if (pendingReads.size && navigator.onLine) {
+      for (const [read, ids] of [[true, []], [false, []]]) {
+        const list = [...pendingReads].filter(([, value]) => value === read).map(([id]) => id);
+        if (!list.length) continue;
+        if (read) ids.push(...list);
+        try {
+          navigator.sendBeacon?.('/api/read', new Blob(
+            [JSON.stringify({ ids: list, read, light: true })],
+            { type: 'application/json' },
+          ));
+        } catch { /* отправим при возврате */ }
+      }
+    }
+  } else {
+    flushNow();
+  }
+});
+window.addEventListener('pagehide', flushNow);
 
 async function markRead(ids, read, { silent = false } = {}) {
   if (!ids.length) return;
