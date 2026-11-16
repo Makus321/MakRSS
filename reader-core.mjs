@@ -137,7 +137,7 @@ async function refreshVersion() {
 const PARSER_VERSION = 18;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
-const BODY_VERSION = 15;   // 15: короткие заголовки разделов не теряются
+const BODY_VERSION = 17;   // 16: добираем картинки из страницы, если разбор их потерял   // 15: короткие заголовки разделов не теряются
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -964,8 +964,17 @@ async function fetchFullText(feedId, itemId) {
       store.saveStateSoon(400, { bump: false });
       return { ok: false, error: 'текст страницы короче текста ленты' };
     }
+    // Табличные вёрстки (batona.net и подобные): разбор статьи не находит картинок,
+    // хотя они есть на странице. Тогда добираем их прямо из сырого HTML.
+    let fullHtml = article.html;
+    if (!/<img\b/i.test(fullHtml)) {
+      const gallery = pageImages(res.text, target.link);
+      if (gallery.length) {
+        fullHtml += "\n" + gallery.map((src) => `<p><img src="${src}" alt=""></p>`).join("\n");
+      }
+    }
     await store.setBody(feedId, itemId, {
-      fullHtml: article.html,
+      fullHtml,
       fullFetchedAt: new Date().toISOString(),
       fullSource: target.link,
       bodyVersion: BODY_VERSION,        // чтобы старые тексты перекачались после правок разбора
@@ -2229,6 +2238,33 @@ async function reachableImage(url) {
   } catch {
     return false;
   }
+}
+/**
+ * Картинки статьи из сырой страницы. Нужно для сайтов с табличной вёрсткой
+ * (batona.net и подобные): разбор статьи теряет их, и текст остаётся без картинок.
+ */
+function pageImages(html, base) {
+  const out = [];
+  const seen = new Set();
+  const raw = String(html ?? '');
+  for (const match of raw.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)) {
+    let src = match[1].replace(/&amp;/g, '&').trim();
+    if (!src) continue;
+    if (!/^https?:/i.test(src)) {
+      try { src = new URL(src, base).href; } catch { continue; }
+    }
+    if (!usableImage(src)) continue;
+    // Служебная графика шаблона: логотипы, значки, смайлы, аватары.
+    if (/\/(?:templates|smiles|emoji|avatars?)\//i.test(src)) continue;
+    if (/\/(?:logo|banner|spacer|pixel|bn)\.(?:png|gif|jpe?g|webp)$/i.test(src)) continue;
+    // Берём только типичные папки загрузок — так отсекается обвязка сайта.
+    if (!/\/(?:uploads?|files|posts|content|images\/20\d\d)\//i.test(src)) continue;
+    if (seen.has(src)) continue;
+    seen.add(src);
+    out.push(src);
+    if (out.length >= 60) break;
+  }
+  return out;
 }
 /** Первая подходящая картинка в HTML статьи. */
 function firstImageInHtml(html) {
