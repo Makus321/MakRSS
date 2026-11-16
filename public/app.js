@@ -1891,7 +1891,7 @@ function updateActiveArticle() {
   // полосы) и не зависит от того, успела ли переехать рамка.
   // Отмечаем только по свежей прокрутке человека: после пересборки карточки могут
   // «прыгнуть» выше линии чтения, и раньше они разом уходили в прочитанные.
-  const scrolledRecently = Date.now() >= ignoreScrollUntil && Date.now() - userScrollAt < 900;
+  const scrolledRecently = Date.now() >= ignoreScrollUntil && Date.now() - userScrollAt < 1500;
   if (state.prefs.readOnScroll && scrolledRecently) {
     for (const entry of visible) {
       if (entry.rect.top >= lineY - 1) continue;   // ещё не спряталась под шапку
@@ -2085,8 +2085,16 @@ let userScrollAt = 0;           // когда это было: отличает 
 let scrollBaseline = 0;   // положение списка на момент последней отрисовки
 let scrollSettleTimer = null;   // проверка после остановки прокрутки
 
-for (const type of ['wheel', 'touchmove']) {
-  $('#list').addEventListener(type, () => {
+// На телефоне после отпускания пальца список ещё катится по инерции: события
+// touchmove при этом не приходят, и прокрутка переставала считаться «своей».
+// Запоминаем касание и продолжаем считать движение руки свежим.
+let lastTouchAt = 0;
+document.getElementById('list')?.addEventListener('scroll', () => {
+  if (lastTouchAt && Date.now() - lastTouchAt < 1500) userScrollAt = Date.now();
+}, { passive: true });
+for (const type of ['wheel', 'touchmove', 'touchstart', 'touchend', 'pointerdown']) {
+  document.getElementById('list')?.addEventListener(type, () => {
+    lastTouchAt = Date.now();
     userScrolled = true;
     userScrollAt = Date.now();
     activePin.until = 0;          // человек сам взялся за список — закрепление снимаем
@@ -2113,7 +2121,7 @@ function checkScrolledPast() {
   if (!userScrolled) return;
   // Прокрутка должна быть свежей и рукой: скачки вёрстки после перерисовки
   // (выравнивание по якорю) ничего не отмечают.
-  if (Date.now() - userScrollAt > 700) return;
+  if (Date.now() - userScrollAt > 1500) return;
   const list = $('#list');
   if (Math.abs(list.scrollTop - scrollBaseline) < 8) return;
   // Отмечаем только пролистанные статьи: низ статьи должен уйти выше линии
