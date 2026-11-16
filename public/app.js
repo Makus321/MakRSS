@@ -4517,6 +4517,9 @@ function slotifyImages(root) {
     if (alt) slot.dataset.alt = alt;
     const hidden = img.cloneNode(false);
     hidden.removeAttribute('src');
+    // lazy + скрытая картинка = браузер не грузит её вообще: загрузкой управляем сами.
+    hidden.removeAttribute('loading');
+    hidden.removeAttribute('decoding');
     hidden.setAttribute('data-lazy-img', '1');
     hidden.setAttribute('hidden', '');
     const button = document.createElement('button');
@@ -4556,6 +4559,7 @@ function loadSlotImage(slot, force = false) {
   if (force) slot.removeAttribute('data-failed');
   // Принудительная загрузка идёт с меткой времени: сервер не отдаёт старый
   // неудачный ответ из кэша и пробует достать картинку заново.
+  img.removeAttribute('loading');   // иначе скрытая картинка может не загрузиться вовсе
   img.src = force ? `${src}${src.includes('?') ? '&' : '?'}n=${Date.now()}` : src;
   img.onload = () => {
     img.hidden = false;
