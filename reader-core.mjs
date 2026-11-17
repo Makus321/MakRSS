@@ -2856,6 +2856,22 @@ async function api(req, res, url) {
     });
   }
 
+  if (route === 'GET /api/since') {
+    // Новые статьи после указанного момента: клиент показывает плашку «Новых статей»,
+    // не перекачивая весь список. Без этого в браузере не появлялись обновления.
+    const after = Date.parse(url.searchParams.get('after') ?? '') || 0;
+    const out = [];
+    for (const feed of db.feeds) {
+      for (const item of db.items[feed.id] ?? []) {
+        const at = Date.parse(item.date ?? '') || 0;
+        if (!at || at <= after) continue;
+        out.push(payloadItem(feed, item));
+      }
+    }
+    out.sort(byDateDesc);
+    return json(res, 200, { ok: true, items: out.slice(0, 200), total: out.length, lastRefresh: db.lastRefresh ?? null });
+  }
+
   if (route === 'GET /api/data') {
     // Один раз за запуск: подставляем превью старым избранным статьям из их текста.
     if (!backfillDone) { backfillDone = true; await backfillStarredImages().catch(() => 0); }

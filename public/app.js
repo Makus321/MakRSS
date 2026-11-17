@@ -3972,12 +3972,23 @@ async function loadData({ poll = false } = {}) {
       // Новые статьи НЕ вставляем в список: человек читает ленту, и любая
       // пересборка сдвигала бы её. Показываем плашку «Новых статей: N» — список
       // пересобирается только по нажатию «Показать».
-      const freshSync = state_.lastRefresh && state_.lastRefresh !== state.data.lastRefreshSeen;
+      const prevRefresh = state.data.lastRefreshSeen;
+      const freshSync = state_.lastRefresh && state_.lastRefresh !== prevRefresh;
       if (freshSync) {
         state.data.lastRefreshSeen = state_.lastRefresh;
         if (Number(state_.lastRefreshAdded) > 0) {
           state.data.lastRefreshAdded = state_.lastRefreshAdded;
           if (state_.addedByFeed) state.data.addedByFeed = state_.addedByFeed;
+        }
+        // Забираем только новые статьи: плашка «Новых статей» показывала 0, потому
+        // что лёгкий опрос приносит счётчики, но не сами статьи.
+        if (prevRefresh) {
+          try {
+            const extra = await api(`/api/since?after=${encodeURIComponent(prevRefresh)}`);
+            for (const item of extra?.items ?? []) {
+              if (!(state.data.items ?? []).some((i) => i.id === item.id)) state.data.items.push(item);
+            }
+          } catch { /* не критично: покажем при следующей полной загрузке */ }
         }
       }
       if (state_.lastRefresh) state.data.lastRefreshSeen = state_.lastRefresh;
