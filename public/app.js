@@ -781,18 +781,17 @@ function pendingNewTotal() {
 }
 
 function pendingNewCount() {
-  // Считаем ровно те статьи, что сервер добавил при синхронизации — тем же
-  // числом, что и «(+N)» у лент. Иначе в плашку попадали все статьи, которых
-  // нет в снимке списка (а он ограничен первыми 10 карточками).
-  const added = state.data.addedByFeed ?? {};
-  const feedIds = state.view.type === 'feed'
-    ? [state.view.id]
-    : Object.keys(added).filter((id) => {
-        if (state.view.type === 'folder') return feedById(id)?.folderId === state.view.id;
-        if (state.view.type === 'starred') return false;      // у избранного нет «новых»
-        return Boolean(feedById(id));
-      });
-  return feedIds.reduce((sum, id) => sum + (Number(added[id]) || 0), 0);
+  // Считаем сами: статьи в данных, которых ещё нет в показанном списке. Раньше
+  // брали счётчик сервера, но он живёт в памяти и обнуляется при каждом перезапуске —
+  // поэтому плашка «Новых статей» пропадала, хотя новости уже пришли.
+  const snapshot = state.snapshot?.ids;
+  if (!snapshot) return 0;
+  const onlyUnread = unreadModeFor();
+  return itemsOfView().filter((item) => {
+    if (snapshot.has(item.id)) return false;
+    if (onlyUnread && item.read) return false;
+    return passesFeedFilters(item);
+  }).length;
 }
 
 function pendingNewCountLegacy() {
