@@ -3216,7 +3216,9 @@ async function api(req, res, url) {
       return json(res, 200, { ok: true, image: fromStored });
     }
     const triedAt = item.coverTriedAt ? Date.parse(item.coverTriedAt) : 0;
-    if (triedAt && Date.now() - triedAt < 7 * 86400000) {
+    // Повторяем попытку через сутки, а не через неделю: у части статей картинка
+    // появляется позже, и обложка оставалась пустой слишком долго.
+    if (triedAt && Date.now() - triedAt < 24 * 3600000) {
       return json(res, 200, { ok: false, image: null, cached: true });
     }
     if (String(feed?.kind ?? '').startsWith('telegram')) {
