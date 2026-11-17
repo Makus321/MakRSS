@@ -511,6 +511,11 @@ async function mergeItems(feedId, fresh) {
     ...fresh.map((item) => {
       const meta = toMeta(item);
       const prev = oldById.get(meta.id);
+      // Когда статья впервые появилась у нас: по этой отметке клиент забирает новинки,
+      // не перекачивая весь список. Дата публикации для этого не годится — лента
+      // может отдать статью позже, с датой в прошлом.
+      if (prev?.addedAt) meta.addedAt = prev.addedAt;
+      if (!meta.addedAt) meta.addedAt = new Date().toISOString();
       if (prev) {
         if (prev.hasFull) meta.hasFull = true;
         if (prev.fullTriedAt) meta.fullTriedAt = prev.fullTriedAt;
@@ -1435,7 +1440,7 @@ function buildPayload() {
       const isRead = Boolean(db.read[item.id]);
       const isStarred = Boolean(db.starred[item.id]);
       if (isRead && !isStarred) {
-        const at = Date.parse(item.date ?? '') || 0;
+        const at = Date.parse(item.addedAt ?? item.date ?? '') || 0;
         if (at && at < freshAfter) continue;     // давно прочитанное в список не шлём
       }
       items.push({

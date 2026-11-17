@@ -631,7 +631,12 @@ function renderSidebar() {
     if (!item.read) { row.unread += 1; unreadAll += 1; }
     perFeed.set(item.feedId, row);
   }
-  const feeds = rawFeeds.map((feed) => ({ ...feed, ...(perFeed.get(feed.id) ?? { unread: 0, total: 0 }) }));
+  // Счётчики берём у сервера: он знает про новые статьи, которых ещё нет в списке.
+  const feeds = rawFeeds.map((feed) => ({
+    ...feed,
+    unread: Number.isFinite(feed.unread) ? feed.unread : (perFeed.get(feed.id)?.unread ?? 0),
+    total: perFeed.get(feed.id)?.total ?? feed.total ?? 0,
+  }));
   $('#badge-unread').textContent = unreadAll || '';
   $('#badge-starred').textContent = starredAll || '';
   $('#feed-count').textContent = feeds.length ? `${feeds.length}` : '';
