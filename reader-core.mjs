@@ -2869,7 +2869,9 @@ async function api(req, res, url) {
       }
     }
     out.sort(byDateDesc);
-    return json(res, 200, { ok: true, items: out.slice(0, 200), total: out.length, lastRefresh: db.lastRefresh ?? null });
+    // cursor — граница для следующего запроса: клиент присылает его как after.
+    const cursor = new Date().toISOString();
+    return json(res, 200, { ok: true, items: out.slice(0, 200), total: out.length, cursor, lastRefresh: db.lastRefresh ?? null });
   }
 
   if (route === 'GET /api/data') {

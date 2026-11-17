@@ -3920,6 +3920,28 @@ async function loadSettings() {
   try { state.settings = (await api('/api/settings')).settings; } catch { /* недоступно до входа */ }
 }
 
+/**
+ * Догружает статьи, появившиеся после последней проверки. Нужен лёгкий путь:
+ * полный список весит мегабайты, а новинок обычно единицы.
+ */
+async function pullNewItems() {
+  if (!Array.isArray(state.data.items) || !state.data.items.length) return 0;
+  if (!state.sinceAt) {
+    const base = Date.parse(state.data.lastRefresh ?? '') || Date.now();
+    state.sinceAt = new Date(base).toISOString();
+  }
+  try {
+    const extra = await api(`/api/since?after=${encodeURIComponent(state.sinceAt)}`);
+    let added = 0;
+    for (const item of extra?.items ?? []) {
+      if (!state.data.items.some((i) => i.id === item.id)) { state.data.items.push(item); added += 1; }
+    }
+    if (extra?.cursor) state.sinceAt = extra.cursor;
+    return added;
+  } catch {
+    return 0;
+  }
+}
 async function loadData({ poll = false } = {}) {
   try {
     if (PAGED_DATA) {
@@ -4000,6 +4022,9 @@ async function loadData({ poll = false } = {}) {
       for (const id of new Set(touched)) patchCard(id);
       renderSidebar();
       renderToolbar();
+      // Новинки приходят отдельным лёгким запросом: иначе плашка их не видит.
+      const freshCount = await pullNewItems();
+      if (freshCount) renderList();
       renderNewRow();
       return;
     }
