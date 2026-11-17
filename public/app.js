@@ -4452,18 +4452,12 @@ function updateCountdown() {
   // после нуля бесконечно, если сервер так и не прислал новый отчёт.
   const refreshing = Boolean(state.data.refreshing);
   const justKicked = Date.now() - (state.refreshKickedAt ?? 0) < 90_000;
-  const spinning = left === 0 && (refreshing || justKicked);
-
-  // Обновление просили, но сервер молчит: показываем предупреждение в подвале,
-  // чтобы это не выглядело как «ничего не происходит».
-  if (left === 0 && !refreshing && Date.now() - (state.refreshKickedAt ?? 0) > 90_000) {
-    state.refreshError = 'сервер не ответил на обновление';
-    state.refreshKickedAt = 0;                 // больше не ждём этот запрос
-    updateFooterStats();
-  }
-  el.textContent = spinning ? '⟳' : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
-  el.title = spinning ? 'Обновляю ленты…' : 'До следующего обновления лент';
-  el.classList.toggle('spinning', spinning);
+  const refreshingNow = left === 0 && (refreshing || justKicked);
+  // Пока идёт обновление, на месте часов — прочерк: крутится только кнопка рядом,
+  // второй «пропеллер» здесь не нужен.
+  el.textContent = refreshingNow ? '—' : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
+  el.title = refreshingNow ? 'Обновляю ленты…' : 'До следующего обновления лент';
+  el.classList.remove('spinning');
 
   // Отсчёт дошёл до нуля — сразу спрашиваем сервер и, если он ещё не обновил
   // ленты, просим обновить (не чаще раза в минуту).
