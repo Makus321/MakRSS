@@ -1388,6 +1388,8 @@ function switchView(view) {
   // вернёмся в ту же ленту с тем же фильтром.
   state.prefs.view = { type: view.type, id: view.id ?? null };
   savePrefs();
+  // Свежие статьи могли не дойти до клиента: подтягиваем их перед отрисовкой.
+  pullRecent();
   render();
 }
 
@@ -3931,6 +3933,22 @@ async function loadSettings() {
  * Догружает статьи, появившиеся после последней проверки. Нужен лёгкий путь:
  * полный список весит мегабайты, а новинок обычно единицы.
  */
+/**
+ * Догружает статьи за последние сутки перед показом раздела: в списке на экране
+ * могло не быть свежих статей, и лента открывалась пустой при «+1» в дереве.
+ */
+async function pullRecent() {
+  try {
+    const from = new Date(Date.now() - 86400000).toISOString();
+    const extra = await api(`/api/since?after=${encodeURIComponent(from)}`);
+    let added = 0;
+    for (const item of extra?.items ?? []) {
+      if (!(state.data.items ?? []).some((i) => i.id === item.id)) { state.data.items.push(item); added += 1; }
+    }
+    if (added) render();
+  } catch { /* нет сети — покажем что есть */ }
+}
+
 async function pullNewItems() {
   if (!Array.isArray(state.data.items) || !state.data.items.length) return 0;
   if (!state.sinceAt) {
