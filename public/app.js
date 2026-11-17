@@ -487,7 +487,7 @@ function resetSnapshot() {
  *  иначе фильтр «Видео» в ленте «…и видео приколы» скрывал бы все статьи сразу.
  *  У постов Telegram заголовок — это имя канала, поэтому смотрим только текст. */
 function articleHaystack(item) {
-  const telegram = Boolean(item.tg);
+  const telegram = (item.categories ?? []).includes('telegram');
   // Автор — часть текста статьи для фильтров: по нему удобно скрывать или
   // наоборот оставлять материалы конкретного человека (есть у Mobile-Review).
   return `${telegram ? '' : item.title ?? ''} ${item.author ?? ''} ${item.excerpt ?? ''}`.toLowerCase();
@@ -495,7 +495,7 @@ function articleHaystack(item) {
 
 /** Текст для поиска: к тексту статьи добавляем ленту и категории — так ищут и по ленте. */
 function searchHaystack(item) {
-  return ` ${articleHaystack(item)} ${feedById(item.feedId)?.title ?? ''}`.toLowerCase();
+  return `${articleHaystack(item)} ${item.feedTitle ?? ''} ${(item.categories ?? []).join(' ')}`.toLowerCase();
 }
 
 /** Фильтры ленты: какие слова скрывать и какие показывать только. */
@@ -1472,9 +1472,9 @@ function articleHtml(item) {
       <div class="a-main">
         <h3 class="a-title">${title}</h3>
         <div class="a-meta">
-          <span class="src">${esc(feedById(item.feedId)?.title ?? '')}</span>
+          <span class="src">${esc(item.feedTitle)}</span>
           <span data-time="${esc(item.date ?? '')}">${esc(timeAgo(item.date))}</span>
-          ${item.author && item.author !== feedById(item.feedId)?.title ? `<span>${esc(item.author)}</span>` : ''}
+          ${item.author && item.author !== item.feedTitle ? `<span>${esc(item.author)}</span>` : ''}
           ${downloaded ? '<span class="flag">скачан</span>' : ''}
           ${item.read ? '<span class="flag read-mark">✓ прочитано</span>' : ''}
           ${item.comments
@@ -3947,13 +3947,6 @@ async function loadData({ poll = false } = {}) {
         if (!flags) continue;
         if (flags.r !== Boolean(item.read)) { item.read = flags.r; touched.push(item.id); }
         if (flags.s !== Boolean(item.starred)) { item.starred = flags.s; touched.push(item.id); }
-      }
-      // Сервер сообщает, каких статей уже нет: убираем их карточки, иначе они висят
-      // без текста и не открываются («статьи уже нет в ленте»).
-      if (Array.isArray(state_.missing) && state_.missing.length) {
-        const gone = new Set(state_.missing);
-        state.data.items = (state.data.items ?? []).filter((item) => !gone.has(item.id));
-        for (const id of gone) state.snapshot?.ids?.delete(id);
       }
       if (state_.counts) state.data.counts = state_.counts;
       if (state_.feedUnread && Array.isArray(state.data.feeds)) {
