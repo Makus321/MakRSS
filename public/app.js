@@ -4403,8 +4403,11 @@ function updateCountdown() {
   const minutes = Math.floor(left / 60_000);
   const seconds = Math.floor((left % 60_000) / 1000);
   // Ноль показываем только мгновение: дальше честно пишем, что идёт обновление.
-  const spinning = left === 0 && Date.now() - (state.refreshKickedAt ?? 0) > 3000;
-  // Вместо длинного «обновляю…» — компактная стрелка: слово раздвигало строку дерева.
+  // Крутим стрелку только пока обновление реально идёт: раньше она крутилась
+  // после нуля бесконечно, если сервер так и не прислал новый отчёт.
+  const refreshing = Boolean(state.data.refreshing);
+  const justKicked = Date.now() - (state.refreshKickedAt ?? 0) < 90_000;
+  const spinning = left === 0 && (refreshing || justKicked);
   el.textContent = spinning ? '⟳' : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
   el.title = spinning ? 'Обновляю ленты…' : 'До следующего обновления лент';
   el.classList.toggle('spinning', spinning);
