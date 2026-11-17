@@ -1842,20 +1842,21 @@ function refreshTimes() {
  */
 /** Числа в подвале: сколько статей считаем прочитанными и сколько отметок в очереди. */
 function updateFooterStats() {
-  const label = $('#sidebar-version');
+  const label = document.querySelector('#sidebar-version');
   if (!label) return;
   const styleTag = document.querySelector('link[rel="stylesheet"]');
   const styleVersion = /v=(\d+)/.exec(styleTag?.href ?? '')?.[1] ?? '?';
   const readCount = (state.data.items ?? []).filter((i) => i.read).length;
   const pendingCount = pendingReads.size;
-  // Иконки вместо слов: подвал компактный, пояснения — в подсказке при наведении.
+  // Если сервер не ответил на обновление — показываем предупреждение вместо галочки.
+  const problem = state.lastError || state.refreshError || '';
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
-  // Версия и стили одним числом: 1.0.277.178 (сборка · стили) — коротко и понятно.
+  // Версия и стили одним числом: 1.0.286.179 — коротко и понятно.
   label.innerHTML = APP_VERSION + '.' + styleVersion
     + ' · ' + icon('●', 'Прочитано статей в данных') + ' ' + readCount
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
-    + ' · ' + (state.lastError
-      ? icon('⚠', 'Последняя ошибка: ' + esc(state.lastError), ' warn')
+    + ' · ' + (problem
+      ? icon('⚠', 'Ошибка: ' + problem, ' warn')
       : icon('✓', 'Ошибок нет', ' ok'));
 }
 function updateActiveArticle() {
@@ -4014,6 +4015,10 @@ async function loadData({ poll = false } = {}) {
         }
       }
       if (state_.lastRefresh) state.data.lastRefreshSeen = state_.lastRefresh;
+      if (state_.lastRefresh) {
+        state.data.lastRefreshSeen = state_.lastRefresh;
+        if (state.refreshError) { state.refreshError = ''; updateFooterStats(); }
+      }
       if (state_.lastRefreshAdded !== undefined) state.data.lastRefreshAdded = state_.lastRefreshAdded;
       if (state_.lastRefreshFeeds !== undefined) state.data.lastRefreshFeeds = state_.lastRefreshFeeds;
       if (state_.lastRefresh !== undefined) state.data.lastRefresh = state_.lastRefresh;
@@ -4408,6 +4413,14 @@ function updateCountdown() {
   const refreshing = Boolean(state.data.refreshing);
   const justKicked = Date.now() - (state.refreshKickedAt ?? 0) < 90_000;
   const spinning = left === 0 && (refreshing || justKicked);
+
+  // Обновление просили, но сервер молчит: показываем предупреждение в подвале,
+  // чтобы это не выглядело как «ничего не происходит».
+  if (left === 0 && !refreshing && Date.now() - (state.refreshKickedAt ?? 0) > 90_000) {
+    state.refreshError = 'сервер не ответил на обновление';
+    state.refreshKickedAt = 0;                 // больше не ждём этот запрос
+    updateFooterStats();
+  }
   el.textContent = spinning ? '⟳' : `⏱ ${minutes}:${String(seconds).padStart(2, '0')}`;
   el.title = spinning ? 'Обновляю ленты…' : 'До следующего обновления лент';
   el.classList.toggle('spinning', spinning);
