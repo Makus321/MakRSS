@@ -321,6 +321,7 @@ window.addEventListener('online', () => flushSettings());
 
 const rememberData = (data) => {
   if (!looksLikeData(data)) return false;         // ответ без данных (нет сети, кэш) — не трогаем состояние
+  if (data.serverVersion) state.serverVersion = data.serverVersion;
   // Отметки о прочтении, сделанные без сети, важнее того, что пришло с сервера.
   applyPendingReads(data.items);
   state.data = data;
@@ -1852,7 +1853,7 @@ function updateFooterStats() {
   const problem = state.lastError || state.refreshError || '';
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
   // Версия и стили одним числом: 1.0.286.179 — коротко и понятно.
-  label.innerHTML = APP_VERSION + '.' + styleVersion
+  label.innerHTML = APP_VERSION + '.' + styleVersion + '.' + (state.serverVersion ?? '?')
     + ' · ' + icon('●', 'Прочитано статей в данных') + ' ' + readCount
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
     + ' · ' + (problem
@@ -3977,6 +3978,7 @@ async function loadData({ poll = false } = {}) {
       const state_ = await api('/api/state', { ids });
       if (!state_?.items) return loadData({ poll: false });
       if (Number.isFinite(state_.revision)) state.revision = state_.revision;
+      if (state_.serverVersion) state.serverVersion = state_.serverVersion;
       const touched = [];
       for (const item of state.data.items ?? []) {
         const flags = state_.items[item.id];
@@ -4273,7 +4275,7 @@ const BUILD = (() => {
   const source = import.meta.url ?? '';
   return Number.parseInt(/[?&]v=(\d+)/.exec(source)?.[1] ?? '0', 10) || 0;
 })();
-const APP_VERSION = `1.0.${BUILD}`;
+const APP_VERSION = `1.${BUILD}`;
 
 function setupPwa() {
   const versionLabel = 'Версия ' + APP_VERSION + ' · обновляется автоматически';

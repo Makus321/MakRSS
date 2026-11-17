@@ -139,6 +139,11 @@ const PARSER_VERSION = 18;
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
 const BODY_VERSION = 15;   // 15: короткие заголовки разделов не теряются
 
+// Версия серверной части: показывается в подвале клиента рядом с его сборкой,
+// чтобы сразу видеть, что именно работает на сервере.
+const SERVER_VERSION = 1;
+const SERVER_TAG = `${SERVER_VERSION}.${BODY_VERSION}`;
+
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
 const KEEP_READ_DAYS_CHOICES = [7, 14, 21, 28];          // 1–4 недели
@@ -1475,6 +1480,7 @@ function buildPayload() {
     lastRefreshFeeds,
     addedByFeed: lastAddedByFeed,
     revision: Number(db.revision) || 0,
+    serverVersion: SERVER_TAG,
     nextRefreshAt,
     limits: { maxUnreadPerFeed: MAX_UNREAD_PER_FEED, keepReadDays: keepReadDays() },
   };
@@ -2730,6 +2736,7 @@ async function api(req, res, url) {
       ok: true,
       seenMax: Number(found.item.commentsSeenMaxId) || 0,
       revision: db.revision,
+      serverVersion: SERVER_TAG,
     });
   }
 
