@@ -989,7 +989,9 @@ function bodyHtml(item) {
   const sameAsExcerpt = Boolean(bodyHead && excerptHead) && (bodyHead.startsWith(excerptHead) || excerptHead.startsWith(bodyHead));
   // Текст совпал с анонсом — сам текст в полной статье не дублируем, но медиа
   // (картинки и видео) из него оставляем: иначе статья выглядела бы пустой.
-  let html = sanitize(bodySource, item.link);
+  // В лентах «только картинки» слоты не делаем: там свои изображения.
+  const imagesOnlyFeed = Boolean(feedById(item.feedId)?.imagesOnly);
+  let html = sanitize(bodySource, item.link, { slot: !imagesOnlyFeed });
   if (sameAsExcerpt && !body.fullHtml) {
     const media = html.match(/<(?:img|video)\b[^>]*>/gi) ?? [];
     html = media.length ? media.map((tag) => '<p>' + tag + '</p>').join('\n') : '';
@@ -1574,6 +1576,8 @@ function holdImageSpace(root) {
   // реального изображения она создавала блок, который после загрузки схлопывался,
   // и картинка «исчезала». Место резервирует сам <img> (у него задана высота).
   for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
+    // Картинки в «местах под картинку» грузятся своим кодом.
+    if (img.hasAttribute('data-lazy-img') || img.closest('.img-slot')) continue;
     if (img.dataset.hold === '1' || img.complete) continue;
     img.dataset.hold = '1';
   }
@@ -1660,6 +1664,8 @@ function flushScrollWork() {
  */
 function markBrokenImages(root = document) {
   for (const img of root.querySelectorAll('.a-body img, .comment-body img')) {
+    // У картинки в слоте ещё нет src — проверка сочла бы её битой и скрыла.
+    if (img.hasAttribute('data-lazy-img') || img.closest('.img-slot')) continue;
     if (img.dataset.brokenCheck === '1') continue;
     img.dataset.brokenCheck = '1';
     const kill = () => {
@@ -1808,6 +1814,7 @@ function renderList() {
   requestCommentCounts();
   fillViewport();          // если карточек меньше экрана — догружаем сразу
   holdImageSpace(listEl);  // заглушки на месте ещё не загруженных картинок
+  setupImageSlots(listEl); // места под картинки: автоподгрузка и кнопка на случай отказа
   markBrokenImages(listEl); // пустое место от не загрузившихся картинок
   queueCoverFetches();    // карточки без обложки — догружаем по одной
   // Класс text-under-thumb больше не переключается: он менял высоту карточки
@@ -2854,6 +2861,13 @@ $('#list').addEventListener('click', async (event) => {
   if (seenBtn) {
     event.stopPropagation();
     await markCommentsSeen(seenBtn.dataset.commentsSeen, Number(seenBtn.dataset.maxId) || 0);
+    return;
+  }
+  const imgLoad = event.target.closest('[data-img-load]');
+  if (imgLoad) {
+    event.stopPropagation();
+    const slot = imgLoad.closest('.img-slot');
+    if (slot) { imgLoad.textContent = 'Загружаю…'; loadSlotImage(slot, true); }
     return;
   }
   const moreBtn = event.target.closest('[data-comments-more]');
@@ -4374,7 +4388,7 @@ updateCountdown();
 // ------------------------------------------------------------- санитайзер
 
 /** Убирает из HTML статьи всё опасное и починяет относительные ссылки. */
-function sanitize(html, baseUrl) {
+function sanitize(html, baseUrl, { slot = true } = {}) {
   if (!html) return '';
   const allowed = new Set(['A', 'P', 'BR', 'HR', 'DIV', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'DEL', 'INS', 'CODE', 'PRE',
     'BLOCKQUOTE', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'IMG', 'FIGURE', 'FIGCAPTION', 'PICTURE', 'SOURCE',
@@ -4561,6 +4575,9 @@ function sanitize(html, baseUrl) {
   }
   flush();
 
+  // Слоты — только для обычных статей: в лентах «только картинки» изображения
+  // собираются отдельно, и подмена <img> на слот оставляла статью без картинок.
+  if (slot) slotifyImages(root);
   trimPromoTail(root);
   return root.innerHTML;
 }
@@ -4570,6 +4587,88 @@ function sanitize(html, baseUrl) {
  * статью, и всё, что идёт после него (пересказ и список таких же ссылок).
  * В самом тексте статьи ссылки не трогаем — только этот концевой блок.
  */
+/**
+ * Каждую картинку статьи превращаем в «место под картинку» с кнопкой.
+ * Пока картинка не пришла, видно рамку с кнопкой «Загрузить картинку» — по клику
+ * пробуем ещё раз. Главное правило: превращение делаем ТОЛЬКО в обычных статьях,
+ * не в лентах «только картинки» — там клиент сам собирает изображения, и подмена
+ * <img> на слот оставляла статью без картинок вовсе.
+ */
+function slotifyImages(root) {
+  for (const img of [...root.querySelectorAll('img')]) {
+    const src = img.getAttribute('src') ?? '';
+    if (!src || img.closest('.img-slot')) continue;
+    if (/^data:/i.test(src)) continue;
+    const slot = document.createElement('div');
+    slot.className = 'img-slot';
+    slot.dataset.src = src;
+    const clone = img.cloneNode(false);
+    clone.removeAttribute('src');
+    // lazy + скрытая картинка = браузер не грузит её вообще: загрузкой управляем сами.
+    clone.removeAttribute('loading');
+    clone.removeAttribute('decoding');
+    clone.setAttribute('data-lazy-img', '1');
+    clone.setAttribute('hidden', '');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'img-load';
+    button.setAttribute('data-img-load', '1');
+    button.textContent = 'Загрузить картинку';
+    slot.append(clone, button);
+    img.replaceWith(slot);
+  }
+}
+
+/** Подключает места под картинки: близкие к экрану грузим сами, остальные — по клику. */
+let slotObserver = null;
+function setupImageSlots(root = document) {
+  if (!slotObserver) {
+    slotObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        slotObserver.unobserve(entry.target);
+        loadSlotImage(entry.target);
+      }
+    }, { root: $('#list') ?? null, rootMargin: '600px 0px' });
+  }
+  for (const slot of root.querySelectorAll('.img-slot:not([data-state])')) {
+    slot.dataset.state = 'wait';
+    slotObserver.observe(slot);
+  }
+}
+
+/** Грузит картинку в конкретное место. force — повторная попытка по кнопке. */
+function loadSlotImage(slot, force = false) {
+  const img = slot.querySelector('img[data-lazy-img]');
+  const src = slot.dataset.src;
+  if (!img || !src) return;
+  slot.dataset.state = 'loading';
+  if (force) slot.removeAttribute('data-failed');
+  img.removeAttribute('loading');
+  img.src = force ? `${src}${src.includes('?') ? '&' : '?'}n=${Date.now()}` : src;
+  img.onload = () => {
+    img.hidden = false;
+    img.classList.remove('broken');
+    slot.dataset.state = 'ready';
+    slot.classList.add('ready');
+    const button = slot.querySelector('.img-load');
+    if (button) button.remove();
+  };
+  img.onerror = () => {
+    img.hidden = true;
+    slot.dataset.state = 'failed';
+    slot.setAttribute('data-failed', '1');
+    let button = slot.querySelector('.img-load');
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'img-load';
+      button.setAttribute('data-img-load', '1');
+      slot.append(button);
+    }
+    button.textContent = 'Не загрузилась — повторить';
+  };
+}
 function trimPromoTail(root) {
   const nodes = [...root.children];
   const from = Math.max(0, nodes.length - 12);
