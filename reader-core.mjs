@@ -2868,6 +2868,27 @@ async function api(req, res, url) {
     });
   }
 
+  if (route === 'GET /api/items') {
+    // Статьи ленты пачкой: клиенту нужно ровно столько, сколько он показывает,
+    // а не всё за сутки и не весь список целиком.
+    const feedId = url.searchParams.get('feedId') ?? '';
+    const limit = Math.min(300, Math.max(1, Number(url.searchParams.get('limit')) || 20));
+    const onlyUnread = url.searchParams.get('unread') === '1';
+    const folderId = url.searchParams.get('folderId') ?? '';
+    const out = [];
+    for (const feed of db.feeds) {
+      if (feedId && feed.id !== feedId) continue;
+      if (!feedId && folderId && feed.folderId !== folderId) continue;
+      for (const item of db.items[feed.id] ?? []) {
+        if (onlyUnread && db.read[item.id]) continue;
+        if (!passesFilters(feed, item)) continue;
+        out.push(payloadItem(feed, item));
+      }
+    }
+    out.sort(byDateDesc);
+    return json(res, 200, { ok: true, items: out.slice(0, limit), total: out.length, revision: db.revision });
+  }
+
   if (route === 'GET /api/since') {
     // Новые статьи после указанного момента: клиент показывает плашку «Новых статей»,
     // не перекачивая весь список. Без этого в браузере не появлялись обновления.

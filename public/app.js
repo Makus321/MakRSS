@@ -1389,7 +1389,8 @@ function switchView(view) {
   state.prefs.view = { type: view.type, id: view.id ?? null };
   savePrefs();
   // Свежие статьи могли не дойти до клиента: подтягиваем их перед отрисовкой.
-  pullRecent();
+  // В новой ленте может не быть нужного числа статей: догружаем по количеству.
+  ensureViewItems().then(() => render());
   render();
 }
 
@@ -3937,16 +3938,30 @@ async function loadSettings() {
  * Догружает статьи за последние сутки перед показом раздела: в списке на экране
  * могло не быть свежих статей, и лента открывалась пустой при «+1» в дереве.
  */
-async function pullRecent() {
+/**
+ * Догружает столько статей раздела, сколько сейчас показывается на экране.
+ * Раньше брали «за сутки» — это и лишний вес, и промахи по количеству.
+ */
+async function ensureViewItems() {
+  const want = Math.max(20, Number(state.limit) || 20);
+  const have = itemsOfView().length;
+  if (have >= want) return 0;
+  const params = new URLSearchParams();
+  params.set('limit', String(Math.min(300, want)));
+  if (state.view.type === 'feed') params.set('feedId', state.view.id);
+  else if (state.view.type === 'folder') params.set('folderId', state.view.id);
+  else if (state.view.type === 'starred') return 0;      // избранное уже в данных
+  if (unreadModeFor()) params.set('unread', '1');
   try {
-    const from = new Date(Date.now() - 86400000).toISOString();
-    const extra = await api(`/api/since?after=${encodeURIComponent(from)}`);
+    const payload = await api(`/api/items?${params.toString()}`);
     let added = 0;
-    for (const item of extra?.items ?? []) {
+    for (const item of payload?.items ?? []) {
       if (!(state.data.items ?? []).some((i) => i.id === item.id)) { state.data.items.push(item); added += 1; }
     }
-    if (added) render();
-  } catch { /* нет сети — покажем что есть */ }
+    return added;
+  } catch {
+    return 0;
+  }
 }
 
 async function pullNewItems() {
