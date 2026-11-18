@@ -2269,7 +2269,7 @@ async function fetchFull(id, silent = false) {
   if (!item) return;
   const previous = state.bodies.get(id) ?? { content: '', fullHtml: '' };
   state.bodies.set(id, { ...previous, note: 'Докачиваю текст со страницы статьи…' });
-  renderList();
+  if (!patchCard(id)) renderList();   // только эта карточка — без прыжка ленты
   try {
     const res = await api('/api/fetch-full', { id });
     if (res.data) rememberData(res.data);
@@ -2282,11 +2282,11 @@ async function fetchFull(id, silent = false) {
       if (!fresh.excerpt && res.item?.excerpt) fresh.excerpt = res.item.excerpt;
     }
     state.bodies.set(id, { content: res.item?.content ?? '', fullHtml: res.item?.fullHtml ?? '', tried: true, loaded: true });
-    renderList();
+    if (!patchCard(id)) renderList();   // только эта карточка, без прыжка
     if (!silent) toast(res.ok ? 'Полный текст докачан' : `Не получилось: ${res.error ?? 'текст не найден'}`, !res.ok);
   } catch (err) {
     state.bodies.set(id, { ...previous, note: `Не удалось докачать: ${err.message}`, loaded: true });
-    renderList();
+    if (!patchCard(id)) renderList();   // только эта карточка, без прыжка
     toast(err.message, true);
   }
 }
@@ -2861,7 +2861,16 @@ $('#list').addEventListener('click', async (event) => {
   // автоматическим правилом прокрутки.
   // Запоминаем решение человека: дальше автоматика эту статью не трогает.
   if (readBtn) manualRead.set(readBtn.dataset.read, readBtn.dataset.value === '1');
-  if (readBtn) { event.stopPropagation(); markRead([readBtn.dataset.read], readBtn.dataset.value === '1'); return; }
+  if (readBtn) {
+    event.stopPropagation();
+    // Отметку ставим точечно: полная перерисовка списка вызывала прыжок ленты.
+    const id = readBtn.dataset.read;
+    const next = readBtn.dataset.value === '1';
+    readBtn.dataset.value = next ? '0' : '1';
+    readBtn.textContent = next ? '●' : '○';
+    markRead([id], next, { silent: true });
+    return;
+  }
   const fetchBtn = event.target.closest('[data-fetch]');
   if (fetchBtn) { event.stopPropagation(); fetchFull(fetchBtn.dataset.fetch); return; }
   // «К первому новому» — прокрутка сразу к earliest новому комментарию.
