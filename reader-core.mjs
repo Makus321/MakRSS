@@ -2897,6 +2897,35 @@ async function api(req, res, url) {
     return json(res, 200, { ok: true, items: out.slice(0, limit), total: out.length, revision: db.revision });
   }
 
+  if (route === 'GET /api/debug') {
+    // Временная диагностика: есть ли статья у сервера и её текст. Только чтение.
+    const id = url.searchParams.get('id') ?? '';
+    const q = url.searchParams.get('q') ?? '';
+    const found = id ? findItem(id) : null;
+    let byLink = null;
+    if (q) {
+      outer: for (const feed of db.feeds) {
+        for (const item of db.items[feed.id] ?? []) {
+          if (String(item.link ?? '').includes(q)) { byLink = { id: item.id, feed: feed.id, date: item.date, hasFull: Boolean(item.hasFull) }; break outer; }
+        }
+      }
+    }
+    const body = found ? (await store.body(found.feed.id, found.item.id)) ?? {} : {};
+    const total = Object.values(db.items ?? {}).reduce((n, list) => n + list.length, 0);
+    return json(res, 200, {
+      ok: true,
+      id,
+      found: Boolean(found),
+      feed: found ? found.feed.id : null,
+      link: found ? found.item.link : null,
+      fullHtml: String(body.fullHtml ?? '').length,
+      content: String(body.content ?? '').length,
+      byLink,
+      total,
+      revision: db.revision,
+    });
+  }
+
   if (route === 'GET /api/since') {
     // Новые статьи после указанного момента: клиент показывает плашку «Новых статей»,
     // не перекачивая весь список. Без этого в браузере не появлялись обновления.
