@@ -692,7 +692,9 @@ function renderSidebar() {
       ${badge(
       // В режиме «Все» показываем, сколько статей всего, иначе — сколько непрочитанных.
       state.prefs.feedUnread?.[feed.id] === false ? feed.total : feed.unread,
-      state.data.addedByFeed?.[feed.id] ?? 0,
+      // «(+N)» считаем по фактическим данным клиента: счётчик сервера живёт в памяти
+      // и переживает чистку, из-за чего в дереве было «1 (+1)», а список пустой.
+      pendingNewForFeed(feed.id),
     )}
     </div></li>`;
   };
@@ -3994,19 +3996,26 @@ async function loadSettings() {
  */
 async function ensureViewItems() {
   const want = Math.max(20, Number(state.limit) || 20);
-  const have = itemsOfView().length;
-  if (have >= want) return 0;
+  if (itemsOfView().length >= want) return 0;
   const params = new URLSearchParams();
   params.set('limit', String(Math.min(300, want)));
   if (state.view.type === 'feed') params.set('feedId', state.view.id);
   else if (state.view.type === 'folder') params.set('folderId', state.view.id);
   else if (state.view.type === 'starred') return 0;      // избранное уже в данных
   if (unreadModeFor()) params.set('unread', '1');
-  try {
-    const payload = await api(`/api/items?${params.toString()}`);
+  const merge = (items) => {
     let added = 0;
-    for (const item of payload?.items ?? []) {
+    for (const item of items ?? []) {
       if (!(state.data.items ?? []).some((i) => i.id === item.id)) { state.data.items.push(item); added += 1; }
+    }
+    return added;
+  };
+  try {
+    let added = merge((await api(`/api/items?${params.toString()}`))?.items);
+    // Если раздел всё ещё пуст, пробуем ещё раз: сервер мог быть занят синхронизацией.
+    if (!itemsOfView().length) {
+      await new Promise((r) => setTimeout(r, 1500));
+      added += merge((await api(`/api/items?${params.toString()}`))?.items);
     }
     return added;
   } catch {
