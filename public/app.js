@@ -821,17 +821,9 @@ function pendingNewTotal() {
 }
 
 function pendingNewCount() {
-  // Считаем сами: статьи в данных, которых ещё нет в показанном списке. Раньше
-  // брали счётчик сервера, но он живёт в памяти и обнуляется при каждом перезапуске —
-  // поэтому плашка «Новых статей» пропадала, хотя новости уже пришли.
-  const snapshot = state.snapshot?.ids;
-  if (!snapshot) return 0;
-  const onlyUnread = unreadModeFor();
-  return itemsOfView().filter((item) => {
-    if (snapshot.has(item.id)) return false;
-    if (onlyUnread && item.read) return false;
-    return passesFeedFilters(item);
-  }).length;
+  // Ровно то же число, что «(+N)» у ленты в дереве: раньше здесь считались
+  // статьи, которых нет в показанном списке (а он ограничен), и числа расходились.
+  return pendingNewTotal();
 }
 
 function pendingNewCountLegacy() {
