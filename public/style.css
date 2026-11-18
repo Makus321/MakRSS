@@ -88,11 +88,14 @@ html, body {
 }
 /* ------------------------------------------------------------------ шрифты */
 /* Межстрочный интервал: маленький / нормальный / большой. */
-:root[data-line="normal"] { --lh-scale: 0.9; }
-:root[data-line="tiny"] { --lh-scale: 0.5; }
-:root[data-line="small"] { --lh-scale: 0.65; }
-:root[data-line="large"] { --lh-scale: 1.2; }
-:root[data-line="huge"] { --lh-scale: 1.5; }
+/* Сетка межстрочного интервала: ровный шаг 0.14 коэффициента (≈0.23 строки),
+   «нормальный» оставлен как был. Раньше между «маленьким» и «нормальным» был
+   провал 0.25, а крайние значения уходили слишком далеко. */
+:root[data-line="tiny"] { --lh-scale: 0.62; }     /* ≈1.02 */
+:root[data-line="small"] { --lh-scale: 0.76; }    /* ≈1.25 */
+:root[data-line="normal"] { --lh-scale: 0.9; }    /* ≈1.49 */
+:root[data-line="large"] { --lh-scale: 1.04; }    /* ≈1.72 */
+:root[data-line="huge"] { --lh-scale: 1.18; }     /* ≈1.95 */
 @font-face {
   font-family: "Читалка Узкий";
   font-style: normal;
