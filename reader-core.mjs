@@ -2914,7 +2914,9 @@ async function api(req, res, url) {
     const total = Object.values(db.items ?? {}).reduce((n, list) => n + list.length, 0);
     // Что реально уходит клиенту в списке: по этому видно, есть ли там «призрак».
     const list = buildPayload().items ?? [];
+    const t = url.searchParams.get('t') ?? '';
     const ghost = q ? list.find((it) => String(it.link ?? '').includes(q)) ?? null : null;
+    const byTitle = t ? list.find((it) => String(it.title ?? '').toLowerCase().includes(t.toLowerCase())) ?? null : null;
     const payloadTotal = list.length;
     return json(res, 200, {
       ok: true,
@@ -2929,6 +2931,7 @@ async function api(req, res, url) {
       total,
       payloadTotal,
       ghost: ghost ? { id: ghost.id, link: ghost.link, date: ghost.date } : null,
+      byTitle: byTitle ? { id: byTitle.id, link: byTitle.link, date: byTitle.date, hasFull: byTitle.hasFull } : null,
       revision: db.revision,
     });
   }

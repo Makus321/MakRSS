@@ -266,6 +266,8 @@ const savePrefs = () => localStorage.setItem(PREF_KEY, JSON.stringify(state.pref
 // Полный сброс клиента по ссылке вида /?reset=1: чистит кэши, локальные данные
 // и перезагружает приложение. Нужен, когда в ленте остаются «мёртвые» карточки.
 const resetRequested = new URLSearchParams(location.search).get('reset') === '1';
+// Показ внутреннего id статьи в карточке: включается ссылкой /?ids=1 (диагностика).
+const SHOW_IDS = new URLSearchParams(location.search).get('ids') === '1';
 if (resetRequested) {
   (async () => {
     try {
@@ -1500,6 +1502,7 @@ function articleHtml(item) {
       <div class="a-main">
         <h3 class="a-title">${title}</h3>
         <div class="a-meta">
+          ${SHOW_IDS ? `<span class="flag" style="opacity:.6">${esc(item.id)}</span>` : ''}
           <span class="src">${esc(item.feedTitle)}</span>
           <span data-time="${esc(item.date ?? '')}">${esc(timeAgo(item.date))}</span>
           ${item.author && item.author !== item.feedTitle ? `<span>${esc(item.author)}</span>` : ''}
