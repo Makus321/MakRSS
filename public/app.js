@@ -694,7 +694,7 @@ function renderSidebar() {
       state.prefs.feedUnread?.[feed.id] === false ? feed.total : feed.unread,
       // «(+N)» считаем по фактическим данным клиента: счётчик сервера живёт в памяти
       // и переживает чистку, из-за чего в дереве было «1 (+1)», а список пустой.
-      pendingNewForFeed(feed.id),
+      state.data.addedByFeed?.[feed.id] ?? 0,
     )}
     </div></li>`;
   };

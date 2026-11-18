@@ -797,7 +797,11 @@ async function refreshFeed(feed, { force = false } = {}) {
     feed.lastModified = res.lastModified || '';
     feed.lastFetched = new Date().toISOString();
     feed.lastError = '';
-    const added = await mergeItems(feed.id, parsed.items);
+    // Считаем только те новые статьи, что реально остались в ленте и не прочитаны:
+    // иначе в дереве висело «(+1)» у ленты, статью которой уже убрала чистка.
+    const stamp = new Date().toISOString();
+    await mergeItems(feed.id, parsed.items);
+    const added = (db.items[feed.id] ?? []).filter((it) => (it.addedAt ?? '') >= stamp && !db.read[it.id]).length;
     return { id: feed.id, added, count: parsed.items.length };
   } catch (err) {
     feed.lastError = err.name === 'AbortError' ? 'таймаут запроса' : err.message;
