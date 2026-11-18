@@ -2,8 +2,7 @@
 :root, :root[data-theme="dark"] {
   /* Масштаб интерфейса (от размера шрифта дерева) и межстрочный интервал. */
   --ui-scale: 1;
-  --lh: 1;                              /* эффективный интервал: 1 = нормальный */
-  --lh-scale: calc(var(--lh) / 1.65);   /* производная для старых правил (заголовки, превью) */
+  --lh-scale: 1;
   --font-ui: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
   --bg: #14161a;
   --panel: #1a1d23;
@@ -92,11 +91,11 @@ html, body {
 /* Сетка межстрочного интервала: ровный шаг 0.14 коэффициента (≈0.23 строки),
    «нормальный» оставлен как был. Раньше между «маленьким» и «нормальным» был
    провал 0.25, а крайние значения уходили слишком далеко. */
-:root[data-line="tiny"] { --lh: 0.88; }     /* итоговый 0.88 */
-:root[data-line="small"] { --lh: 0.94; }    /* итоговый 0.94 */
-:root[data-line="normal"] { --lh: 1; }      /* итоговый ровно 1 */
-:root[data-line="large"] { --lh: 1.12; }    /* итоговый 1.12 */
-:root[data-line="huge"] { --lh: 1.26; }     /* итоговый 1.26 */
+:root[data-line="tiny"] { --lh-scale: 0.62; }     /* ≈1.02 */
+:root[data-line="small"] { --lh-scale: 0.76; }    /* ≈1.25 */
+:root[data-line="normal"] { --lh-scale: 0.9; }    /* ≈1.49 */
+:root[data-line="large"] { --lh-scale: 1.04; }    /* ≈1.72 */
+:root[data-line="huge"] { --lh-scale: 1.18; }     /* ≈1.95 */
 @font-face {
   font-family: "Читалка Узкий";
   font-style: normal;
@@ -555,18 +554,18 @@ select:focus-visible { outline: none; }
 
 .a-excerpt { grid-column: 1 / -1; grid-row: 3; }
 .article.compact-thumb .a-thumb { display: block; }
-.a-thumb { display: none; width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * var(--lh, 1)); max-height: 70vh; object-fit: cover; border-radius: 8px; background: var(--panel-2); }
+.a-thumb { display: none; width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1)); max-height: 70vh; object-fit: cover; border-radius: 8px; background: var(--panel-2); }
 /* Заголовок статьи — ссылка, но без подчёркивания; жирный всегда, цвет — как у текста
    статьи (белый в тёмной теме, чёрный в светлой), без оттенка гаммы. */
 /* Заголовок берёт размер из того вида, который выбран у ленты: в кратком виде —
    от «шрифта краткого вида», в полном — от «шрифта статьи». */
-.a-title { margin: 0 0 3px; font-size: calc(var(--font-excerpt) * 1.18); line-height: calc(1.9 * var(--lh-scale, 1)); font-weight: 700; color: var(--article-text); }
+.a-title { margin: 0 0 3px; font-size: calc(var(--font-excerpt) * 1.18); line-height: calc(1.3 * var(--lh-scale, 1)); font-weight: 700; color: var(--article-text); }
 .article.full .a-title { font-size: calc(var(--font-article) * 1.15); }
 .a-title a { text-decoration: none; color: inherit; }
 .a-title a:hover { color: var(--accent); }
 .a-excerpt { color: var(--article-text); font-size: var(--font-excerpt); margin: 0; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
   /* Тот же интервал, что у раскрытой статьи: иначе краткий и полный вид заметно расходятся. */
-  line-height: var(--lh, 1); text-align: justify; hyphens: auto; }
+  line-height: calc(1.65 * var(--lh-scale, 1)); text-align: justify; hyphens: auto; }
 .article.expanded .a-excerpt { display: none; }
 .a-meta { font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .a-meta .src { color: var(--accent); }
@@ -618,7 +617,7 @@ select:focus-visible { outline: none; }
 .a-actions .a-next { display: none; }
 
 /* Текст статьи тянется по ширине окна и выравнивается по обоим краям. */
-.a-body { display: none; padding: 4px 14px 16px; font-size: var(--font-article); line-height: var(--lh, 1); overflow-wrap: anywhere; text-align: justify; hyphens: auto; color: var(--article-text); }
+.a-body { display: none; padding: 4px 14px 16px; font-size: var(--font-article); line-height: calc(1.65 * var(--lh-scale, 1)); overflow-wrap: anywhere; text-align: justify; hyphens: auto; color: var(--article-text); }
 .a-body p, .a-body div, .a-body li, .a-body blockquote { text-align: justify; }
 .article.expanded .a-body { display: block; }
 /* Картинки: не шире колонки, не шире 760px (примерно как на самих сайтах) и не выше
@@ -647,7 +646,7 @@ select:focus-visible { outline: none; }
 .a-body blockquote { margin: 10px 0; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--muted); font-style: italic; }
 .a-body table { border-collapse: collapse; max-width: 100%; display: block; overflow-x: auto; }
 .a-body td, .a-body th { border: 1px solid var(--line); padding: 4px 8px; }
-.a-body h1, .a-body h2, .a-body h3 { margin: 18px 0 6px; line-height: calc(1.9 * var(--lh-scale, 1)); }
+.a-body h1, .a-body h2, .a-body h3 { margin: 18px 0 6px; line-height: calc(1.3 * var(--lh-scale, 1)); }
 .a-note { background: var(--panel-2); border-left: 3px solid var(--accent); border-radius: 8px; padding: 8px 10px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--muted); margin: 8px 0; }
 .a-loading { color: var(--muted); font-size: calc(13px * var(--ui-scale, 1)); padding: 6px 0; }
 
@@ -697,7 +696,7 @@ body.dragging .tree-tail { display: flex; }
 .comment-body {
   font-family: inherit;
   font-size: var(--font-article);
-  line-height: var(--lh, 1);
+  line-height: calc(1.65 * var(--lh-scale, 1));
   overflow-wrap: anywhere;
   text-align: justify;
   hyphens: auto;
@@ -854,7 +853,7 @@ body.dragging .tree-tail { display: flex; }
   /* Обтекание чистим в конце карточки, а не в конце шапки: иначе текст начинался
      бы ниже картинки. */
   .article::after { content: ""; display: block; clear: both; }
-  .a-thumb { width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * var(--lh, 1)); max-height: 70vh; object-fit: cover; }
+  .a-thumb { width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1)); max-height: 70vh; object-fit: cover; }
   /* На узком экране картинка обтекается текстом: длинный заголовок идёт под ней,
      а не сжимается в узкую колонку справа от картинки. */
   /* Четвёртая кнопка — переход к следующей статье — только на телефоне, где панель
@@ -914,7 +913,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .a-body h2 { font-size: calc(var(--font-article) * 1.12); }
 .a-body h3 { font-size: calc(var(--font-article) * 1.02); }
 .a-body h4, .a-body h5, .a-body h6 { font-size: var(--font-article); }
-.a-body h4 { line-height: calc(1.85 * var(--lh-scale, 1)); }
+.a-body h4 { line-height: calc(1.25 * var(--lh-scale, 1)); }
 
 /* Кнопка «следующая» нужна всегда, когда кнопки плавают. */
 .article.expanded .a-actions .a-next { display: inline-flex; }
@@ -1093,7 +1092,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
    новых карточек список «прыгает» вниз. */
 .a-thumb { background: var(--panel-2); }
 @media (max-width: 560px) {
-  .a-thumb { width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * var(--lh, 1)); max-height: 70vh; object-fit: cover; flex: none; }
+  .a-thumb { width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1)); max-height: 70vh; object-fit: cover; flex: none; }
 }
 
 .new-row .note { flex: 1 1 auto; min-width: 0; }
@@ -1302,7 +1301,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
     width: 15%;
     height: auto;
     /* Ограничение по высоте: вертикальная картинка иначе растягивала карточку. */
-    max-height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * var(--lh, 1));
+    max-height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1));
     align-self: flex-start;
     object-fit: contain;
     background: var(--panel-2);
@@ -1321,7 +1320,7 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
     width: auto;
     max-width: 34%;
     height: auto;
-    max-height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * var(--lh, 1));
+    max-height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1));
     object-fit: contain;
   }
 }
