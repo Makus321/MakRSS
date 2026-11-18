@@ -2912,6 +2912,10 @@ async function api(req, res, url) {
     }
     const body = found ? (await store.body(found.feed.id, found.item.id)) ?? {} : {};
     const total = Object.values(db.items ?? {}).reduce((n, list) => n + list.length, 0);
+    // Что реально уходит клиенту в списке: по этому видно, есть ли там «призрак».
+    const list = buildPayload().items ?? [];
+    const ghost = q ? list.find((it) => String(it.link ?? '').includes(q)) ?? null : null;
+    const payloadTotal = list.length;
     return json(res, 200, {
       ok: true,
       id,
@@ -2922,6 +2926,9 @@ async function api(req, res, url) {
       content: String(body.content ?? '').length,
       byLink,
       total,
+      total,
+      payloadTotal,
+      ghost: ghost ? { id: ghost.id, link: ghost.link, date: ghost.date } : null,
       revision: db.revision,
     });
   }
