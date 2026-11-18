@@ -81,6 +81,7 @@ const state = {
   expandedItems: new Set(),             // статьи, раскрытые вручную
   commentsOnly: new Set(),              // раскрыты только комментарии, без текста статьи
   bodies: new Map(),                    // id -> { content, fullHtml, note }
+  bodyTries: new Map(),   // сколько раз просили текст статьи (пустой ответ не окончателен)
   comments: new Map(),                  // id -> { loading, ok, total, count, threads, error }
   selectedId: null,
   limit: 10,                     // сначала показываем 10 карточек, остальное — по прокрутке
@@ -2233,7 +2234,14 @@ async function ensureBodiesNeeded(force = false) {
       const item = state.data.items.find((i) => i.id === id);
       if (item) item.hasFull = Boolean(body.hasFull);
     }
-    for (const id of need) if (!state.bodies.has(id)) state.bodies.set(id, { content: '', fullHtml: '', loaded: true });
+    // Пустой ответ не считаем окончательным: сервер мог не успеть, и статья
+    // навсегда оставалась «без текста», хотя текст есть. Пробуем до трёх раз.
+    for (const id of need) {
+      if (state.bodies.has(id)) continue;
+      const tries = (state.bodyTries.get(id) ?? 0) + 1;
+      state.bodyTries.set(id, tries);
+      state.bodies.set(id, { content: '', fullHtml: '', loaded: tries >= 3 });
+    }
     renderListSoon();
   } catch (err) {
     // Не ругаемся вслух: текст — не критичная часть, а тост только мешает.
