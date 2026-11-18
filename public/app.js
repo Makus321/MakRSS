@@ -4205,6 +4205,13 @@ async function loadData({ poll = false } = {}) {
       // Новинки приходят отдельным лёгким запросом: иначе плашка их не видит.
       const freshCount = await pullNewItems();
       if (freshCount) renderList();
+      // Дерево показывает серверное число непрочитанных. Если в данных раздела
+      // меньше статей — догружаем недостающие, иначе шапка и дерево расходятся.
+      const expected = state.view.type === 'feed' ? Number(viewFeed()?.unread ?? 0) : 0;
+      if (expected && itemsOfView().length < expected) {
+        const more = await ensureViewItems();
+        if (more) renderList();
+      }
       renderNewRow();
       return;
     }
