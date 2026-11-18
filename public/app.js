@@ -1865,6 +1865,7 @@ function updateFooterStats() {
   label.innerHTML = APP_VERSION + '.' + styleVersion + '.' + (state.serverVersion ?? '?')
     + ' · ' + icon('●', 'Прочитано статей в данных') + ' ' + readCount
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
+    + (state.removedCards ? ' · ' + icon('⌫', 'Снято карточек, которых на сервере уже нет: ' + state.removedCards) + ' ' + state.removedCards : '')
     + ' · ' + (problem
       ? icon('⚠', 'Ошибка: ' + problem, ' warn')
       : icon('✓', 'Ошибок нет', ' ok'));
@@ -3987,8 +3988,8 @@ async function ensureViewItems() {
  * карточки висят пустыми: открыть нельзя, текста нет.
  */
 async function verifyItemsOnce() {
-  if (state.itemsVerified) return;
-  state.itemsVerified = true;
+  if (state.verifiedRevision === state.revision) return;
+  state.verifiedRevision = state.revision;
   const ids = (state.data.items ?? []).map((i) => i.id).slice(0, 3000);
   if (!ids.length) return;
   const gone = new Set();
@@ -3998,7 +3999,8 @@ async function verifyItemsOnce() {
       for (const id of answer?.missing ?? []) gone.add(id);
     } catch { return; }
   }
-  if (!gone.size) return;
+  if (!gone.size) { state.removedCards = 0; updateFooterStats(); return; }
+  state.removedCards = gone.size;   // диагностика: сколько «призраков» сняли
   state.data.items = (state.data.items ?? []).filter((item) => !gone.has(item.id));
   for (const id of gone) { state.snapshot?.ids?.delete(id); keepReadItems.delete(id); }
   render();
