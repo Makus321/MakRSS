@@ -155,6 +155,20 @@ function cycleTheme() {
 function loadPrefs() {
   try { Object.assign(state.prefs, JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}')); } catch { /* по умолчанию */ }
   try { state.collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? '[]')); } catch { state.collapsed = new Set(); }
+  // После кнопки «Обновить приложение» возвращаем сохранённые настройки вида:
+  // браузер мог почистить хранилище вместе с кэшами.
+  try {
+    const kept = JSON.parse(sessionStorage.getItem('rss.prefs.keep') ?? '{}');
+    for (const [key, value] of Object.entries(kept)) {
+      if (value && localStorage.getItem(key) === null) localStorage.setItem(key, value);
+    }
+    if (kept['rss.prefs' ]) {
+      const own = JSON.parse(localStorage.getItem('rss.prefs') ?? '{}');
+      Object.assign(state.prefs, JSON.parse(kept['rss.prefs']), own);
+      localStorage.setItem('rss.prefs', JSON.stringify(state.prefs));
+    }
+    sessionStorage.removeItem('rss.prefs.keep');
+  } catch { /* не критично */ }
   // Размеры шрифта храним в виде «13px»: старые настройки держали число.
   state.prefs.fontTree = fontPx(state.prefs.fontTree, '13px');
   state.prefs.fontArticle = fontPx(state.prefs.fontArticle, '14.5px');
@@ -4303,6 +4317,14 @@ function setupMobile() {
   // гарантированно загрузило свежую версию (полезно, если оболочка «залипла»).
   const hardReload = async () => {
     toast('Обновляю приложение…');
+    // Свои настройки вида (шрифты, строки краткого вида) сохраняем отдельно:
+    // обновление не должно их сбрасывать, даже если браузер чистит хранилище.
+    const keepPrefs = {};
+    try {
+      for (const key of Object.keys(localStorage)) if (key.startsWith('rss.') && key !== 'rss.prefs' ) keepPrefs[key] = localStorage.getItem(key);
+      keepPrefs['rss.prefs'] = localStorage.getItem('rss.prefs');
+      sessionStorage.setItem('rss.prefs.keep', JSON.stringify(keepPrefs));
+    } catch { /* не критично */ }
     try {
       for (const name of await caches.keys()) await caches.delete(name);
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
