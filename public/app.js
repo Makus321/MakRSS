@@ -741,8 +741,11 @@ function renderToolbar() {
   if (state.view.type === 'folder') title = `Папка: ${viewFolder()?.name ?? ''}`;
   $('#view-title').textContent = title;
 
-  const items = visibleItems();
-  const unread = items.filter((i) => !i.read).length;
+  // Считаем ВСЕ статьи раздела, а не только показанные карточки: иначе в шапке
+  // «3 статьи», а в дереве 4 — список-то выдаётся порциями.
+  const viewItems = itemsOfView().filter((item) => !unreadModeFor() || !item.read);
+  const items = viewItems;
+  const unread = viewItems.filter((i) => !i.read).length;
   // «3 мин назад», но «только что» и «вчера» — уже готовые слова, «назад» к ним не идёт.
   const ago = timeAgo(state.data.lastRefresh);
   const refreshed = state.data.lastRefresh
