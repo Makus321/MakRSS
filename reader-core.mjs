@@ -1389,7 +1389,9 @@ async function purgeFiltered(feedId) {
 }
 
 function feedView(feed) {
-  const items = db.items[feed.id] ?? [];
+  // Считаем только то, что реально показывается: фильтры ленты («скрыть/только»)
+  // отсекают статьи, и раньше дерево показывало 2, а в списке была 1.
+  const items = (db.items[feed.id] ?? []).filter((item) => passesFilters(feed, item));
   const unread = items.filter((i) => !db.read[i.id]).length;
   const full = items.filter((i) => i.hasFull).length;
   return {
