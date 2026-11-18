@@ -3268,6 +3268,8 @@ async function api(req, res, url) {
     if (!found) return json(res, 404, { ok: false, error: 'статья не найдена' });
     if (force) { found.item.hasFull = false; found.item.fullTriedAt = null; await store.setBody(found.feed.id, found.item.id, { fullHtml: '' }); }
     const result = await fetchFullText(found.feed.id, found.item.id);
+    // Временная диагностика: видно, почему «Докачать текст» ничего не приносит.
+    log(`докачка по запросу: ${found.item.id}, ok=${result.ok}, error=${result.error || "нет"}, hasFull=${Boolean(found.item.hasFull)}`);
     const body = (await store.body(found.feed.id, found.item.id)) ?? {};
     // Полный список здесь не отдаём: он весил мегабайты на каждую докачку,
     // а клиенту нужен только сам текст статьи.

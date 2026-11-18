@@ -263,6 +263,23 @@ function watchMobileFonts() {
 const saveCollapsed = () => localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...state.collapsed]));
 const savePrefs = () => localStorage.setItem(PREF_KEY, JSON.stringify(state.prefs));
 
+// Полный сброс клиента по ссылке вида /?reset=1: чистит кэши, локальные данные
+// и перезагружает приложение. Нужен, когда в ленте остаются «мёртвые» карточки.
+const resetRequested = new URLSearchParams(location.search).get('reset') === '1';
+if (resetRequested) {
+  (async () => {
+    try {
+      for (const name of await caches.keys()) await caches.delete(name);
+      for (const key of Object.keys(localStorage)) if (key.startsWith('rss.')) localStorage.removeItem(key);
+      sessionStorage.clear();
+      const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+      for (const registration of registrations) await registration.unregister();
+    } catch { /* не критично */ }
+    location.replace(location.pathname);
+  })();
+}
+
+
 // ---------------------------------------------------------------------- API
 
 async function api(path, body, options = {}) {
