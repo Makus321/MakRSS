@@ -2297,7 +2297,9 @@ async function fetchFull(id, silent = false) {
   state.bodies.set(id, { ...previous, note: 'Докачиваю текст со страницы статьи…' });
   if (!patchCard(id)) renderList();   // только эта карточка — без прыжка ленты
   try {
-    const res = await api('/api/fetch-full', { id });
+    // Кнопка «Докачать текст» просит сервер попробовать заново (force): иначе
+    // сервер отвечал «недавно пробовали» и ничего не скачивал.
+    const res = await api('/api/fetch-full', silent ? { id } : { id, force: true });
     if (res.data) rememberData(res.data);
     const fresh = (state.data.items ?? []).find((i) => i.id === id);
     if (fresh) {
