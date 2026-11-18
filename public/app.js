@@ -1876,7 +1876,7 @@ function updateFooterStats() {
   const readCount = (state.data.items ?? []).filter((i) => i.read).length;
   const pendingCount = pendingReads.size;
   // Если сервер не ответил на обновление — показываем предупреждение вместо галочки.
-  const problem = state.lastError || state.refreshError || '';
+  const problem = state.listError || state.lastError || state.refreshError || '';
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
   // Версия и стили одним числом: 1.0.286.179 — коротко и понятно.
   label.innerHTML = APP_VERSION + '.' + styleVersion + '.' + (state.serverVersion ?? '?')
@@ -4066,7 +4066,17 @@ async function loadData({ poll = false } = {}) {
       return;
     }
     const query = poll && state.revision ? `?rev=${state.revision}` : '';
-    const payload = await api(`/api/data${query}`);
+    let payload;                               // сбой загрузки списка видно в подвале
+    try {
+      payload = await api(`/api/data${query}`);
+      state.listError = '';
+    } catch (err) {
+      // Раньше сбой молча оставлял старую копию списка: в ленте висели карточки
+      // удалённых статей. Теперь причина видна в подвале.
+      state.listError = 'список не загрузился: ' + (err?.message ?? err);
+      updateFooterStats();
+      throw err;
+    }
     // Сервер отвечает «изменилось» без данных: тогда грузим список целиком.
     // Без этой ветки клиент навсегда оставался со старой копией состояния —
     // именно поэтому отметки из Fever и новые статьи не доходили.
