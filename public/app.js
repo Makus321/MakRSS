@@ -3988,6 +3988,8 @@ async function ensureViewItems() {
  * карточки висят пустыми: открыть нельзя, текста нет.
  */
 async function verifyItemsOnce() {
+  // Без ревизии сверять нечего: иначе `undefined === undefined` глушит проверку навсегда.
+  if (!state.revision) return;
   if (state.verifiedRevision === state.revision) return;
   state.verifiedRevision = state.revision;
   const ids = (state.data.items ?? []).map((i) => i.id).slice(0, 3000);
