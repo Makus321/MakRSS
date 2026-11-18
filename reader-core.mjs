@@ -92,7 +92,7 @@ const AUTH_PASS = '';
 // Политика хранения: непрочитанное не удаляется никогда (до жёсткого предела),
 // прочитанное живёт KEEP_READ_DAYS дней, избранное — всегда.
 const MAX_UNREAD_PER_FEED = Number(process.env.MAX_UNREAD_PER_FEED || argValue('max-unread', 3000));
-const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-read', 1000));
+const MAX_READ_PER_FEED = Number(process.env.MAX_READ_PER_FEED || argValue('max-read', 5000));
 // Идентификаторы удалённых прочитанных статей помним всегда: иначе сайт снова
 // отдаёт их в ленте, и они возвращаются как «новые». Сами статьи при этом
 // удаляются, хранятся только id (35 байт на запись).
