@@ -3981,6 +3981,30 @@ async function ensureViewItems() {
   }
 }
 
+/**
+ * Один раз после загрузки сверяет карточки с сервером пачками по 500 id:
+ * сервер отвечает, каких статей у него уже нет, и мы их убираем. Иначе старые
+ * карточки висят пустыми: открыть нельзя, текста нет.
+ */
+async function verifyItemsOnce() {
+  if (state.itemsVerified) return;
+  state.itemsVerified = true;
+  const ids = (state.data.items ?? []).map((i) => i.id).slice(0, 3000);
+  if (!ids.length) return;
+  const gone = new Set();
+  for (let from = 0; from < ids.length; from += 500) {
+    try {
+      const answer = await api('/api/state', { ids: ids.slice(from, from + 500) });
+      for (const id of answer?.missing ?? []) gone.add(id);
+    } catch { return; }
+  }
+  if (!gone.size) return;
+  state.data.items = (state.data.items ?? []).filter((item) => !gone.has(item.id));
+  for (const id of gone) { state.snapshot?.ids?.delete(id); keepReadItems.delete(id); }
+  render();
+}
+
+
 async function pullNewItems() {
   if (!Array.isArray(state.data.items) || !state.data.items.length) return 0;
   if (!state.sinceAt) {
@@ -4126,6 +4150,7 @@ async function loadData({ poll = false } = {}) {
       return;
     }
     if (!rememberData(payload)) return;         // ответ без данных не применяем
+    verifyItemsOnce();                       // убрать карточки, которых на сервере уже нет
     render();
     flushPendingReads();                        // заодно отправим отложенные отметки
   } catch (err) {
