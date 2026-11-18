@@ -556,8 +556,8 @@ select:focus-visible { outline: none; }
    статьи (белый в тёмной теме, чёрный в светлой), без оттенка гаммы. */
 /* Заголовок берёт размер из того вида, который выбран у ленты: в кратком виде —
    от «шрифта краткого вида», в полном — от «шрифта статьи». */
-.a-title { margin: 0 0 3px; font-size: calc(var(--font-excerpt) * 0.95); line-height: calc(1.35 * var(--lh-scale, 1)); font-weight: 700; color: var(--article-text); }
-.article.full .a-title { font-size: calc(var(--font-article) * 0.95); }
+.a-title { margin: 0 0 3px; font-size: calc(var(--font-excerpt) * 1.18); line-height: calc(1.3 * var(--lh-scale, 1)); font-weight: 700; color: var(--article-text); }
+.article.full .a-title { font-size: calc(var(--font-article) * 1.15); }
 .a-title a { text-decoration: none; color: inherit; }
 .a-title a:hover { color: var(--accent); }
 .a-excerpt { color: var(--article-text); font-size: var(--font-excerpt); margin: 0; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
