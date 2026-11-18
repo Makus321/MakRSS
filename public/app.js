@@ -1865,7 +1865,7 @@ function updateFooterStats() {
   label.innerHTML = APP_VERSION + '.' + styleVersion + '.' + (state.serverVersion ?? '?')
     + ' · ' + icon('●', 'Прочитано статей в данных') + ' ' + readCount
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
-    + (state.removedCards ? ' · ' + icon('⌫', 'Снято карточек, которых на сервере уже нет: ' + state.removedCards) + ' ' + state.removedCards : '')
+    + (state.verifyInfo ? ' · ' + icon('⌫', 'Сверка карточек: ' + state.verifyInfo) + (state.removedCards ?? 0) : '')
     + ' · ' + (problem
       ? icon('⚠', 'Ошибка: ' + problem, ' warn')
       : icon('✓', 'Ошибок нет', ' ok'));
@@ -3999,10 +3999,10 @@ async function verifyItemsOnce() {
     try {
       const answer = await api('/api/state', { ids: ids.slice(from, from + 500) });
       for (const id of answer?.missing ?? []) gone.add(id);
-    } catch { return; }
+    } catch (err) { state.verifyInfo = 'ошибка: ' + (err?.message ?? err); updateFooterStats(); return; }
   }
-  if (!gone.size) { state.removedCards = 0; updateFooterStats(); return; }
-  state.removedCards = gone.size;   // диагностика: сколько «призраков» сняли
+  state.verifyInfo = 'проверено ' + ids.length + ', снято ' + gone.size;
+  state.removedCards = gone.size;
   state.data.items = (state.data.items ?? []).filter((item) => !gone.has(item.id));
   for (const id of gone) { state.snapshot?.ids?.delete(id); keepReadItems.delete(id); }
   render();

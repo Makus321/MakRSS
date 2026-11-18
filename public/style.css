@@ -1348,4 +1348,4 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 .img-slot[data-failed] { border-color: #e5573f; }
 
 /* Строка версии в подвале: на 30% меньше обычного текста, чтобы не отвлекала. */
-#sidebar-version { font-size: calc(9px * var(--ui-scale, 1)); opacity: .8; }
+#sidebar-version { font-size: 10px; opacity: .8; }
