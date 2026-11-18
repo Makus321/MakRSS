@@ -2630,7 +2630,6 @@ async function api(req, res, url) {
     const bodies = await bodiesFor(ids);
     const values = Object.values(bodies ?? {});
     const filled = values.filter((b) => b && (b.fullHtml || b.content)).length;
-    log(`тела: просили ${ids.length}, отдали ${filled}, байт ${JSON.stringify(bodies).length}, мс ${Date.now() - startedAt}`);
     return json(res, 200, { ok: true, bodies });
   }
 
@@ -2897,44 +2896,6 @@ async function api(req, res, url) {
     return json(res, 200, { ok: true, items: out.slice(0, limit), total: out.length, revision: db.revision });
   }
 
-  if (route === 'GET /api/debug') {
-    // Временная диагностика: есть ли статья у сервера и её текст. Только чтение.
-    const id = url.searchParams.get('id') ?? '';
-    const q = url.searchParams.get('q') ?? '';
-    const found = id ? findItem(id) : null;
-    let byLink = null;
-    if (q) {
-      outer: for (const feed of db.feeds) {
-        for (const item of db.items[feed.id] ?? []) {
-          if (String(item.link ?? '').includes(q)) { byLink = { id: item.id, feed: feed.id, date: item.date, hasFull: Boolean(item.hasFull) }; break outer; }
-        }
-      }
-    }
-    const body = found ? (await store.body(found.feed.id, found.item.id)) ?? {} : {};
-    const total = Object.values(db.items ?? {}).reduce((n, list) => n + list.length, 0);
-    // Что реально уходит клиенту в списке: по этому видно, есть ли там «призрак».
-    const list = buildPayload().items ?? [];
-    const t = url.searchParams.get('t') ?? '';
-    const ghost = q ? list.find((it) => String(it.link ?? '').includes(q)) ?? null : null;
-    const byTitle = t ? list.find((it) => String(it.title ?? '').toLowerCase().includes(t.toLowerCase())) ?? null : null;
-    const payloadTotal = list.length;
-    return json(res, 200, {
-      ok: true,
-      id,
-      found: Boolean(found),
-      feed: found ? found.feed.id : null,
-      link: found ? found.item.link : null,
-      fullHtml: String(body.fullHtml ?? '').length,
-      content: String(body.content ?? '').length,
-      byLink,
-      total,
-      total,
-      payloadTotal,
-      ghost: ghost ? { id: ghost.id, link: ghost.link, date: ghost.date } : null,
-      byTitle: byTitle ? { id: byTitle.id, link: byTitle.link, date: byTitle.date, hasFull: byTitle.hasFull } : null,
-      revision: db.revision,
-    });
-  }
 
   if (route === 'GET /api/since') {
     // Новые статьи после указанного момента: клиент показывает плашку «Новых статей»,
@@ -3213,7 +3174,6 @@ async function api(req, res, url) {
       }
     }
     // Временная диагностика: видно, доходит ли запрос отметок и сколько в нём id.
-    log(`отметки: пришло ${ids.length} id, read=${read}, light=${Boolean(body.light)}, неизвестных ${ids.filter((id) => !findItem(id)).length}`);
     const stamp = Date.now();
     for (const id of ids) {
       if (read) db.read[id] = stamp;
@@ -3308,7 +3268,6 @@ async function api(req, res, url) {
     if (force) { found.item.hasFull = false; found.item.fullTriedAt = null; await store.setBody(found.feed.id, found.item.id, { fullHtml: '' }); }
     const result = await fetchFullText(found.feed.id, found.item.id);
     // Временная диагностика: видно, почему «Докачать текст» ничего не приносит.
-    log(`докачка по запросу: ${found.item.id}, ok=${result.ok}, error=${result.error || "нет"}, hasFull=${Boolean(found.item.hasFull)}`);
     const body = (await store.body(found.feed.id, found.item.id)) ?? {};
     // Полный список здесь не отдаём: он весил мегабайты на каждую докачку,
     // а клиенту нужен только сам текст статьи.

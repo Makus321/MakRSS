@@ -280,8 +280,6 @@ const savePrefs = () => localStorage.setItem(PREF_KEY, JSON.stringify(state.pref
 // Полный сброс клиента по ссылке вида /?reset=1: чистит кэши, локальные данные
 // и перезагружает приложение. Нужен, когда в ленте остаются «мёртвые» карточки.
 const resetRequested = new URLSearchParams(location.search).get('reset') === '1';
-// Показ внутреннего id статьи в карточке: включается ссылкой /?ids=1 (диагностика).
-const SHOW_IDS = new URLSearchParams(location.search).get('ids') === '1';
 if (resetRequested) {
   (async () => {
     try {
@@ -1516,7 +1514,6 @@ function articleHtml(item) {
       <div class="a-main">
         <h3 class="a-title">${title}</h3>
         <div class="a-meta">
-          ${SHOW_IDS ? `<span class="flag" style="opacity:.6">${esc(item.id)}</span>` : ''}
           <span class="src">${esc(item.feedTitle)}</span>
           <span data-time="${esc(item.date ?? '')}">${esc(timeAgo(item.date))}</span>
           ${item.author && item.author !== item.feedTitle ? `<span>${esc(item.author)}</span>` : ''}
@@ -1892,10 +1889,6 @@ function updateFooterStats() {
   const styleVersion = /v=(\d+)/.exec(styleTag?.href ?? '')?.[1] ?? '?';
   const readCount = (state.data.items ?? []).filter((i) => i.read).length;
   const pendingCount = pendingReads.size;
-  // Сколько статей реально пришло с сервера и сколько карточек сейчас на экране:
-  // по этой паре видно, откуда берутся лишние.
-  const itemsCount = (state.data.items ?? []).length;
-  const cardsCount = document.querySelectorAll('#list .article').length;
   // Если сервер не ответил на обновление — показываем предупреждение вместо галочки.
   const problem = state.listError || state.lastError || state.refreshError || '';
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
@@ -1903,8 +1896,6 @@ function updateFooterStats() {
   label.innerHTML = APP_VERSION + '.' + styleVersion + '.' + (state.serverVersion ?? '?')
     + ' · ' + icon('●', 'Прочитано статей в данных') + ' ' + readCount
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
-    + ' · ' + icon('▤', 'Статей в данных / карточек на экране') + ' ' + itemsCount + '/' + cardsCount
-    + (state.verifyInfo ? ' · ' + icon('⌫', 'Сверка карточек: ' + state.verifyInfo) + (state.removedCards ?? 0) : '')
     + ' · ' + (problem
       ? icon('⚠', 'Ошибка: ' + problem, ' warn')
       : icon('✓', 'Ошибок нет', ' ok'));
@@ -4040,10 +4031,8 @@ async function verifyItemsOnce() {
     try {
       const answer = await api('/api/state', { ids: ids.slice(from, from + 500) });
       for (const id of answer?.missing ?? []) gone.add(id);
-    } catch (err) { state.verifyInfo = 'ошибка: ' + (err?.message ?? err); updateFooterStats(); return; }
+    } catch { return; }
   }
-  state.verifyInfo = 'проверено ' + ids.length + ', снято ' + gone.size;
-  state.removedCards = gone.size;
   state.data.items = (state.data.items ?? []).filter((item) => !gone.has(item.id));
   for (const id of gone) { state.snapshot?.ids?.delete(id); keepReadItems.delete(id); }
   render();
