@@ -1927,12 +1927,15 @@ function updateFooterStats() {
   const styleTag = document.querySelector('link[rel="stylesheet"]');
   const styleVersion = /v=(\d+)/.exec(styleTag?.href ?? '')?.[1] ?? '?';
   const pendingCount = pendingReads.size;
-  // Объём данных, полученных при последнем открытии ленты из дерева.
-  const listBytes = Number(state.listBytes) || 0;
+  const traffic = state.traffic ?? { total: 0, list: 0, images: 0 };
   const problem = state.listError || state.lastError || state.refreshError || '';
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
+  // Первое число — трафик за сессию (сжатый, с учётом кэша),
+  // в подсказке — из чего он состоит: ленты, картинки, остальное.
+  const trafficTitle = 'Трафик за сессию: ' + sizeLabel(traffic.total)
+    + ' (ленты ' + sizeLabel(traffic.list) + ', картинки ' + sizeLabel(traffic.images) + ')';
   label.innerHTML = APP_VERSION + '.' + styleVersion + '.' + (state.serverVersion ?? '?')
-    + ' · ' + icon('⇣', 'Объём данных, полученных при открытии ленты') + ' ' + sizeLabel(listBytes)
+    + ' · ' + icon('⇣', trafficTitle) + ' ' + sizeLabel(traffic.total)
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
     + ' · ' + (problem
       ? icon('⚠', 'Ошибка: ' + problem, ' warn')
@@ -1940,6 +1943,24 @@ function updateFooterStats() {
 }
 
 /** Байты в короткую подпись: 812 Б, 24 КБ, 1.8 МБ. */
+// ------- учёт трафика: сколько реально пришло по сети за сессию -------
+// Берём transferSize из Performance API: это сжатый размер с учётом кэша
+// (повторный ответ из кэша даёт 0, то есть трафика не было).
+state.traffic = { total: 0, list: 0, images: 0 };
+function noteTraffic(entry) {
+  const bytes = Number(entry.transferSize) || 0;
+  if (!bytes) return;
+  state.traffic.total += bytes;
+  const url = entry.name || '';
+  if (url.includes('/api/items')) state.traffic.list += bytes;
+  else if (/\.(webp|jpe?g|png|gif|avif)(\?|$)/i.test(url) || url.includes('/api/cover') || url.includes('/api/media')) state.traffic.images += bytes;
+  updateFooterStats();
+}
+try {
+  new PerformanceObserver((list) => { for (const entry of list.getEntries()) noteTraffic(entry); })
+    .observe({ type: 'resource', buffered: true });
+} catch { /* старый браузер — обойдёмся без учёта */ }
+
 function sizeLabel(bytes) {
   const n = Number(bytes) || 0;
   if (n < 1024) return n + ' Б';
