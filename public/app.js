@@ -4208,7 +4208,7 @@ async function loadData({ poll = false } = {}) {
       const expected = state.view.type === 'feed' ? Number(viewFeed()?.unread ?? 0) : 0;
       if (expected && itemsOfView().length < expected) {
         const more = await ensureViewItems(expected);
-        if (more) renderList();
+        if (more) { state.listFrozen = false; state.snapshot = null; renderList(); }   // снапшот не знал о догруженных
       }
       renderNewRow();
       return;
@@ -4230,7 +4230,7 @@ async function loadData({ poll = false } = {}) {
       const expectedNow = state.view.type === 'feed' ? Number(viewFeed()?.unread ?? 0) : 0;
       if (expectedNow && itemsOfView().length < expectedNow) {
         const moreItems = await ensureViewItems(expectedNow);
-        if (moreItems) renderList();
+        if (moreItems) { state.listFrozen = false; state.snapshot = null; renderList(); }
       }
       state.data.fetching = payload.fetching;
       state.data.refreshing = payload.refreshing;
