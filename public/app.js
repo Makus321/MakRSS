@@ -1425,7 +1425,11 @@ function switchView(view) {
   savePrefs();
   // Свежие статьи могли не дойти до клиента: подтягиваем их перед отрисовкой.
   // В новой ленте может не быть нужного числа статей: догружаем по количеству.
-  ensureViewItems().then(() => render());
+  // Пересобираем раздел наверняка: список мог отстать от сервера (в дереве 5, в ленте 4).
+  render();
+  state.snapshot = null;                 // снимок строим заново из свежих данных
+  state.listFrozen = false;
+  ensureViewItems(0, true).then(() => render());   // true — спросить сервер, даже если данные есть
   render();
 }
 
@@ -4021,12 +4025,12 @@ async function loadSettings() {
  * Догружает столько статей раздела, сколько сейчас показывается на экране.
  * Раньше брали «за сутки» — это и лишний вес, и промахи по количеству.
  */
-async function ensureViewItems(expected = 0) {
+async function ensureViewItems(expected = 0, force = false) {
   const want = Math.max(20, Number(state.limit) || 20);
   // Если сервер сообщил, сколько статей в разделе, ориентируемся на это число:
   // иначе в ленте оставалось 5 карточек при 7 статьях на сервере.
   const needAtLeast = expected > 0 ? Math.min(expected, want) : want;
-  if (itemsOfView().length >= needAtLeast) return 0;
+  if (!force && itemsOfView().length >= needAtLeast) return 0;
   const params = new URLSearchParams();
   params.set('limit', String(Math.min(300, want)));
   if (state.view.type === 'feed') params.set('feedId', state.view.id);
