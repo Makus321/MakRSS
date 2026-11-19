@@ -515,7 +515,10 @@ async function mergeItems(feedId, fresh) {
       // не перекачивая весь список. Дата публикации для этого не годится — лента
       // может отдать статью позже, с датой в прошлом.
       if (prev?.addedAt) meta.addedAt = prev.addedAt;
-      if (!meta.addedAt) meta.addedAt = new Date().toISOString();
+      // Время появления ставим ТОЛЬКО новым статьям: если проставлять его
+      // старым записям, каждая синхронизация считала их «новыми» и в дереве
+      // появлялось «(+N)», равное числу всех непрочитанных.
+      if (!prev) meta.addedAt = new Date().toISOString();
       if (prev) {
         if (prev.hasFull) meta.hasFull = true;
         if (prev.fullTriedAt) meta.fullTriedAt = prev.fullTriedAt;
