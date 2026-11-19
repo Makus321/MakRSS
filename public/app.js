@@ -4021,9 +4021,12 @@ async function loadSettings() {
  * Догружает столько статей раздела, сколько сейчас показывается на экране.
  * Раньше брали «за сутки» — это и лишний вес, и промахи по количеству.
  */
-async function ensureViewItems() {
+async function ensureViewItems(expected = 0) {
   const want = Math.max(20, Number(state.limit) || 20);
-  if (itemsOfView().length >= want) return 0;
+  // Если сервер сообщил, сколько статей в разделе, ориентируемся на это число:
+  // иначе в ленте оставалось 5 карточек при 7 статьях на сервере.
+  const needAtLeast = expected > 0 ? Math.min(expected, want) : want;
+  if (itemsOfView().length >= needAtLeast) return 0;
   const params = new URLSearchParams();
   params.set('limit', String(Math.min(300, want)));
   if (state.view.type === 'feed') params.set('feedId', state.view.id);
@@ -4204,7 +4207,7 @@ async function loadData({ poll = false } = {}) {
       // меньше статей — догружаем недостающие, иначе шапка и дерево расходятся.
       const expected = state.view.type === 'feed' ? Number(viewFeed()?.unread ?? 0) : 0;
       if (expected && itemsOfView().length < expected) {
-        const more = await ensureViewItems();
+        const more = await ensureViewItems(expected);
         if (more) renderList();
       }
       renderNewRow();
@@ -4222,6 +4225,13 @@ async function loadData({ poll = false } = {}) {
         }
       }
       state.data.counts = payload.counts;
+      // Даже когда «ничего не изменилось», в разделе может не хватать статей:
+      // список у нас порционный, а дерево показывает серверное число.
+      const expectedNow = state.view.type === 'feed' ? Number(viewFeed()?.unread ?? 0) : 0;
+      if (expectedNow && itemsOfView().length < expectedNow) {
+        const moreItems = await ensureViewItems(expectedNow);
+        if (moreItems) renderList();
+      }
       state.data.fetching = payload.fetching;
       state.data.refreshing = payload.refreshing;
       // Время последней синхронизации и отсчёт до следующей: без них счётчик
