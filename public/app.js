@@ -2791,7 +2791,9 @@ async function toggleStar(id, event) {
       renderToolbar();
       return;
     }
-    render();
+    // Список НЕ пересобираем: карточка остаётся на месте, иначе лента прыгает.
+    renderSidebar();
+    renderToolbar();
   } catch (err) { toast(err.message, true); }
 }
 
