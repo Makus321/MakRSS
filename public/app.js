@@ -4206,9 +4206,13 @@ async function loadData({ poll = false } = {}) {
       // Дерево показывает серверное число непрочитанных. Если в данных раздела
       // меньше статей — догружаем недостающие, иначе шапка и дерево расходятся.
       const expected = state.view.type === 'feed' ? Number(viewFeed()?.unread ?? 0) : 0;
+      const hadItems = itemsOfView().length > 0;   // пусто ли было до догрузки
       if (expected && itemsOfView().length < expected) {
         const more = await ensureViewItems(expected);
-        if (more) { state.listFrozen = false; state.snapshot = null; renderList(); }   // снапшот не знал о догруженных
+        // Догружаем ТОЛЬКО в данные: список не пересобираем, иначе во время
+        // чтения в него вставлялись бы новые статьи и лента прыгала.
+        // Отрисовываем лишь когда до этого список был пуст (первый заход в раздел).
+        if (!hadItems) { state.listFrozen = false; state.snapshot = null; renderList(); }
       }
       renderNewRow();
       return;
@@ -4228,9 +4232,10 @@ async function loadData({ poll = false } = {}) {
       // Даже когда «ничего не изменилось», в разделе может не хватать статей:
       // список у нас порционный, а дерево показывает серверное число.
       const expectedNow = state.view.type === 'feed' ? Number(viewFeed()?.unread ?? 0) : 0;
+      const hadItemsNow = itemsOfView().length > 0;
       if (expectedNow && itemsOfView().length < expectedNow) {
         const moreItems = await ensureViewItems(expectedNow);
-        if (moreItems) { state.listFrozen = false; state.snapshot = null; renderList(); }
+        if (!hadItemsNow) { state.listFrozen = false; state.snapshot = null; renderList(); }
       }
       state.data.fetching = payload.fetching;
       state.data.refreshing = payload.refreshing;
