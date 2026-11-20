@@ -749,9 +749,13 @@ function renderToolbar() {
 
   // Считаем ВСЕ статьи раздела, а не только показанные карточки: иначе в шапке
   // «3 статьи», а в дереве 4 — список-то выдаётся порциями.
+  // В шапке показываем ТЕ ЖЕ числа, что в дереве (их считает сервер): иначе
+  // получалось «в дереве 5, в ленте 4» из-за того, что список приходит порциями.
+  const curFeed = state.view.type === 'feed' ? viewFeed() : null;
   const viewItems = itemsOfView().filter((item) => !unreadModeFor() || !item.read);
   const items = viewItems;
-  const unread = viewItems.filter((i) => !i.read).length;
+  const unread = curFeed ? Number(curFeed.unread ?? 0) : viewItems.filter((i) => !i.read).length;
+  const totalShown = curFeed ? (unreadModeFor() ? Number(curFeed.unread ?? 0) : Number(curFeed.total ?? 0)) : viewItems.length;
   // «3 мин назад», но «только что» и «вчера» — уже готовые слова, «назад» к ним не идёт.
   const ago = timeAgo(state.data.lastRefresh);
   const refreshed = state.data.lastRefresh
@@ -760,7 +764,7 @@ function renderToolbar() {
   const added = Number.isFinite(state.data.lastRefreshAdded)
     ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
     : '';
-  $('#view-sub').textContent = `${items.length} ${plural(items.length, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}`;
+  $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}`;
   // Режим «Непрочитанные / Все» — только для текущей ленты.
   $('#unread-mode').value = unreadModeFor() ? 'unread' : 'all';
   $('#unread-mode-wrap').hidden = state.view.type === 'starred';

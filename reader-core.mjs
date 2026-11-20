@@ -2900,6 +2900,8 @@ async function api(req, res, url) {
       }
     }
     out.sort(byDateDesc);
+    // Временная диагностика: видно, почему лента пустая при ненулевом счётчике.
+    log(`лента по запросу: feed=${feedId || '(папка)'}, unread=${onlyUnread}, статей=${out.length}, limit=${limit}`);
     return json(res, 200, { ok: true, items: out.slice(0, limit), total: out.length, revision: db.revision });
   }
 
