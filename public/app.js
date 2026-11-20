@@ -765,6 +765,12 @@ function renderToolbar() {
     ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
     : '';
   $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}`;
+  // Диагностика по ссылке ?debug=1: видно, где теряется статья.
+  if (new URLSearchParams(location.search).get('debug') === '1') {
+    const raw = state.data.items.filter((item) => state.view.type !== 'feed' || item.feedId === state.view.id);
+    const rendered = document.querySelectorAll('#list .article').length;
+    $('#view-sub').textContent += ` · данные ${raw.length}, после фильтров ${viewItems.length}, снимок ${state.snapshot?.ids?.size ?? 0}, карточек ${rendered}`;
+  }
   // Режим «Непрочитанные / Все» — только для текущей ленты.
   $('#unread-mode').value = unreadModeFor() ? 'unread' : 'all';
   $('#unread-mode-wrap').hidden = state.view.type === 'starred';
