@@ -594,7 +594,9 @@ function itemsOfView() {
 function visibleItems() {
   const key = viewKey();
   const onlyUnread = unreadModeFor();
-  if (!state.listFrozen && (!state.snapshot || state.snapshot.key !== key)) {
+  // Снимка может не быть вовсе (его сбрасывают при догрузке и при смене раздела),
+  // поэтому проверяем null раньше флага «заморожено», иначе падало на .ids.
+  if (!state.snapshot || (!state.listFrozen && state.snapshot.key !== key)) {
     state.snapshot = {
       key,
       // Снимок — это то, что видно сейчас: в режиме «только непрочитанные»
@@ -1849,7 +1851,7 @@ function renderList() {
   if (state.loadingView) {
     const loadingEl = $('#list');
     if (loadingEl) loadingEl.innerHTML = '<div class="a-loading">Загружаю статьи…</div>';
-    state.listFrozen = true;
+    // снимок не трогаем: список построится после загрузки
     ignoreScrollUntil = Date.now() + 900;
     return;
   }
