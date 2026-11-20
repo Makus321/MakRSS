@@ -1452,14 +1452,19 @@ function switchView(view) {
   state.traffic.winTotal = 0;
   state.traffic.winList = 0;
   state.traffic.winImages = 0;
+  // Пока раздел догружается, показываем заглушку: иначе сначала рисовался
+  // неполный список, а через секунду статьи вставлялись сверху и сразу
+  // помечались прочитанными, потому что оказывались выше линии чтения.
+  state.loadingView = true;
+  render();
   ensureViewItems(0, true).then(() => {
+    state.loadingView = false;
     // Снимок сбрасываем ещё раз ПОСЛЕ ответа: иначе список уже заморожен и
     // догруженные статьи в него не попадут (в шапке 1, а карточек нет).
     state.snapshot = null;
     state.listFrozen = false;
     render();
-  });
-  render();
+  }).catch(() => { state.loadingView = false; render(); });
 }
 
 /** Восстанавливает раздел, в котором пользователь был до перезагрузки. */
@@ -1840,6 +1845,14 @@ function patchCard(id) {
 }
 
 function renderList() {
+  // Пока раздел догружается, вместо списка показываем заглушку.
+  if (state.loadingView) {
+    const loadingEl = $('#list');
+    if (loadingEl) loadingEl.innerHTML = '<div class="a-loading">Загружаю статьи…</div>';
+    state.listFrozen = true;
+    ignoreScrollUntil = Date.now() + 900;
+    return;
+  }
   if (pointerDown) { renderPending = true; return; }
   if (state.scrolling) { state.deferredRender = true; return; }
   const listEl = $('#list');
