@@ -2587,7 +2587,7 @@ async function flushPendingReads() {
 }
 
 loadPendingReads();
-window.addEventListener('online', () => { flushPendingReads(); });
+window.addEventListener('online', () => { flushPendingReads(); loadData({ poll: true }).catch(() => {}); });
 // На телефоне страница замирает, как только её скрывают: неотправленные отметки
 // могли потеряться. Отправляем их при уходе и при возврате, в том числе через
 // sendBeacon — он переживает закрытие вкладки.
@@ -2608,7 +2608,10 @@ document.addEventListener('visibilitychange', () => {
       }
     }
   } else {
+    // Вернулись к вкладке — сразу и отметки, и свежие данные: иначе после
+    // обрыва связи клиент висел со старой копией до следующего опроса.
     flushNow();
+    if (state.session?.authenticated) loadData({ poll: true }).catch(() => {});
   }
 });
 window.addEventListener('pagehide', flushNow);
