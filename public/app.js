@@ -1446,7 +1446,13 @@ function switchView(view) {
   state.traffic.winTotal = 0;
   state.traffic.winList = 0;
   state.traffic.winImages = 0;
-  ensureViewItems(0, true).then(() => render());   // true — спросить сервер, даже если данные есть
+  ensureViewItems(0, true).then(() => {
+    // Снимок сбрасываем ещё раз ПОСЛЕ ответа: иначе список уже заморожен и
+    // догруженные статьи в него не попадут (в шапке 1, а карточек нет).
+    state.snapshot = null;
+    state.listFrozen = false;
+    render();
+  });
   render();
 }
 
