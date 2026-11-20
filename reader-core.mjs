@@ -3184,7 +3184,12 @@ async function api(req, res, url) {
     }
     // Временная диагностика: видно, доходит ли запрос отметок и сколько в нём id.
     const stamp = Date.now();
+    // Подтверждаем клиенту, какие отметки РЕАЛЬНО применены: он убирает из
+    // своей очереди только их. Иначе при сбое отметка терялась навсегда.
+    const applied = [];
+    const missing = [];
     for (const id of ids) {
+      if (findItem(id)) applied.push(id); else missing.push(id);
       if (read) db.read[id] = stamp;
       else delete db.read[id];
     }
@@ -3201,8 +3206,8 @@ async function api(req, res, url) {
     }
     // Полный список здесь не отдаём: при прокрутке отметок много, и каждая
     // тянула мегабайты. Клиент обновляет состояние сам, оптимистично.
-    if (body.light) return json(res, 200, { ok: true, changed: ids.length });
-    return json(res, 200, { ok: true, changed: ids.length, data: buildPayload() });
+    if (body.light) return json(res, 200, { ok: true, changed: applied.length, applied, missing });
+    return json(res, 200, { ok: true, changed: applied.length, applied, missing, data: buildPayload() });
   }
 
   if (route === 'POST /api/star') {

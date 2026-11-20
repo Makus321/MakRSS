@@ -2572,7 +2572,13 @@ async function flushPendingReads() {
       const payload = await api('/api/read', { ids, read, light: true });
     if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
       if (payload?.ok === false) continue;
-      for (const id of ids) pendingReads.delete(id);
+      // Из очереди убираем ТОЛЬКО подтверждённые сервером отметки.
+      // Если подтверждения нет (старый ответ, сбой) — оставляем и повторим.
+      const confirmed = Array.isArray(payload?.applied) ? new Set(payload.applied) : null;
+      const unknown = new Set(Array.isArray(payload?.missing) ? payload.missing : []);
+      for (const id of ids) {
+        if (!confirmed || confirmed.has(id) || unknown.has(id)) pendingReads.delete(id);
+      }
       savePendingReads();
       if (payload?.data) rememberData(payload.data);
       updateFooterStats();   // очередь уменьшилась — показываем сразу
