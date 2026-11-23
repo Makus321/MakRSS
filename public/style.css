@@ -1396,3 +1396,26 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .app-spinner { animation-duration: 2.4s; }
 }
+/* Просмотр картинки на весь экран: затемнение и изображение по ширине окна.
+   Повторный клик по картинке или фону закрывает просмотр. */
+.lightbox {
+  position: fixed; inset: 0; z-index: 90;
+  display: grid; place-items: center;
+  background: rgba(4, 8, 12, .92);
+  padding: 12px;
+  cursor: zoom-out;
+}
+.lightbox[hidden] { display: none; }
+.lightbox img {
+  width: auto; height: auto;
+  max-width: min(100vw - 24px, 1600px);
+  max-height: calc(100vh - 24px);
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+/* Пока смотрим картинку, страница под ней не прокручивается. */
+body.lightbox-open { overflow: hidden; }
+/* В тексте статьи картинка выглядит кликабельной. */
+.a-body img, .comment-body img { cursor: zoom-in; }

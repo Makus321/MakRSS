@@ -3007,6 +3007,15 @@ document.addEventListener('keydown', (event) => {
 // ------------------------------------------------------------------ события
 
 $('#list').addEventListener('click', async (event) => {
+  // Картинка в тексте статьи открывается на весь экран. Проверяем раньше
+  // ссылок и карточки, иначе клик уводил по ссылке или раскрывал статью.
+  const picture = event.target.closest('.a-body img, .comment-body img');
+  if (picture) {
+    event.preventDefault();
+    event.stopPropagation();
+    openLightbox(picture);
+    return;
+  }
   const star = event.target.closest('[data-star]');
   if (star) { toggleStar(star.dataset.star, event); return; }
   const shareBtn = event.target.closest('[data-share]');
@@ -4051,6 +4060,38 @@ $('#clear-tg').addEventListener('click', async () => {
  * Затемнение со спиннером на всё окно: пока данные не пришли, интерфейс без
  * лент выглядел как «пустое приложение». hideLoader снимает затемнение.
  */
+/**
+ * Просмотр картинки на весь экран: клик по изображению в тексте статьи
+ * открывает затемнение с картинкой по ширине экрана, повторный клик — закрывает.
+ */
+function openLightbox(image) {
+  const box = $('#lightbox');
+  const big = $('#lightbox-img');
+  if (!box || !big) return;
+  // У ленивых картинок адрес лежит в data-src: src может быть заглушкой.
+  const src = image.dataset.src || image.currentSrc || image.src || '';
+  if (!src) return;
+  big.src = src;
+  big.alt = image.alt || '';
+  box.hidden = false;
+  document.body.classList.add('lightbox-open');
+}
+
+function closeLightbox() {
+  const box = $('#lightbox');
+  const big = $('#lightbox-img');
+  if (!box) return;
+  box.hidden = true;
+  if (big) big.removeAttribute('src');   // не держим картинку в памяти
+  document.body.classList.remove('lightbox-open');
+}
+
+function lightboxVisible() {
+  const box = $('#lightbox');
+  return Boolean(box && !box.hidden);
+}
+
+
 function showLoader(text = 'Загрузка…') {
   const box = $('#app-loader');
   const label = $('#app-loader-text');
@@ -4409,6 +4450,12 @@ function setupSplitter() {
  */
 let events = null;
 function startEvents() {
+  // Просмотр картинки: повторный клик по ней или по затемнению закрывает,
+  // Esc — тоже. Так чтение возвращается на то же место: список не сдвигался.
+  $('#lightbox')?.addEventListener('click', (event) => { event.preventDefault(); closeLightbox(); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && lightboxVisible()) { event.preventDefault(); closeLightbox(); }
+  });
   if (!('EventSource' in window) || events) return;
   try {
     events = new EventSource('/api/events');
