@@ -885,16 +885,6 @@ function renderToolbar() {
 
 /** Сколько новых статей пришло в текущий вид после того, как его открыли. */
 /** Сколько новых статей у ленты — по тому же правилу, что и плашка сверху. */
-function pendingNewForFeed(feedId) {
-  const snapshot = state.snapshot?.ids;
-  if (!snapshot) return 0;
-  return (state.data.items ?? []).filter((item) => {
-    if (item.feedId !== feedId) return false;
-    if (snapshot.has(item.id)) return false;
-    if (!passesFeedFilters(item)) return false;
-    return true;
-  }).length;
-}
 
 /** Сумма серверных счётчиков «добавлено» по лентам текущего вида. */
 function pendingNewTotal() {
@@ -910,22 +900,6 @@ function pendingNewCount() {
   return pendingNewTotal();
 }
 
-function pendingNewCountLegacy() {
-  const snapshot = state.snapshot?.ids;
-  if (!snapshot) return 0;
-  const onlyUnread = unreadModeFor();
-  const q = state.query.trim().toLowerCase();
-  return state.data.items.filter((item) => {
-    if (snapshot.has(item.id)) return false;
-    if (state.view.type === 'feed' && item.feedId !== state.view.id) return false;
-    if (state.view.type === 'folder' && feedById(item.feedId)?.folderId !== state.view.id) return false;
-    if (state.view.type === 'starred' && !item.starred && !pendingUnstar.has(item.id)) return false;
-    if (!passesFeedFilters(item)) return false;
-    if (q && !searchHaystack(item).includes(q)) return false;
-    if (onlyUnread && item.read) return false;
-    return true;
-  }).length;
-}
 
 /** Полоска «пришли новые статьи»: показываем, но в список не добавляем. */
 function renderNewRow() {
@@ -1697,18 +1671,6 @@ state.filling = false;
  * Если шапка карточки (заголовок, автор, метки) по высоте короче картинки,
  * краткий текст начинается под картинкой, а не справа от неё под заголовком.
  */
-function layoutCardThumbs(root) {
-  for (const card of (root ?? document).querySelectorAll('.article.has-thumb')) {
-    const main = card.querySelector('.a-main') ?? card.querySelector('.a-head');
-    const thumb = card.querySelector('.a-thumb');
-    if (!main || !thumb || !thumb.offsetHeight) continue;
-    // Сравниваем картинку не с шапкой целиком (картинка лежит внутри неё),
-    // а с колонкой заголовка и подписи: если картинка ниже — текст пойдёт под ней.
-    const mainBottom = main.getBoundingClientRect().bottom;
-    const thumbBottom = thumb.getBoundingClientRect().bottom;
-    card.classList.toggle('text-under-thumb', thumbBottom > mainBottom + 2);
-  }
-}
 
 /** Пустые обёртки в ряду (<figure> без картинки) — лишняя ячейка, убираем. */
 function dropEmptyRowCells(row) {
@@ -2009,7 +1971,9 @@ function renderList() {
   refreshStaleComments();  // открытые комментарии догоняют счётчик сайта
 
   layoutArticleImages();
-  showMediaCounters();
+  // Служебная строка «сколько медиа» нужна только при разборе проблем: в обычной
+  // жизни она занимает место под текстом статьи.
+  if (DEBUG) showMediaCounters();
   setupEmbeds();
 }
 
@@ -2244,20 +2208,8 @@ const markedRecently = new Map();   // id → время последней по
  * Статья, которую вручную сделали непрочитанной. Автоматические правила не
  * трогают её, пока список не сдвинули с того места, где её отметили.
  */
-function rememberManualUnread(id) {
-  state.manualUnread = { id, moved: 0, lastTop: $('#list')?.scrollTop ?? 0 };
-}
 
 /** Эту статью сейчас нельзя отмечать прочитанной автоматически? */
-function keepManualUnread(id) {
-  const manual = state.manualUnread;
-  if (!manual || manual.id !== id) return false;
-  // Защита снимается, только когда человек реально пролистал дальше: считаем
-  // пройденный путь по событиям прокрутки, а не сравниваем позиции — перерисовка
-  // списка тоже меняет scrollTop, и раньше защита отключалась сразу.
-  if (manual.moved > 220) { state.manualUnread = null; return false; }
-  return true;
-}
 
 /** Автоматике можно трогать эту статью? */
 function autoReadAllowed(id) {
@@ -2270,19 +2222,9 @@ function autoReadAllowed(id) {
  * новые статьи только увеличивают счётчик. Так отметки «прочитано» не могут
  * уехать на соседнюю статью.
  */
-function freezeListForReading() {
-  state.listFrozen = true;
-}
 
-function unfreezeList() {
-  state.listFrozen = false;
-}
 
 /** Статья входит в текущий список (снимок) — только такие можно отмечать. */
-function inReadingList(id) {
-  const ids = state.snapshot?.ids;
-  return !ids || ids.has(id);
-}
 
 function markReadOnce(id, read = true) {
   // Повторные отметки в пределах нескольких секунд не шлём, но и не блокируем
@@ -4753,6 +4695,9 @@ const BUILD = (() => {
   const tag = document.querySelector('script[src*="app.js"]');
   return fromUrl(tag?.getAttribute('src') ?? '');
 })();
+
+// Диагностика включается ссылкой ?debug=1: служебные строки и счётчики медиа.
+const DEBUG = new URLSearchParams(location.search).get('debug') === '1';
 const APP_VERSION = `1.${BUILD}`;
 
 function setupPwa() {

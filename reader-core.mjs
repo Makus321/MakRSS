@@ -28,7 +28,6 @@
 //   GET  /api/opml  /  POST /api/opml   выгрузка и импорт подписок
 //   ANY  /fever/                        протокол Fever API для внешних клиентов
 
-import { createServer } from 'node:http';
 import { readFile, writeFile, appendFile, mkdir, unlink, stat, readdir, rename } from 'node:fs/promises';
 import { gzip, brotliCompress, constants as zlibConstants } from 'node:zlib';
 import { promisify } from 'node:util';
@@ -62,8 +61,7 @@ function argValue(name, fallback) {
   return process.argv[process.argv.indexOf(hit) + 1] ?? fallback;
 }
 
-const PORT = Number(process.env.PORT || argValue('port', 8787));
-const HOST = process.env.HOST || argValue('host', '127.0.0.1');
+// PORT и HOST читает server.mjs — ядру они не нужны: сервер создаётся снаружи.
 const REFRESH_MINUTES = Number(process.env.REFRESH_MINUTES || argValue('refresh', 5));
 const MIN_REFRESH_MINUTES = 5;                 // чаще пяти минут ленты не обновляем
 // Ширина текста статьи в процентах от ширины окна (шаг — 10%).
@@ -290,6 +288,43 @@ function charsetFromBody(bytes) {
     || '';
 }
 
+const FEED_MAX_BYTES = Number(process.env.FEED_MAX_BYTES || 8 * 1024 * 1024);          // ленты: 8 МБ
+const MEDIA_MAX_BYTES = Number(process.env.MEDIA_MAX_BYTES || 25 * 1024 * 1024);       // картинки постов: 25 МБ
+const BOT_FILE_MAX_BYTES = Number(process.env.BOT_FILE_MAX_BYTES || 50 * 1024 * 1024); // файлы из Telegram: 50 МБ
+
+/** Предел в человекочитаемом виде: КБ или МБ. */
+const fmtBytes = (n) => (n >= 1048576 ? `${Math.round(n / 1048576)} МБ` : `${Math.round(n / 1024)} КБ`);
+
+/**
+ * Читает тело ответа с пределом по размеру. Сначала проверяем content-length
+ * (дешёвый отказ), затем считаем байты по мере чтения: заголовку верить нельзя.
+ */
+async function readLimited(response, limit, what = 'ответ') {
+  const declared = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limit) {
+    throw new Error(`${what}: ${fmtBytes(declared)} больше предела ${fmtBytes(limit)}`);
+  }
+  if (!response.body) return Buffer.alloc(0);
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > limit) {
+        await reader.cancel().catch(() => {});
+        throw new Error(`${what}: больше предела ${fmtBytes(limit)}`);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  return Buffer.concat(chunks, total);
+}
+
 function decodeBody(buffer, contentType) {
   let bytes = new Uint8Array(buffer);
   let charset = /charset\s*=\s*["']?([\w.-]+)/i.exec(contentType || '')?.[1] ?? '';
@@ -331,7 +366,8 @@ async function httpGetOnce(url, { etag, lastModified, timeout = 20000, accept } 
   if (lastModified) headers['if-modified-since'] = lastModified;
   try {
     const res = await fetch(url, { redirect: 'follow', signal: controller.signal, headers });
-    const buffer = res.status === 304 ? new ArrayBuffer(0) : await res.arrayBuffer();
+    // Ленты бывают по несколько мегабайт, но не бесконечно: 8 МБ хватает с запасом.
+    const buffer = res.status === 304 ? new ArrayBuffer(0) : await readLimited(res, FEED_MAX_BYTES, 'лента');
     return {
       status: res.status,
       ok: res.ok,
@@ -2409,7 +2445,7 @@ async function cachePostMedia(feedId, itemId, html, limit = 12) {
     try {
     const response = await safeFetch(urls[index], { headers: { 'user-agent': UA, accept: '*/*' }, signal: AbortSignal.timeout(15000) });
       if (!response.ok) continue;
-      const bin = Buffer.from(await response.arrayBuffer());
+      const bin = await readLimited(response, MEDIA_MAX_BYTES, 'картинка поста');
       if (bin.length < 200) continue;
       await writeFile(target, bin);
       const size = imageSize(bin);
@@ -2431,7 +2467,7 @@ async function ensureCachedMedia(feedId, itemId, index, remoteUrl) {
   try {
     const response = await safeFetch(remoteUrl, { headers: { 'user-agent': UA, accept: '*/*' }, signal: AbortSignal.timeout(15000) });
     if (!response.ok) return false;
-    const bin = Buffer.from(await response.arrayBuffer());
+    const bin = await readLimited(response, MEDIA_MAX_BYTES, 'картинка поста');
     if (bin.length < 200) return false;
     await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
     await writeFile(target, bin).catch(() => {});
@@ -2530,7 +2566,7 @@ async function serveMedia(req, res, url) {
         await sleep(400);
       }
       if (!response?.ok) throw new Error(String(response?.status ?? 'нет ответа'));
-      const bin = Buffer.from(await response.arrayBuffer());
+      const bin = await readLimited(response, MEDIA_MAX_BYTES, 'картинка поста');
       await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
       await writeFile(target, bin).catch(() => {});
       pruneMediaCache().catch(() => {});   // кэш не должен расти без предела
@@ -2580,7 +2616,9 @@ async function serveMedia(req, res, url) {
     const info = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`).then((r) => r.json());
     if (!info.ok) throw new Error(info.description ?? 'getFile не удался');
     const filePath = info.result.file_path;
-    const bin = Buffer.from(await fetch(telegramFileUrl(token, filePath)).then((r) => r.arrayBuffer()));
+    // Файл бота может быть любым: держим таймаут и предел 50 МБ.
+    const fileResponse = await fetch(telegramFileUrl(token, filePath), { signal: AbortSignal.timeout(30000) });
+    const bin = await readLimited(fileResponse, BOT_FILE_MAX_BYTES, 'файл Telegram');
     const type = MEDIA_TYPES[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
     await writeFile(cached, bin);
     res.writeHead(200, { 'content-type': type, 'cache-control': 'private, max-age=86400' });
