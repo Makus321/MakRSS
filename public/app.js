@@ -3785,7 +3785,12 @@ function fillSettingsForm() {
   setSelectValue($('#set-font-family'), fontVariant(state.prefs.fontFamily));
   setSelectValue($('#set-line-height'), state.prefs.lineHeight || 'normal');
   setFontSelect($('#set-font-tree'), state.prefs.fontTree);
-  setSelectValue($('#set-ui-scale'), String(state.prefs.uiScale ?? 1));
+  const uiScaleAsPx = (() => {
+    const n = Number(state.prefs.uiScale);
+    if (!Number.isFinite(n) || n <= 0) return '13px';
+    return `${Math.round(n < 6 ? n * 13 : n)}px`;   // старые значения хранились множителем
+  })();
+  setSelectValue($('#set-ui-scale'), uiScaleAsPx);
   setFontSelect($('#set-font-article'), state.prefs.fontArticle);
   setFontSelect($('#set-font-excerpt'), state.prefs.fontExcerpt);
   setSelectValue($('#set-read-mode'), readMode());
@@ -3941,7 +3946,8 @@ $('#set-font-family').addEventListener('change', (e) => { state.prefs.fontFamily
 $('#set-line-height').addEventListener('change', (e) => { state.prefs.lineHeight = e.target.value; savePrefs(); applyVisualPrefs(); });
 $('#set-font-tree').addEventListener('change', (e) => { state.prefs.fontTree = e.target.value; savePrefs(); applyVisualPrefs(); });
   $('#set-ui-scale').addEventListener('change', (e) => {
-    state.prefs.uiScale = Number(e.target.value) || 1;
+    // Из списка приходит строка вида «15px»: храним множитель от базы 13 px.
+    state.prefs.uiScale = Math.max(0.7, Math.min(2, (Number.parseFloat(String(e.target.value)) || 13) / 13));
     savePrefs();
     applyVisualPrefs();
   });
