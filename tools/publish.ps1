@@ -101,11 +101,21 @@ if ($forbidden.Count -gt 0) {
     throw 'В копии оказались личные файлы — публикация остановлена.'
 }
 $textFiles = Get-ChildItem $Stage -Recurse -File -Include *.mjs, *.js, *.html, *.css, *.md, *.sh, *.cmd -ErrorAction SilentlyContinue
-# Домен в скриптах установки — это нормально, а вот IP сервера публиковать не нужно.
-$leaks = Select-String -Path $textFiles.FullName -Pattern '194.147.115', '185.221.19' -SimpleMatch -ErrorAction SilentlyContinue
-if ($leaks) {
-    $leaks | Select-Object -First 5 | ForEach-Object { Write-Host "   $($_.Filename):$($_.LineNumber) — $($_.Line.Trim())" -ForegroundColor Red }
-    throw 'В файлах найдены упоминания доступов — публикация остановлена.'
+# Домен в скриптах установки — это нормально, а вот адреса своего сервера публиковать не нужно.
+# Список запрещённых шаблонов в репозитории не хранится: он лежит рядом, в
+# tools/publish-leaks.txt (одна строка — один шаблон; файл в .gitignore).
+$leakFile = Join-Path $PSScriptRoot 'publish-leaks.txt'
+if (Test-Path $leakFile) {
+    $patterns = @(Get-Content $leakFile | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | ForEach-Object { $_.Trim() })
+    if ($patterns.Count) {
+        $leaks = Select-String -Path $textFiles.FullName -Pattern $patterns -SimpleMatch -ErrorAction SilentlyContinue
+        if ($leaks) {
+            $leaks | Select-Object -First 5 | ForEach-Object { Write-Host "   $($_.Filename):$($_.LineNumber) — $($_.Line.Trim())" -ForegroundColor Red }
+            throw 'В файлах найдены упоминания доступов — публикация остановлена.'
+        }
+    }
+} else {
+    Write-Host '   список запрещённых адресов не задан (tools/publish-leaks.txt нет) — проверка пропущена' -ForegroundColor Yellow
 }
 Write-Note 'чисто'
 

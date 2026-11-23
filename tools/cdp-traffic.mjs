@@ -6,7 +6,7 @@
  * и задайте переменные окружения RSS_TEST_LOGIN и RSS_TEST_PASS.
  *
  * Запуск:
- *   node tools/cdp-traffic.mjs --port 9223 --url https://rss.letsplay.today/ --scroll 10
+ *   node tools/cdp-traffic.mjs --port 9223 --url http://127.0.0.1:8787/ --scroll 10
  *
  * Печатает вес по типам ресурсов и самые тяжёлые запросы. Зависимостей нет:
  * используется встроенный WebSocket Node.js.
@@ -20,7 +20,7 @@ for (let i = 2; i < process.argv.length; i += 2) {
 }
 
 const port = Number(args.get('port') ?? 9223);
-const targetUrl = args.get('url') ?? 'https://rss.letsplay.today/';
+// Адрес обязателен: в примерах был боевой сайт, и запуск «по умолчанию» ходил в интернет.\nconst targetUrl = args.get('url') ?? process.env.RSS_TEST_URL ?? 'http://127.0.0.1:8787/';
 const loginName = process.env.RSS_TEST_LOGIN ?? '';
 const loginSecret = process.env.RSS_TEST_PASS ?? '';
 const scrollSteps = Number(args.get('scroll') ?? 10);

@@ -9,3 +9,6 @@ bazqux-reader-subscriptions.xml
 # Служебное
 preview/
 *.log
+
+# локальный список адресов для проверки утечек в publish.ps1
+tools/publish-leaks.txt

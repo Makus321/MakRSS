@@ -21,7 +21,14 @@
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-DOMAIN="${DOMAIN:-rss.letsplay.today}"
+# Домен обязательно передаём явно: раньше здесь стоял адрес конкретного сервера,
+# и скрипт с параметрами по умолчанию настраивал HAProxy/сертификат на чужой домен.
+DOMAIN="${DOMAIN:-}"
+if [[ -z "$DOMAIN" ]]; then
+  echo 'Укажите домен: DOMAIN=rss.example.com sudo -E ./deploy/install-vps.sh' >&2
+  echo '(для локальной проверки без TLS добавьте SKIP_CERT=yes)' >&2
+  exit 1
+fi
 EMAIL="${EMAIL:-}"                                  # пусто — регистрация без почты
 APP_DIR="${APP_DIR:-/opt/rss-reader}"
 DATA_DIR="${DATA_DIR:-/var/lib/rss-reader}"
