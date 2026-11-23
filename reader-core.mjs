@@ -38,7 +38,7 @@ import { spawn } from 'node:child_process';
 import { parseFeed, looksLikeFeed, discoverFeedLinks, htmlToText, itemId, stripFeedNoise } from './lib/feed.mjs';
 import { parseXml, localName, elementChildren } from './lib/xml.mjs';
 import { imageSize } from './lib/imagesize.mjs';
-import { extractArticle, looksLikePageChrome } from './lib/readability.mjs';
+import { extractArticle, looksLikePageChrome, stripTrackerImages } from './lib/readability.mjs';
 import {
   telegramChannelFromUrl, telegramPreviewUrl, parseTelegramChannel,
   telegramBotMe, telegramGetUpdates, parseBotUpdate, telegramFileUrl,
@@ -145,7 +145,7 @@ const PARSER_VERSION = 18;
 const CLEANUP_VERSION = 1;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
-const BODY_VERSION = 18;   // 18: картинки-счётчики (habr.com/share, пиксели) вырезаются; 17 уже стояла в данных
+const BODY_VERSION = 19;   // 19: чистка сохранённых тел на месте (18 уже стояла в данных после перекачки)
 
 // Версия серверной части: показывается в подвале клиента рядом с его сборкой,
 // чтобы сразу видеть, что именно работает на сервере.
@@ -3621,19 +3621,14 @@ export async function init(options = {}) {
   // Когда меняется разбор страницы, сохранённые тексты надо перекачать. Снимаем
   // отметку «текст есть» у всех статей, чтобы очередь докачки и открытие статьи
   // подтянули их заново (иначе ждали бы FULLTEXT_RETRY_DAYS).
+  // Новая версия разбора: чистим уже сохранённые тексты на месте, а не
+  // перекачиваем их заново. Перекачка тысяч страниц означала бы перезапись
+  // всего файла тел ленты на каждую статью — десятки мегабайт записи на диск.
   if (Number(db.bodySweepVersion ?? 0) < BODY_VERSION) {
-    let marked = 0;
-    for (const feed of db.feeds) {
-      for (const item of db.items[feed.id] ?? []) {
-        if (!item.hasFull) continue;
-        item.hasFull = false;
-        item.fullTriedAt = null;
-        marked += 1;
-      }
-    }
     db.bodySweepVersion = BODY_VERSION;
     store.saveStateSoon();
-    if (marked) log(`тексты статей будут перекачаны новой версией разбора: ${marked}`);
+    // В фоне: чистка читает все файлы тел, при старте она задержала бы ответы.
+    setTimeout(() => { cleanStoredBodies().catch((err) => log(`чистка текстов: ${err.message}`)); }, 3000).unref?.();
   }
 
   // Разовая (и заодно при каждом старте) чистка: статьи, попавшие под фильтры,
@@ -3798,6 +3793,38 @@ async function migrateTelegramTitles() {
  *  — служебные заглушки лент («Choose a tag to compare» и подобные) в докачанных текстах.
  * Такие посты/статьи уже не попадают в первую страницу ленты и сами не переразберутся.
  */
+/**
+ * Разовая чистка сохранённых тел: убирает картинки-счётчики и возвращает
+ * отметку «текст есть» там, где текст уже лежит в файле ленты. Пишем один раз
+ * на ленту, поэтому диск не страдает так, как при перекачке всех статей.
+ */
+async function cleanStoredBodies() {
+  let fixed = 0;
+  let restored = 0;
+  for (const feed of db.feeds) {
+    const items = db.items[feed.id] ?? [];
+    if (!items.length) continue;
+    let dirty = false;
+    for (const item of items) {
+      const body = await store.body(feed.id, item.id);
+      if (!body) continue;
+      const next = { ...body };
+      let bodyChanged = false;
+      for (const field of ['content', 'fullHtml']) {
+        const before = String(next[field] ?? '');
+        if (!before) continue;
+        const after = stripTrackerImages(before);
+        if (after !== before) { next[field] = after; bodyChanged = true; fixed += 1; }
+      }
+      if (bodyChanged) { await store.setBody(feed.id, item.id, next); dirty = true; }
+      if (!item.hasFull && (next.content || next.fullHtml)) { item.hasFull = true; restored += 1; dirty = true; }
+    }
+    if (dirty) await store.flushFeed(feed.id);   // одна запись на ленту
+  }
+  if (restored) store.saveStateSoon();
+  log(`тексты: счётчики убраны (${fixed}), отметок «текст есть» восстановлено (${restored})`);
+}
+
 async function cleanupStoredBodies() {
   const EMOJI = /telegram\.org\/img\/emoji/i;
   const NOISE = /choose a tag to compare|something went wrong|error while loading|no results found/i;

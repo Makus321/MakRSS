@@ -20,7 +20,9 @@
   --ui-scale: 1;
   --lh-scale: 1;
   --font-ui: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --bg-palette: #14161a;          /* цвет темы: лента в режиме «акцент для интерфейса» */
   --bg: #14161a;
+  --panel-palette: #1a1d23;       /* цвет темы: панель и карточки в режиме «акцент для статей» */
   --panel: #1a1d23;
   --panel-2: #21252c;
   --panel-3: #171a1f;
@@ -43,7 +45,9 @@
   --article-bg: var(--panel);
 }
 :root[data-theme="light"] {
+  --bg-palette: #f5f6f8;
   --bg: #f5f6f8;
+  --panel-palette: #ffffff;
   --panel: #ffffff;
   --panel-2: #eef0f4;
   --panel-3: #ffffff;
@@ -59,51 +63,53 @@
   --badge-bg: #ffd166;      /* плашка логина: светлая, чтобы тёмный текст читался */
   --shadow: 0 18px 40px rgba(20, 25, 35, .18);
   /* В светлой теме обычные статьи — на белом; прочитанные выглядят так же. */
-  --article-bg: #ffffff;
+  --article-bg: var(--panel);
 }
 
-/*
- * Фон карточек статей — единая логика для обеих тем, выбирается в настройках:
- *   data-cards="raised" — карточка выделена цветом и рамкой (по умолчанию);
- *   data-cards="flat"   — карточка того же цвета, что и страница, рамки нет.
- * Раньше светлая и тёмная темы жили по-разному: в светлой карточка всегда была
- * белой, а в тёмной сливалась с фоном, если включён «фон темы».
- */
-:root[data-cards="raised"] { --article-bg: var(--panel); --article-border: var(--line); }
-:root[data-theme="light"][data-cards="raised"] { --article-bg: #ffffff; }
-/* «Фон темы» даёт чистый белый/чёрный: в светлой теме белая карточка слилась бы
-   со страницей, поэтому страницу немного приглушаем только в этом режиме. */
-:root[data-theme="light"][data-cards="raised"][data-bg="theme"] { --bg: #eef0f3; }
-:root[data-cards="flat"] { --article-bg: var(--bg); --article-border: transparent; }
 
 /* ------------------------------------------- цветовые гаммы (по 8 на тему) */
 /* Тёмные */
-:root[data-theme="dark"][data-palette="graphite"] { --bg:#14161a; --panel:#1a1d23; --panel-2:#21252c; --panel-3:#171a1f; --line:#2b3038; --text:#e6e8ec; --muted:#8b929e; --accent:#f97316; --accent-soft:rgba(249,115,22,.16); --star:#f5c451; }
-:root[data-theme="dark"][data-palette="blue"]     { --bg:#0f1720; --panel:#141d28; --panel-2:#1b2735; --panel-3:#111a24; --line:#243040; --text:#e3eaf3; --muted:#8a99ab; --accent:#4c9aff; --accent-soft:rgba(76,154,255,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="green"]    { --bg:#101713; --panel:#16201a; --panel-2:#1d2a22; --panel-3:#121b16; --line:#27352c; --text:#e4ece6; --muted:#8fa294; --accent:#3fbf7f; --accent-soft:rgba(63,191,127,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="violet"]   { --bg:#141020; --panel:#1b1630; --panel-2:#241d3d; --panel-3:#171328; --line:#322a52; --text:#eae6f7; --muted:#9b94b8; --accent:#a78bfa; --accent-soft:rgba(167,139,250,.18); --star:#fcd34d; }
-:root[data-theme="dark"][data-palette="amber"]    { --bg:#17130d; --panel:#201a11; --panel-2:#2a2216; --panel-3:#1a150e; --line:#3a2f1e; --text:#f0e9df; --muted:#a89a86; --accent:#f0a020; --accent-soft:rgba(240,160,32,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="cyan"]     { --bg:#0d1618; --panel:#121f22; --panel-2:#18292d; --panel-3:#0f1a1d; --line:#23383d; --text:#e1eef0; --muted:#86a0a5; --accent:#2bc7d4; --accent-soft:rgba(43,199,212,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="rose"]     { --bg:#190f14; --panel:#22151b; --panel-2:#2c1c24; --panel-3:#1c1116; --line:#3d2831; --text:#f4e7ec; --muted:#b193a0; --accent:#f472b6; --accent-soft:rgba(244,114,182,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="forest"]   { --bg:#0e140f; --panel:#131c15; --panel-2:#1a261c; --panel-3:#101812; --line:#24331f; --text:#e6efe4; --muted:#8fa78b; --accent:#8bc34a; --accent-soft:rgba(139,195,74,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="graphite"] { --bg:#14161a; --bg-palette:#14161a; --panel:#1a1d23; --panel-palette:#1a1d23; --panel-2:#21252c; --panel-3:#171a1f; --line:#2b3038; --text:#e6e8ec; --muted:#8b929e; --accent:#f97316; --accent-soft:rgba(249,115,22,.16); --star:#f5c451; }
+:root[data-theme="dark"][data-palette="blue"]     { --bg:#0f1720; --bg-palette:#0f1720; --panel:#141d28; --panel-palette:#141d28; --panel-2:#1b2735; --panel-3:#111a24; --line:#243040; --text:#e3eaf3; --muted:#8a99ab; --accent:#4c9aff; --accent-soft:rgba(76,154,255,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="green"]    { --bg:#101713; --bg-palette:#101713; --panel:#16201a; --panel-palette:#16201a; --panel-2:#1d2a22; --panel-3:#121b16; --line:#27352c; --text:#e4ece6; --muted:#8fa294; --accent:#3fbf7f; --accent-soft:rgba(63,191,127,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="violet"]   { --bg:#141020; --bg-palette:#141020; --panel:#1b1630; --panel-palette:#1b1630; --panel-2:#241d3d; --panel-3:#171328; --line:#322a52; --text:#eae6f7; --muted:#9b94b8; --accent:#a78bfa; --accent-soft:rgba(167,139,250,.18); --star:#fcd34d; }
+:root[data-theme="dark"][data-palette="amber"]    { --bg:#17130d; --bg-palette:#17130d; --panel:#201a11; --panel-palette:#201a11; --panel-2:#2a2216; --panel-3:#1a150e; --line:#3a2f1e; --text:#f0e9df; --muted:#a89a86; --accent:#f0a020; --accent-soft:rgba(240,160,32,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="cyan"]     { --bg:#0d1618; --bg-palette:#0d1618; --panel:#121f22; --panel-palette:#121f22; --panel-2:#18292d; --panel-3:#0f1a1d; --line:#23383d; --text:#e1eef0; --muted:#86a0a5; --accent:#2bc7d4; --accent-soft:rgba(43,199,212,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="rose"]     { --bg:#190f14; --bg-palette:#190f14; --panel:#22151b; --panel-palette:#22151b; --panel-2:#2c1c24; --panel-3:#1c1116; --line:#3d2831; --text:#f4e7ec; --muted:#b193a0; --accent:#f472b6; --accent-soft:rgba(244,114,182,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="forest"]   { --bg:#0e140f; --bg-palette:#0e140f; --panel:#131c15; --panel-palette:#131c15; --panel-2:#1a261c; --panel-3:#101812; --line:#24331f; --text:#e6efe4; --muted:#8fa78b; --accent:#8bc34a; --accent-soft:rgba(139,195,74,.16); --star:#ffd166; }
 /* Монохром: только серые, без цветного акцента. */
-:root[data-theme="dark"][data-palette="mono"]     { --bg:#0f0f10; --panel:#171718; --panel-2:#1f1f21; --panel-3:#141415; --line:#2c2c2e; --text:#e9e9ea; --muted:#8f8f92; --accent:#d6d6d9; --accent-soft:rgba(214,214,217,.16); --star:#d6d6d9; --accent-contrast:#111112; }
+:root[data-theme="dark"][data-palette="mono"]     { --bg:#0f0f10; --bg-palette:#0f0f10; --panel:#171718; --panel-palette:#171718; --panel-2:#1f1f21; --panel-3:#141415; --line:#2c2c2e; --text:#e9e9ea; --muted:#8f8f92; --accent:#d6d6d9; --accent-soft:rgba(214,214,217,.16); --star:#d6d6d9; --accent-contrast:#111112; }
 /* Светлые */
-:root[data-theme="light"][data-palette="day"]     { --bg:#f5f6f8; --panel:#ffffff; --panel-2:#eef0f4; --panel-3:#ffffff; --line:#dcdfe6; --text:#1b1f27; --muted:#6b7280; --accent:#d9600c; --accent-soft:rgba(217,96,12,.12); --star:#c98a00; }
-:root[data-theme="light"][data-palette="sky"]     { --bg:#f2f6fb; --panel:#ffffff; --panel-2:#e8eef7; --panel-3:#ffffff; --line:#d5dfec; --text:#16202e; --muted:#5f6f83; --accent:#2563eb; --accent-soft:rgba(37,99,235,.12); --star:#d08700; }
-:root[data-theme="light"][data-palette="mint"]    { --bg:#f1f7f3; --panel:#ffffff; --panel-2:#e6f1ea; --panel-3:#ffffff; --line:#d2e3d8; --text:#14201a; --muted:#5b7266; --accent:#15803d; --accent-soft:rgba(21,128,61,.12); --star:#d08700; }
-:root[data-theme="light"][data-palette="lavender"]{ --bg:#f6f4fb; --panel:#ffffff; --panel-2:#ece8f8; --panel-3:#ffffff; --line:#dcd5ee; --text:#1d1830; --muted:#6c6588; --accent:#7c3aed; --accent-soft:rgba(124,58,237,.12); --star:#d08700; }
-:root[data-theme="light"][data-palette="sand"]    { --bg:#faf6ef; --panel:#ffffff; --panel-2:#f3ebdd; --panel-3:#ffffff; --line:#e6d9c3; --text:#241d12; --muted:#7a6c56; --accent:#b45309; --accent-soft:rgba(180,83,9,.12); --star:#b45309; }
-:root[data-theme="light"][data-palette="ice"]     { --bg:#f0f7f9; --panel:#ffffff; --panel-2:#e4f1f4; --panel-3:#ffffff; --line:#cfe3e8; --text:#12222a; --muted:#5c7a83; --accent:#0e7490; --accent-soft:rgba(14,116,144,.12); --star:#d08700; }
-:root[data-theme="light"][data-palette="blush"]   { --bg:#fdf3f7; --panel:#ffffff; --panel-2:#f8e6ee; --panel-3:#ffffff; --line:#ecd3de; --text:#2a1620; --muted:#86606f; --accent:#db2777; --accent-soft:rgba(219,39,119,.12); --star:#d08700; }
-:root[data-theme="light"][data-palette="sepia"]   { --bg:#f7f4ec; --panel:#fffdf7; --panel-2:#efe9da; --panel-3:#fffdf7; --line:#ded5c0; --text:#241f14; --muted:#7c7460; --accent:#6d7f2f; --accent-soft:rgba(109,127,47,.14); --star:#b45309; }
+:root[data-theme="light"][data-palette="day"]     { --bg:#f5f6f8; --bg-palette:#f5f6f8; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#eef0f4; --panel-3:#ffffff; --line:#dcdfe6; --text:#1b1f27; --muted:#6b7280; --accent:#d9600c; --accent-soft:rgba(217,96,12,.12); --star:#c98a00; }
+:root[data-theme="light"][data-palette="sky"]     { --bg:#f2f6fb; --bg-palette:#f2f6fb; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#e8eef7; --panel-3:#ffffff; --line:#d5dfec; --text:#16202e; --muted:#5f6f83; --accent:#2563eb; --accent-soft:rgba(37,99,235,.12); --star:#d08700; }
+:root[data-theme="light"][data-palette="mint"]    { --bg:#f1f7f3; --bg-palette:#f1f7f3; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#e6f1ea; --panel-3:#ffffff; --line:#d2e3d8; --text:#14201a; --muted:#5b7266; --accent:#15803d; --accent-soft:rgba(21,128,61,.12); --star:#d08700; }
+:root[data-theme="light"][data-palette="lavender"]{ --bg:#f6f4fb; --bg-palette:#f6f4fb; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#ece8f8; --panel-3:#ffffff; --line:#dcd5ee; --text:#1d1830; --muted:#6c6588; --accent:#7c3aed; --accent-soft:rgba(124,58,237,.12); --star:#d08700; }
+:root[data-theme="light"][data-palette="sand"]    { --bg:#faf6ef; --bg-palette:#faf6ef; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#f3ebdd; --panel-3:#ffffff; --line:#e6d9c3; --text:#241d12; --muted:#7a6c56; --accent:#b45309; --accent-soft:rgba(180,83,9,.12); --star:#b45309; }
+:root[data-theme="light"][data-palette="ice"]     { --bg:#f0f7f9; --bg-palette:#f0f7f9; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#e4f1f4; --panel-3:#ffffff; --line:#cfe3e8; --text:#12222a; --muted:#5c7a83; --accent:#0e7490; --accent-soft:rgba(14,116,144,.12); --star:#d08700; }
+:root[data-theme="light"][data-palette="blush"]   { --bg:#fdf3f7; --bg-palette:#fdf3f7; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#f8e6ee; --panel-3:#ffffff; --line:#ecd3de; --text:#2a1620; --muted:#86606f; --accent:#db2777; --accent-soft:rgba(219,39,119,.12); --star:#d08700; }
+:root[data-theme="light"][data-palette="sepia"]   { --bg:#f7f4ec; --bg-palette:#f7f4ec; --panel:#fffdf7; --panel-palette:#fffdf7; --panel-2:#efe9da; --panel-3:#fffdf7; --line:#ded5c0; --text:#241f14; --muted:#7c7460; --accent:#6d7f2f; --accent-soft:rgba(109,127,47,.14); --star:#b45309; }
 /* Монохром: чёрно-белая, акцент — графитовый. */
-:root[data-theme="light"][data-palette="mono"]    { --bg:#f4f4f5; --panel:#ffffff; --panel-2:#ebebed; --panel-3:#ffffff; --line:#dcdcdf; --text:#111112; --muted:#6d6d70; --accent:#2f2f31; --accent-soft:rgba(47,47,49,.10); --star:#3a3a3c; --accent-contrast:#ffffff; }
+:root[data-theme="light"][data-palette="mono"]    { --bg:#f4f4f5; --bg-palette:#f4f4f5; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#ebebed; --panel-3:#ffffff; --line:#dcdcdf; --text:#111112; --muted:#6d6d70; --accent:#2f2f31; --accent-soft:rgba(47,47,49,.10); --star:#3a3a3c; --accent-contrast:#ffffff; }
 
 /* Фон читалки: «фон темы» — чистый белый или чёрный, «фон с гаммой» — цвет выбранной гаммы.
    Идут после палитр: при одинаковой специфичности побеждает последнее правило. */
-:root[data-bg="theme"][data-theme="light"] { --bg:#ffffff; }
-:root[data-bg="theme"][data-theme="dark"]  { --bg:#000000; }
+:root[data-bg="theme"][data-theme="light"] { --bg-palette:#ffffff; }
+:root[data-bg="theme"][data-theme="dark"]  { --bg-palette:#000000; }
+
+/*
+ * Куда идёт акцент темы. Одна настройка для обеих тем, два варианта:
+ *   data-tint="interface" — цветной фон ленты, панель и карточки нейтральные
+ *                           (белые в светлой теме, почти чёрные в тёмной);
+ *   data-tint="articles"  — панель и карточки цветные, фон ленты нейтральный.
+ * Правила стоят ПОСЛЕ палитр: у них та же специфичность, поэтому порядок решает.
+ */
+:root[data-theme="dark"]  { --neutral: #0f1012; }
+:root[data-theme="light"] { --neutral: #ffffff; }
+:root[data-theme="dark"][data-tint="interface"]   { --bg: var(--bg-palette); --panel: var(--neutral); }
+:root[data-theme="dark"][data-tint="articles"]    { --bg: var(--neutral); --panel: var(--bg-palette); }
+:root[data-theme="light"][data-tint="interface"]  { --bg: var(--bg-palette); --panel: var(--neutral); }
+:root[data-theme="light"][data-tint="articles"]   { --bg: var(--neutral); --panel: var(--bg-palette); }
+
 
 * { box-sizing: border-box; }
 /* Классы вроде .list задают display и иначе перебивают служебный [hidden]. */
@@ -540,7 +546,7 @@ select:focus-visible { outline: none; }
   /* Ширина статьи из кнопок «−» и «+»: сужается вся карточка, включая заголовок. */
   max-width: var(--read-width, 100%);
   margin-left: auto; margin-right: auto;
-  background: var(--article-bg); border: 1px solid var(--article-border, var(--line)); border-radius: 10px;
+  background: var(--article-bg); border: 1px solid var(--line); border-radius: 10px;
   margin-bottom: 6px; overflow: hidden;
   transition: background .35s ease, border-color .2s ease;
 }

@@ -114,7 +114,7 @@ const state = {
     theme: 'dark', paletteDark: 'graphite', paletteLight: 'day', background: 'palette', density: 'compact', thumbs: true,
     fontTree: '13px', fontArticle: '14.5px', fontExcerpt: '14.5px', fontFamily: 'system', lineHeight: 'normal',
     borders: true,
-  cards: 'raised',                        // 'raised' — карточка на фоне, 'flat' — сливается
+  tint: 'interface',                      // 'interface' — акцент на фоне ленты, 'articles' — на панели и карточках
     uiScale: 1,                            // размер системных надписей и диалогов
     imageWrap: false,                      // узкие картинки в статье обтекаются текстом
     readOnExpand: true, readOnScroll: true, readOnFinish: false,
@@ -310,8 +310,8 @@ function applyVisualPrefs() {
   // «Невидимые рамки» — минималистичный вид: у карточек и панелей рамок нет,
   // остаётся только подсветка активной статьи.
   document.body.classList.toggle('no-borders', state.prefs.borders === false);
-  // Фон карточек: одна логика для обеих тем, выбор хранится в настройках устройства.
-  document.documentElement.dataset.cards = state.prefs.cards === 'flat' ? 'flat' : 'raised';
+  // Куда идёт акцент темы: на фон ленты или на панель и карточки.
+  document.documentElement.dataset.tint = state.prefs.tint === 'articles' ? 'articles' : 'interface';
 }
 
 // Поворот телефона или изменение ширины окна меняет ступень — пересчитываем.
@@ -3766,7 +3766,7 @@ function fillSettingsForm() {
   setSelectValue($('#set-image-wrap'), state.prefs.imageWrap ? 'yes' : 'no');
   setSelectValue($('#set-swipe-next'), state.prefs.swipeNext === false ? 'no' : 'yes');
   setSelectValue($('#set-borders'), state.prefs.borders !== false ? 'yes' : 'no');
-  setSelectValue($('#set-cards'), state.prefs.cards === 'flat' ? 'flat' : 'raised');
+  setSelectValue($('#set-tint'), state.prefs.tint === 'articles' ? 'articles' : 'interface');
   setSelectValue($('#set-fetch-full'), s.fetchFull !== false ? 'yes' : 'no');
   $('#set-pass').value = '';
   $('#set-pass-current').value = '';
@@ -3931,12 +3931,12 @@ $('#set-borders').addEventListener('change', (e) => {
   applyVisualPrefs();
   toast(state.prefs.borders ? 'Рамки видимые' : 'Рамки невидимые');
 });
-// Карточки статей: «на фоне» или «сливаются с фоном» — одинаково в обеих темах.
-$('#set-cards').addEventListener('change', (e) => {
-  state.prefs.cards = e.target.value === 'flat' ? 'flat' : 'raised';
+// Акцент темы: на интерфейсе (фон ленты) или на статьях (панель и карточки).
+$('#set-tint').addEventListener('change', (e) => {
+  state.prefs.tint = e.target.value === 'articles' ? 'articles' : 'interface';
   savePrefs();
   applyVisualPrefs();
-  toast(state.prefs.cards === 'flat' ? 'Карточки сливаются с фоном' : 'Карточки на фоне');
+  toast(state.prefs.tint === 'articles' ? 'Акцент на статьях' : 'Акцент на интерфейсе');
 });
 $('#set-font-family').addEventListener('change', (e) => { state.prefs.fontFamily = e.target.value; savePrefs(); applyVisualPrefs(); });
 $('#set-line-height').addEventListener('change', (e) => { state.prefs.lineHeight = e.target.value; savePrefs(); applyVisualPrefs(); });
