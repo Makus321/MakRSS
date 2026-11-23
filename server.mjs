@@ -515,19 +515,26 @@ pre{white-space:pre-wrap;font-size:13px;color:#9a9a9a}</style></head><body>
       const body = await readJsonBody(req);
       const login = String(body.login ?? body.user ?? '').trim();
       const password = String(body.password ?? '');
+      const ip = clientIp(req);
+      // Лимит попыток по IP: раньше защитой был только setTimeout(350),
+      // который обходится параллельными запросами.
+      if (loginBlocked(ip)) {
+        return json(res, 429, { ok: false, error: 'слишком много попыток входа, подождите минуту' });
+      }
       const user = users.byLogin(login);
       if (!user || !users.verify(user, password)) {
+        loginFailed(ip);
         await new Promise((resolve) => setTimeout(resolve, 350));   // против перебора
         log(`неудачный вход: «${login}»`);
         return json(res, 401, { ok: false, error: 'неверный логин или пароль' });
       }
+      loginSucceeded(ip);
       const ttl = body.remember ? SESSION_TTL : SHORT_SESSION_TTL;
-      res.setHeader('set-cookie', cookieHeader(SESSION_COOKIE, issueSession(users.state.secret, user.login, ttl), { maxAge: ttl }));
+      res.setHeader('set-cookie', cookieHeader(SESSION_COOKIE, issueSession(users.state.secret, user.login, ttl), { maxAge: ttl, secure: requestIsHttps(req) }));
       users.touch(user).catch(() => {});
       log(`вход: ${user.login}`);
       return json(res, 200, sessionPayload(user));
     }
-
     if (route === 'POST /api/logout') {
       res.setHeader('set-cookie', cookieHeader(SESSION_COOKIE, '', { maxAge: 0 }));
       return json(res, 200, { ok: true });
@@ -543,7 +550,10 @@ pre{white-space:pre-wrap;font-size:13px;color:#9a9a9a}</style></head><body>
       }
       const current = String(body.current ?? body.oldPassword ?? '');
       const next = String(body.password ?? '');
-      if (current && !users.verify(me, current)) return json(res, 403, { ok: false, error: 'текущий пароль неверен' });
+        // Пустой current больше не обходит проверку: он обязателен.
+        if (!current || !users.verify(me, current)) {
+          return json(res, 403, { ok: false, error: 'текущий пароль неверен' });
+        }
       try {
         await users.setPassword(me, next);
         await refreshCoreAuth(me);
@@ -671,4 +681,48 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     clearTimeout(guard);
     process.exit(0);
   });
+}
+
+/**
+ * Запрос пришёл по HTTPS (напрямую или через прокси с x-forwarded-proto).
+ * Нужно, чтобы cookie сессии получала флаг Secure.
+ */
+function requestIsHttps(req) {
+  return Boolean(req.socket?.encrypted) || String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim() === 'https';
+}
+
+// ---- Лимит попыток входа (объявления на верхнем уровне: ниже по файлу
+//      они используются в обработчике /api/login) ----
+
+/** IP клиента: за прокси берём первый адрес из x-forwarded-for. */
+function clientIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim();
+  return forwarded || req.socket?.remoteAddress || 'unknown';
+}
+
+// Попытки входа: ip -> { count, until }. Держим в памяти, хранилище не нужно.
+const loginAttempts = new Map();   // ip -> { count, until }
+
+const LOGIN_MAX_TRIES = 10;
+const LOGIN_WINDOW_MS = 60_000;
+
+function loginBlocked(ip) {
+  const entry = loginAttempts.get(ip);
+  if (!entry) return false;
+  if (Date.now() > entry.until) { loginAttempts.delete(ip); return false; }
+  return entry.count >= LOGIN_MAX_TRIES;
+}
+
+function loginFailed(ip) {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now > entry.until) {
+    loginAttempts.set(ip, { count: 1, until: now + LOGIN_WINDOW_MS });
+    return;
+  }
+  entry.count += 1;
+}
+
+function loginSucceeded(ip) {
+  loginAttempts.delete(ip);
 }

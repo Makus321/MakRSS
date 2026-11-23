@@ -2340,6 +2340,19 @@ function postMediaFile(feedId, itemId, index) {
   return 'tg-' + feedId + '-' + itemId + '-' + index + '.img';
 }
 
+/**
+ * Путь к файлу медиа с проверкой идентификаторов: f/k приходят из адреса,
+ * и без валидации «../» выводил за пределы каталога медиа (path traversal).
+ */
+function mediaPathFor(feedId, itemId, index) {
+  const idRe = /^[A-Za-z0-9_-]{1,64}$/;
+  if (!idRe.test(String(feedId)) || !idRe.test(String(itemId))) return null;
+  const root = path.resolve(MEDIA_DIR);
+  const target = path.resolve(root, postMediaFile(feedId, itemId, index));
+  if (!target.startsWith(root + path.sep)) return null;
+  return target;
+}
+
 /** Скачивает картинки поста в кэш на сервере (до limit штук). */
 async function cachePostMedia(feedId, itemId, html, limit = 12) {
   const urls = [...String(html ?? '').matchAll(/<img\b[^>]*\bsrc="([^"]+)"/gi)].map((m) => m[1]).slice(0, limit);
@@ -2444,9 +2457,14 @@ async function serveMedia(req, res, url) {
   // Короткая ссылка на картинку поста: отдаём из кэша, при промахе качаем и кэшируем.
   const postId = url.searchParams.get('k') ?? '';
   if (postId) console.log('media: f=' + feedId + ' k=' + postId + ' i=' + (url.searchParams.get('i') ?? '0'));
+  // Идентификаторы приходят из адреса: без проверки «../» выводил за каталог медиа.
+  if (postId && !mediaPathFor(feedId, postId, 0)) {
+    res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('плохие параметры');
+    return;
+  }
   if (postId) {
     const index = Math.max(0, Number.parseInt(url.searchParams.get('i') ?? '0', 10) || 0);
-    const target = path.join(MEDIA_DIR, postMediaFile(feedId, postId, index));
+    const target = mediaPathFor(feedId, postId, index);
     try {
       const data = await readFile(target);
       console.log('media ok из кэша, байт ' + data.length);
