@@ -3795,9 +3795,15 @@ function schedulePeriodicRefresh() {
   const minutes = Math.max(MIN_REFRESH_MINUTES, Number(settings().refreshMinutes) || REFRESH_MINUTES);
   // Первый запуск каждого пользователя сдвигаем: иначе на сервере с несколькими
   // аккаунтами все обновления придутся на одну и ту же секунду.
-  const jitter = refreshScheduledOnce ? 0 : Math.floor(Math.random() * 60_000);
+  // Если с прошлого обновления прошло больше интервала (службу перезапустили
+  // после деплоя), не ждём полный интервал заново — обновляем в ближайшие
+  // секунды. Иначе новые статьи «замирали» до следующего окна.
+  const interval = minutes * 60_000;
+  const sinceLast = Date.now() - (Date.parse(db.lastRefresh ?? '') || 0);
+  const overdued = !db.lastRefresh || sinceLast >= interval;
+  const jitter = refreshScheduledOnce ? 0 : Math.floor(Math.random() * (overdued ? 15_000 : 60_000));
   refreshScheduledOnce = true;
-  const delay = minutes * 60_000 + jitter;
+  const delay = overdued ? 15_000 + jitter : Math.max(30_000, interval - sinceLast) + jitter;
   nextRefreshAt = Date.now() + delay;
   refreshTimer = setTimeout(async () => {
     refreshTimer = null;
