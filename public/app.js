@@ -4692,10 +4692,14 @@ function setupMobile() {
 // Версия приложения: 1.0.<номер сборки ресурсов>. Номер берётся из запроса
 // к самому app.js (app.js?v=NNN), поэтому версия всегда совпадает со сборкой.
 const BUILD = (() => {
-  // У модулей document.currentScript всегда null, поэтому адрес берём из
-  // import.meta.url: app.js?v=NNN — это и есть номер сборки.
-  const source = import.meta.url ?? '';
-  return Number.parseInt(/[?&]v=(\d+)/.exec(source)?.[1] ?? '0', 10) || 0;
+  // Номер сборки берём из адреса модуля. Если ответ пришёл из кэша без ?v=
+  // (так бывало после смены Service Worker), читаем адрес тега script —
+  // он всегда содержит версию.
+  const fromUrl = (value) => Number.parseInt(/[?&]v=(\d+)/.exec(String(value ?? ''))?.[1] ?? '0', 10) || 0;
+  const direct = fromUrl(import.meta.url ?? '');
+  if (direct) return direct;
+  const tag = document.querySelector('script[src*="app.js"]');
+  return fromUrl(tag?.getAttribute('src') ?? '');
 })();
 const APP_VERSION = `1.${BUILD}`;
 

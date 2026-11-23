@@ -8,21 +8,22 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v300';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
+const CACHE = 'rss-shell-v301';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
 const DATA_CACHE = 'rss-data-v180';
 const MEDIA_CACHE = 'rss-media-v151';
 
 const SHELL = [
   '/',
   '/index.html',
-  '/style.css',
-  '/app.js',
   '/manifest.webmanifest',
   '/icon-192.png',
   '/icon-512.png',
   '/apple-touch-icon.png',
   '/fonts/ptsansnarrow-400-cyrillic.woff2',
   '/fonts/ptsansnarrow-400-latin.woff2',
+  // /app.js и /style.css НЕ предзагружаем: у них адрес с ?v=NNN, и копия
+  // без версии в кэше лишала app.js номера сборки (версия показывалась 1.0).
+  // Их сохраняет shellFirst() уже с версией в адресе.
 ];
 
 self.addEventListener('install', (event) => {
