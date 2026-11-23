@@ -3676,6 +3676,11 @@ $('#add-input').addEventListener('input', () => {
  * subscribeSelected() искал только .cand.active — подписка не оформлялась.
  */
 function handleAddButton() {
+  if (!$('#add-input').value.trim()) {
+    $('#add-result').textContent = 'Введите адрес сайта, страницы или канала';
+    $('#add-input').focus();
+    return;
+  }
   const active = document.querySelector('#add-candidates .cand.active');
   if (active) return subscribeSelected();
   return searchSubscriptions();
