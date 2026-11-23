@@ -3618,33 +3618,6 @@ async function searchSubscriptions() {
   }
 }
 
-async function checkAddress() {
-  const url = $('#add-input').value.trim();
-  const result = $('#add-result');
-  if (!url) { result.textContent = 'Введите адрес сайта, страницы или канала'; return; }
-  result.textContent = 'Проверяю адрес…';
-  $('#add-candidates').innerHTML = '';
-  try {
-    const payload = await api('/api/discover', { url });
-    addCandidates = payload.candidates ?? [];
-    if (!payload.ok || !addCandidates.length) {
-      result.textContent = payload.error ?? 'Подписки не найдены';
-      return;
-    }
-    result.textContent = `Найдено ${addCandidates.length} ${plural(addCandidates.length, 'подписка', 'подписки', 'подписок')} — отметьте нужные и нажмите «Подписаться».`;
-    $('#add-candidates').innerHTML = addCandidates.map((c, index) => `
-      <label class="${c.subscribed ? 'subscribed' : ''}">
-        <input type="checkbox" data-cand="${index}" ${index === 0 && !c.subscribed ? 'checked' : ''} ${c.subscribed ? 'disabled' : ''}>
-        <span>
-          <span class="cand-title">${esc(c.label || c.title)}</span><br>
-          <span class="cand-sub">${esc(c.format || '')}${c.items ? ` · статей: ${c.items}` : ''}${c.subscribed ? ' · уже подписаны' : (c.hint ? ` · ${esc(c.hint)}` : '')}</span><br>
-          <span class="cand-url">${esc(c.url)}</span>
-        </span>
-      </label>`).join('');
-  } catch (err) {
-    result.textContent = err.message;
-  }
-}
 
 async function subscribeSelected() {
   const selected = document.querySelector('#add-candidates .cand.active');
@@ -3696,7 +3669,19 @@ $('#add-input').addEventListener('input', () => {
   addTimer = setTimeout(searchSubscriptions, 450);
 });
 
-$('#add-check').addEventListener('click', checkAddress);
+/**
+ * Кнопка «Добавить» и Enter работают одинаково: если в результатах поиска
+ * уже выбран вариант — подписываемся, иначе запускаем поиск. Раньше кнопка
+ * звала checkAddress(), которая рисовала чекбоксы без класса .cand, а
+ * subscribeSelected() искал только .cand.active — подписка не оформлялась.
+ */
+function handleAddButton() {
+  const active = document.querySelector('#add-candidates .cand.active');
+  if (active) return subscribeSelected();
+  return searchSubscriptions();
+}
+
+$('#add-check').addEventListener('click', handleAddButton);
 $('#add-candidates').addEventListener('click', async (event) => {
   const row = event.target.closest('.cand');
   if (!row) return;
@@ -3706,7 +3691,7 @@ $('#add-candidates').addEventListener('click', async (event) => {
   if (already) await subscribeSelected();     // повторный клик по выбранной — подписаться
 });
 
-$('#add-input').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); checkAddress(); } });
+$('#add-input').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); handleAddButton(); } });
 
 $('#lines-select').addEventListener('change', async (event) => {
   const lines = Number(event.target.value) || 2;
