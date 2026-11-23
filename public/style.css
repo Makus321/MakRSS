@@ -62,6 +62,20 @@
   --article-bg: #ffffff;
 }
 
+/*
+ * Фон карточек статей — единая логика для обеих тем, выбирается в настройках:
+ *   data-cards="raised" — карточка выделена цветом и рамкой (по умолчанию);
+ *   data-cards="flat"   — карточка того же цвета, что и страница, рамки нет.
+ * Раньше светлая и тёмная темы жили по-разному: в светлой карточка всегда была
+ * белой, а в тёмной сливалась с фоном, если включён «фон темы».
+ */
+:root[data-cards="raised"] { --article-bg: var(--panel); --article-border: var(--line); }
+:root[data-theme="light"][data-cards="raised"] { --article-bg: #ffffff; }
+/* «Фон темы» даёт чистый белый/чёрный: в светлой теме белая карточка слилась бы
+   со страницей, поэтому страницу немного приглушаем только в этом режиме. */
+:root[data-theme="light"][data-cards="raised"][data-bg="theme"] { --bg: #eef0f3; }
+:root[data-cards="flat"] { --article-bg: var(--bg); --article-border: transparent; }
+
 /* ------------------------------------------- цветовые гаммы (по 8 на тему) */
 /* Тёмные */
 :root[data-theme="dark"][data-palette="graphite"] { --bg:#14161a; --panel:#1a1d23; --panel-2:#21252c; --panel-3:#171a1f; --line:#2b3038; --text:#e6e8ec; --muted:#8b929e; --accent:#f97316; --accent-soft:rgba(249,115,22,.16); --star:#f5c451; }
@@ -526,7 +540,7 @@ select:focus-visible { outline: none; }
   /* Ширина статьи из кнопок «−» и «+»: сужается вся карточка, включая заголовок. */
   max-width: var(--read-width, 100%);
   margin-left: auto; margin-right: auto;
-  background: var(--article-bg); border: 1px solid var(--line); border-radius: 10px;
+  background: var(--article-bg); border: 1px solid var(--article-border, var(--line)); border-radius: 10px;
   margin-bottom: 6px; overflow: hidden;
   transition: background .35s ease, border-color .2s ease;
 }

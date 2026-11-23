@@ -114,6 +114,7 @@ const state = {
     theme: 'dark', paletteDark: 'graphite', paletteLight: 'day', background: 'palette', density: 'compact', thumbs: true,
     fontTree: '13px', fontArticle: '14.5px', fontExcerpt: '14.5px', fontFamily: 'system', lineHeight: 'normal',
     borders: true,
+  cards: 'raised',                        // 'raised' — карточка на фоне, 'flat' — сливается
     uiScale: 1,                            // размер системных надписей и диалогов
     imageWrap: false,                      // узкие картинки в статье обтекаются текстом
     readOnExpand: true, readOnScroll: true, readOnFinish: false,
@@ -309,6 +310,8 @@ function applyVisualPrefs() {
   // «Невидимые рамки» — минималистичный вид: у карточек и панелей рамок нет,
   // остаётся только подсветка активной статьи.
   document.body.classList.toggle('no-borders', state.prefs.borders === false);
+  // Фон карточек: одна логика для обеих тем, выбор хранится в настройках устройства.
+  document.documentElement.dataset.cards = state.prefs.cards === 'flat' ? 'flat' : 'raised';
 }
 
 // Поворот телефона или изменение ширины окна меняет ступень — пересчитываем.
@@ -659,7 +662,10 @@ function visibleItems() {
   const onlyUnread = unreadModeFor();
   // Снимка может не быть вовсе (его сбрасывают при догрузке и при смене раздела),
   // поэтому проверяем null раньше флага «заморожено», иначе падало на .ids.
-  if (!state.snapshot || (!state.listFrozen && state.snapshot.key !== key)) {
+  // Пустой снимок пересобираем всегда: он мог быть построен до прихода данных
+  // (тогда в нём ноль статей), и «замороженный» список оставался пустым навсегда.
+  const snapshotEmpty = !state.snapshot || !state.snapshot.ids || state.snapshot.ids.size === 0;
+  if (snapshotEmpty || (!state.listFrozen && state.snapshot.key !== key)) {
     state.snapshot = {
       key,
       // Снимок — это то, что видно сейчас: в режиме «только непрочитанные»
@@ -3760,6 +3766,7 @@ function fillSettingsForm() {
   setSelectValue($('#set-image-wrap'), state.prefs.imageWrap ? 'yes' : 'no');
   setSelectValue($('#set-swipe-next'), state.prefs.swipeNext === false ? 'no' : 'yes');
   setSelectValue($('#set-borders'), state.prefs.borders !== false ? 'yes' : 'no');
+  setSelectValue($('#set-cards'), state.prefs.cards === 'flat' ? 'flat' : 'raised');
   setSelectValue($('#set-fetch-full'), s.fetchFull !== false ? 'yes' : 'no');
   $('#set-pass').value = '';
   $('#set-pass-current').value = '';
@@ -3923,6 +3930,13 @@ $('#set-borders').addEventListener('change', (e) => {
   savePrefs();
   applyVisualPrefs();
   toast(state.prefs.borders ? 'Рамки видимые' : 'Рамки невидимые');
+});
+// Карточки статей: «на фоне» или «сливаются с фоном» — одинаково в обеих темах.
+$('#set-cards').addEventListener('change', (e) => {
+  state.prefs.cards = e.target.value === 'flat' ? 'flat' : 'raised';
+  savePrefs();
+  applyVisualPrefs();
+  toast(state.prefs.cards === 'flat' ? 'Карточки сливаются с фоном' : 'Карточки на фоне');
 });
 $('#set-font-family').addEventListener('change', (e) => { state.prefs.fontFamily = e.target.value; savePrefs(); applyVisualPrefs(); });
 $('#set-line-height').addEventListener('change', (e) => { state.prefs.lineHeight = e.target.value; savePrefs(); applyVisualPrefs(); });
@@ -4806,6 +4820,9 @@ async function start() {
   afterAuthInit();        // восстановить раздел и включить живые события
   hideLoader();                           // данные пришли — снимаем затемнение
 }
+
+// Диагностика по ссылке ?debug=1: доступ к внутренним функциям из консоли.
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, viewKey };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)
