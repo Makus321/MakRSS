@@ -1398,3 +1398,29 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 body.lightbox-open { overflow: hidden; }
 /* В тексте статьи картинка выглядит кликабельной. */
 .a-body img, .comment-body img { cursor: zoom-in; }
+
+/* Узкий экран: в шапке окна настроек логин не влезал — заголовок обрезался
+   многоточием, а плашка с логином уезжала за край. Переносим её на новую строку,
+   кнопки («Выйти из аккаунта», «Закрыть») тоже переносятся, если не помещаются. */
+@media (max-width: 560px) {
+  .modal-head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    align-items: flex-start;
+  }
+  .modal-head h3 {
+    display: block;           /* плашка логина встаёт отдельной строкой под заголовком */
+    flex: 1 1 100%;
+    white-space: normal;      /* иначе плашка логина обрезалась вместе с заголовком */
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .modal-head .who-badge {
+    display: flex;            /* блочная — значит с новой строки */
+    width: fit-content;
+    margin: 6px 0 0;
+    max-width: 100%;
+  }
+  .modal-head .head-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-end; }
+  .modal-head .head-actions .btn { flex: 1 1 auto; }
+}
