@@ -1,3 +1,19 @@
+/*
+ * MAK RSS Reader — стили.
+ *
+ * Порядок секций (сверху вниз):
+ *   1. токены и темы           2. каркас и панели
+ *   3. дерево подписок         4. шапка ленты
+ *   5. карточка статьи         6. текст статьи, медиа, слоты картинок
+ *   7. комментарии             8. дерево/шапка в узком виде
+ *   9. модальные окна          10. просмотр картинки и затемнение загрузки
+ *  11. подвал и служебные классы 12. адаптивные и медиа-запросы
+ *
+ * Мёртвые правила (классы, которых нет в разметке и скриптах) удалены:
+ * .add-form, .dot, .embed-open, body.tools-open, body.actions-hidden,
+ * .a-actions.floating.settled, .a-body img.pending.
+ */
+
 /* Темы: тёмная по умолчанию, светлая — по переключателю или системной настройке. */
 :root, :root[data-theme="dark"] {
   /* Масштаб интерфейса (от размера шрифта дерева) и межстрочный интервал. */
@@ -308,14 +324,6 @@ a { color: var(--accent); }
 .icon-btn.spin, .btn.spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.add-form { display: flex; gap: 6px; padding: 0 12px; }
-.add-form input {
-  flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: 8px; padding: 6px 9px; outline: none; font-size: calc(13px * var(--ui-scale, 1));
-}
-.add-form input:focus { border-color: var(--accent); }
-.add-form button { background: var(--accent); border: 0; color: var(--accent-contrast, #1b1206); font-weight: 700; border-radius: 8px; width: 32px; cursor: pointer; }
-.add-form button:disabled { opacity: .5; cursor: default; }
 .add-status { font-size: calc(12px * var(--ui-scale, 1)); color: var(--muted); padding: 4px 12px 0; min-height: 16px; }
 .add-status.err { color: #e5573f; }
 
@@ -416,9 +424,6 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
 .row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 .row-sub { font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); }
 .caret { width: 14px; flex: 0 0 14px; text-align: center; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 0; font-size: calc(10px * var(--ui-scale, 1)); }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
-.dot.read { background: var(--line); }
-.row.warn .dot { background: #e5573f; }
 /* Кнопки в дереве показываются при наведении на строку, размер у них фиксированный. */
 /* Кнопки правки/удаления не сдвигают счётчик: место под них занято всегда,
    а сами они появляются слева от счётчика при наведении. */
@@ -600,7 +605,6 @@ select:focus-visible { outline: none; }
 /* На сенсорном экране наведения нет: там кнопки проявляются, когда прокрутка
    остановилась, и снова тускнеют при следующем движении списка. */
 @media (hover: none) {
-  .a-actions.floating.settled { opacity: 1; }
 }
 
 .a-actions button, .a-actions a.icon-btn {
@@ -774,7 +778,6 @@ body.dragging .tree-tail { display: flex; }
 .tree-backdrop { display: none; }
 /* Атрибут hidden должен побеждать любые правила display (иначе кнопка,
    у которой задан display, остаётся видимой). */
-[hidden] { display: none !important; }
 
 @media (max-width: 900px), (pointer: coarse) {
   .app { grid-template-columns: minmax(0, 1fr); height: 100dvh; }
@@ -813,10 +816,6 @@ body.dragging .tree-tail { display: flex; }
   .head-tools { order: 21; flex-basis: 100%; }
   .head-row .seg, .head-row .mini-field, .head-row .width-controls { display: none; }
   .head-tools { display: none; }
-  body.tools-open .head-row .seg,
-  body.tools-open .head-row .mini-field,
-  body.tools-open .head-row .width-controls { display: flex; }
-  body.tools-open .head-tools { display: flex; }
   .pane-head { padding: 6px 10px; }
   #view-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -959,12 +958,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Пока картинка не пришла, под неё держим место: иначе текст прыгает. */
 /* Заглушка нужна только одиночным картинкам: в сетке ряда место уже держит
    сам ряд, а лишняя высота заставляла картинки «перескакивать». */
-.a-body img.pending:not(.img-row img), .comment-body img.pending:not(.img-row img) {
-  aspect-ratio: 3 / 2;
-  min-height: 120px;
-  background: var(--panel-2);
-  border-radius: 8px;
-}
 /* Место под ряд держим минимальной высотой, но без цветной подложки: она
    выглядела как пустой бежевый блок справа от одиночной картинки. */
 /* Пока картинки не пришли, место под ряд НЕ держим: иначе над первой картинкой
@@ -1175,7 +1168,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .article { min-height: var(--actions-min, 88px); }
 @media (max-width: 900px) { .article { min-height: 124px; } }
 /* Кнопки прячутся, когда раскрытую статью начали прокручивать. */
-body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 
 /* Телефон: карточка и текст — во всю ширину экрана. */
 @media (max-width: 900px) {
@@ -1186,7 +1178,8 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
     margin-left: 0 !important;
     margin-right: 0 !important;
   }
-  .a-head { padding-right: 8px; }
+  /* Плавающие кнопки шириной ~46px: без этого отступа заголовок уходил под них. */
+  .a-head { padding-right: 46px; }
   .article.expanded:not(.selected) .a-body { padding-right: 8px; }
   .a-title, .a-excerpt, .a-body { max-width: 100%; }
   /* По левому краю: «по ширине» на узком экране даёт огромные промежутки между словами. */
@@ -1270,21 +1263,6 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 }
 /* Кнопка-ссылка на месте встроенного плеера: видео открывается в браузере,
    страница не загружает ни одного кадра. */
-.embed-open {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 12px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel-2);
-  color: var(--article-text);
-  text-decoration: none;
-  font-size: calc(13px * var(--ui-scale, 1));
-}
-.embed-open:active { background: var(--panel); }
-.embed-open-icon { color: var(--accent); font-size: calc(15px * var(--ui-scale, 1)); }
 /* Кнопка плеера и запасная ссылка рядом с ней. */
 .embed-box { margin: 12px 0; display: flex; flex-direction: column; gap: 6px; }
 .embed-box .embed-play { width: 100%; justify-content: center; min-height: 44px; }
