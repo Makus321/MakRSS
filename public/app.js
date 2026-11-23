@@ -1459,14 +1459,16 @@ function switchView(view) {
   // помечались прочитанными, потому что оказывались выше линии чтения.
   state.loadingView = true;
   render();
+  showLoader('Загружаю ленту…');   // затемнение со спиннером вместо надписи вверху
   ensureViewItems(0, true).then(() => {
+    hideLoader();
     state.loadingView = false;
     // Снимок сбрасываем ещё раз ПОСЛЕ ответа: иначе список уже заморожен и
     // догруженные статьи в него не попадут (в шапке 1, а карточек нет).
     state.snapshot = null;
     state.listFrozen = false;
     render();
-  }).catch(() => { state.loadingView = false; render(); });
+  }).catch(() => { hideLoader(); state.loadingView = false; render(); });
 }
 
 /** Восстанавливает раздел, в котором пользователь был до перезагрузки. */
@@ -4045,7 +4047,26 @@ $('#clear-tg').addEventListener('click', async () => {
 
 // -------------------------------------------------------------------- вход
 
+/**
+ * Затемнение со спиннером на всё окно: пока данные не пришли, интерфейс без
+ * лент выглядел как «пустое приложение». hideLoader снимает затемнение.
+ */
+function showLoader(text = 'Загрузка…') {
+  const box = $('#app-loader');
+  const label = $('#app-loader-text');
+  if (label) label.textContent = text;
+  if (box) box.hidden = false;
+}
+
+function hideLoader() {
+  const box = $('#app-loader');
+  if (box) box.hidden = true;
+}
+
+
 function showLogin() {
+  hideLoader();                     // экран входа показывает себя сам
+
   // Пока не вошли — интерфейс читалки не показываем, только окно входа.
   document.body.classList.add('logged-out');
   $('#toast').hidden = true;
@@ -4084,8 +4105,10 @@ async function submitLogin() {
     document.body.classList.remove('logged-out');
     $('#login-modal').hidden = true;
     state.session.authenticated = true;
+    showLoader('Загружаю ленты…');      // после входа виден только спиннер
     await loadSettings();
     await loadData();
+    hideLoader();
     toast(`Здравствуйте, ${login}`);
   } catch (err) {
     const message = String(err?.message ?? '').trim();
@@ -4645,6 +4668,7 @@ function setupPwa() {
 }
 
 async function start() {
+  showLoader('Загружаю ленты…');   // пока данных нет, экран не должен пустовать
   loadPrefs();  // Параметры адреса: ?theme=light|dark|auto — удобно для ссылок и проверки вида.
   const params = new URLSearchParams(location.search);
   const themeParam = params.get('theme');
@@ -4662,6 +4686,7 @@ async function start() {
   await loadSettings();
   await loadData();
   restoreView();          // возвращаемся в ту ленту и с тем фильтром, что были
+  hideLoader();                           // данные пришли — снимаем затемнение
   startEvents();
 }
 

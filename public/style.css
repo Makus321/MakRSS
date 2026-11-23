@@ -1371,3 +1371,28 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
   #login-modal .btn-row { justify-content: stretch; }
   #login-modal .btn-row .btn { width: 100%; }
 }
+/* Затемнение с крутящимся индикатором: показывается, пока грузятся данные
+   приложения или статьи при переключении ленты. Раньше на экране был просто
+   пустой интерфейс, а в ленте — надпись «Загружаю статьи…» вверху. */
+.app-loader {
+  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+  background: rgba(8, 12, 18, .55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.app-loader[hidden] { display: none; }
+.app-loader-inner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 22px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
+  font-size: calc(13px * var(--ui-scale, 1)); color: var(--muted);
+}
+.app-spinner {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 3px solid var(--line); border-top-color: var(--accent);
+  animation: app-spin .8s linear infinite;
+}
+@keyframes app-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .app-spinner { animation-duration: 2.4s; }
+}
