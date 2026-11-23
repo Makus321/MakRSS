@@ -52,12 +52,26 @@ say "каталоги: $APP_DIR (код), $DATA_DIR (данные)"
 mkdir -p "$APP_DIR" "$DATA_DIR"
 
 say "копирую код"
+# Ядро читалки (reader-core.mjs) — отдельный файл: без него служба не стартует.
 install -m 0644 "$SRC_DIR/server.mjs" "$APP_DIR/server.mjs"
+install -m 0644 "$SRC_DIR/reader-core.mjs" "$APP_DIR/reader-core.mjs"
 install -m 0644 "$SRC_DIR/README.md" "$APP_DIR/README.md"
+[[ -f "$SRC_DIR/package.json" ]] && install -m 0644 "$SRC_DIR/package.json" "$APP_DIR/package.json"
+# Деревья копируем целиком: в public/ есть подпапка fonts/, а glob public/* её пропускал.
 rm -rf "$APP_DIR/lib" "$APP_DIR/public"
 mkdir -p "$APP_DIR/lib" "$APP_DIR/public"
-install -m 0644 "$SRC_DIR"/lib/*.mjs "$APP_DIR/lib/"
-install -m 0644 "$SRC_DIR"/public/* "$APP_DIR/public/"
+cp -a "$SRC_DIR/lib/." "$APP_DIR/lib/"
+cp -a "$SRC_DIR/public/." "$APP_DIR/public/"
+find "$APP_DIR/lib" "$APP_DIR/public" -type f -exec chmod 0644 {} +
+find "$APP_DIR/lib" "$APP_DIR/public" -type d -exec chmod 0755 {} +
+
+say "проверяю, что файлы скопированы целиком"
+for required in server.mjs reader-core.mjs lib/feed.mjs public/index.html public/app.js public/style.css; do
+  [[ -s "$APP_DIR/$required" ]] || die "после копирования нет файла $required"
+done
+for entry in server.mjs reader-core.mjs; do
+  "$NODE_BIN" --check "$APP_DIR/$entry" || die "файл $entry не разбирается (повреждён при копировании)"
+done
 chown -R root:root "$APP_DIR"
 chown -R "$APP_USER:$APP_USER" "$DATA_DIR"
 chmod 750 "$DATA_DIR"

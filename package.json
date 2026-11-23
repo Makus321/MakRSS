@@ -1,0 +1,26 @@
+{
+  "name": "mak-rss-reader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RSS/Atom/Telegram reader без внешних зависимостей: Node.js, системный пользователь Linux, веб-интерфейс",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs --refresh 5 --data ./data",
+    "test": "node --test",
+    "check": "node --check server.mjs && node --check reader-core.mjs",
+    "bump": "node tools/bump-version.mjs",
+    "bump:check": "node tools/bump-version.mjs --check"
+  },
+  "files": [
+    "server.mjs",
+    "reader-core.mjs",
+    "lib/",
+    "public/",
+    "deploy/"
+  ],
+  "license": "MIT"
+}
