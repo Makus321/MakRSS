@@ -4991,6 +4991,19 @@ function sanitize(html, baseUrl, { slot = true } = {}) {
     // Картинкам и видео в тексте не оставляем размеры из разметки: иначе браузер
     // заранее резервирует место, и до загрузки видно белое поле. Пусть место
     // появляется вместе с картинкой.
+    // Картинки-счётчики («поделиться», пиксели, маячки аналитики) выбрасываем
+    // сразу: места они не занимают, но читалка рисовала под них пустую рамку с
+    // кнопкой «Не загрузилась — повторить».
+    if (el.tagName === 'IMG') {
+      const src = el.getAttribute('src') ?? '';
+      const width = Number(el.getAttribute('width') ?? 0);
+      const height = Number(el.getAttribute('height') ?? 0);
+      const tracker = /(\/(share|pixel|pixel\.gif|counter|count|stat|stats|track|tracker|analytics|beacon|1x1)[\/._-]|(^|\/\/)(mc\.yandex|top-fwz1|tns-counter|www\.tns-counter|b\.scorecardresearch|px\.|counter\.|informer\.))/i;
+      if ((width > 0 && width <= 2) || (height > 0 && height <= 2) || tracker.test(src)) {
+        doomed.push(el);
+        continue;
+      }
+    }
     if (el.tagName === 'IMG' || el.tagName === 'VIDEO') {
       el.removeAttribute('width');
       el.removeAttribute('height');
