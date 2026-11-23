@@ -377,7 +377,6 @@ window.addEventListener('online', () => flushSettings());
 const rememberData = (data) => {
   if (!looksLikeData(data)) return false;         // ответ без данных (нет сети, кэш) — не трогаем состояние
   if (data.serverVersion) state.serverVersion = data.serverVersion;
-  if (data.buildVersion) state.buildVersion = data.buildVersion;   // сборка сервера для подвала
   // Отметки о прочтении, сделанные без сети, важнее того, что пришло с сервера.
   applyPendingReads(data.items);
   state.data = data;
@@ -1991,17 +1990,14 @@ function updateFooterStats() {
   const traffic = state.traffic ?? { total: 0, list: 0, images: 0, bodies: 0, label: '' };
   const problem = state.listError || state.lastError || state.refreshError || '';
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
-  // Сборка сервера приходит из /api/version: раньше в подвале висел только тег
-  // формата данных (1.15), и понять, какая сборка на сервере, было нельзя.
-  const serverBuild = state.buildVersion || state.serverVersion || '?';
-  const versionTitle = 'Клиент ' + APP_VERSION + ', стили ' + styleVersion
-    + ', сервер сборка ' + serverBuild
-    + (state.serverVersion ? ` (формат ${state.serverVersion})` : '');
+  // Только версия разбора (без «1.»): она меняется, когда меняется разбор текста.
+  const parseVersion = String(state.serverVersion ?? '').split('.').pop() || '?';
+  const versionTitle = 'Клиент ' + APP_VERSION + ', стили ' + styleVersion + ', версия разбора ' + parseVersion;
   const trafficTitle = 'Трафик ленты' + (traffic.label ? ` «${traffic.label}»` : '') + ': '
     + sizeLabel(traffic.total) + ' (данные ' + sizeLabel(traffic.list)
     + ', тексты ' + sizeLabel(traffic.bodies)
     + ', картинки ' + sizeLabel(traffic.images) + ')';
-  label.innerHTML = `<span title="${versionTitle}">` + APP_VERSION + '.' + styleVersion + '.' + serverBuild + '</span>'
+  label.innerHTML = `<span title="${versionTitle}">` + APP_VERSION + '.' + styleVersion + '.' + parseVersion + '</span>'
     + ' · ' + icon('⇣', trafficTitle) + ' ' + sizeLabel(traffic.total)
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
     + ' · ' + (problem
@@ -4798,10 +4794,6 @@ async function start() {
   await loadData();
   afterAuthInit();        // восстановить раздел и включить живые события
   hideLoader();                           // данные пришли — снимаем затемнение
-  // Сборка сервера: показываем в подвале вместо тега формата данных.
-  api('/api/version').then((res) => {
-    if (res?.version) { state.buildVersion = res.version; updateFooterStats(); }
-  }).catch(() => {});
 }
 
 start();
