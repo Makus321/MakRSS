@@ -29,7 +29,7 @@
 //   ANY  /fever/                        протокол Fever API для внешних клиентов
 
 import { createServer } from 'node:http';
-import { readFile, writeFile, appendFile, mkdir, unlink, stat, readdir } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, mkdir, unlink, stat, readdir, rename } from 'node:fs/promises';
 import { gzip, brotliCompress, constants as zlibConstants } from 'node:zlib';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -1562,6 +1562,16 @@ const ICON_MAGIC = [
   (b) => b.length > 5 && b[0] === 0x3c,                                                        // svg/xml
 ];
 const looksLikeImage = (buffer) => Boolean(buffer?.length) && ICON_MAGIC.some((test) => test(buffer));
+/** Тип картинки по первым байтам: кэш хранит и JPEG, и PNG, и WebP, и GIF. */
+function sniffImageType(buffer) {
+  if (!buffer || !buffer.length) return 'image/jpeg';
+  if (buffer[0] === 0x89 && buffer[1] === 0x50) return 'image/png';
+  if (buffer[0] === 0x47 && buffer[1] === 0x49) return 'image/gif';
+  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[8] === 0x57) return 'image/webp';
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) return 'image/jpeg';
+  return 'image/jpeg';
+}
+
 const ICON_TYPE = (buffer, headerType) => {
   if (/^image\//i.test(headerType || '')) return headerType.split(';')[0];
   if (buffer[0] === 0x89) return 'image/png';
@@ -2109,6 +2119,7 @@ async function serveThumb(req, res, url) {
       return;
     }
     await writeFile(file, buffer).catch(() => {});
+    pruneMediaCache().catch(() => {});
     res.writeHead(200, { 'content-type': /gif/i.test(type) ? 'image/gif' : type, 'cache-control': 'private, max-age=604800' });
     res.end(buffer);
   } catch {
@@ -2180,26 +2191,32 @@ async function compressToWebp(buffer, baseFile, { quality, width } = {}) {
   if (!quality && buffer.length < IMG_RECOMPRESS_ABOVE) return null;
   const source = `${baseFile}.src`;
   const target = `${baseFile}.webp`;
+  const tmp = `${baseFile}.${process.pid}.${Date.now()}.webp.tmp`;
   try {
     await mkdir(MEDIA_DIR, { recursive: true });
     await writeFile(source, buffer);
-    const ok = await runCwebp(['-quiet', '-q', String(quality ?? IMG_WEBP_QUALITY), '-resize', String(width ?? IMG_WEBP_WIDTH), '0', '-o', target, source]);
+    // Пишем во временный файл и переименовываем только при успехе: иначе
+    // недожатая копия оставалась на диске и отдавалась вместо оригинала.
+    const ok = await runCwebp(['-quiet', '-q', String(quality ?? IMG_WEBP_QUALITY), '-resize', String(width ?? IMG_WEBP_WIDTH), '0', '-o', tmp, source]);
     if (ok === 'missing') {
       webpAvailable = false;
       log('cwebp не найден — картинки отдаём как есть');
       return null;
     }
     if (ok !== 'ok') {
-      // Формат не подошёл (SVG, анимированный GIF): не выключаем сжатие целиком.
+      // Формат не подошёл (SVG, анимированный GIF): сжатие не выключаем.
       log(`файл ${path.basename(baseFile)} не сжался (${Math.round(buffer.length / 1024)} КБ)`);
       return null;
     }
-    const out = await readFile(target);
-    return out.length && out.length < buffer.length ? out : null;
+    const out = await readFile(tmp);
+    if (!out.length || out.length >= buffer.length) return null;   // не меньше оригинала — не нужен
+    await rename(tmp, target);
+    return out;
   } catch {
     return null;
   } finally {
     unlink(source).catch(() => {});
+    unlink(tmp).catch(() => {});
   }
 }
 
@@ -2333,6 +2350,7 @@ async function serveImage(req, res, url) {
     if (buffer.length > IMG_MAX_BYTES) throw new Error('слишком большая');
     await mkdir(MEDIA_DIR, { recursive: true });
     await writeFile(file, buffer).catch(() => {});
+    pruneMediaCache().catch(() => {});
     const webp = await compressToWebp(buffer, file);
     if (webp) {
       await writeFile(`${file}.webp`, webp).catch(() => {});
@@ -2374,7 +2392,7 @@ async function cachePostMedia(feedId, itemId, html, limit = 12) {
     const target = path.join(MEDIA_DIR, postMediaFile(feedId, itemId, index));
     try { await readFile(target); saved += 1; continue; } catch { /* ещё нет в кэше */ }
     try {
-      const response = await safeFetch(urls[index], { headers: { 'user-agent': UA, accept: '*/*' } });
+    const response = await safeFetch(urls[index], { headers: { 'user-agent': UA, accept: '*/*' }, signal: AbortSignal.timeout(15000) });
       if (!response.ok) continue;
       const bin = Buffer.from(await response.arrayBuffer());
       if (bin.length < 200) continue;
@@ -2396,12 +2414,13 @@ async function ensureCachedMedia(feedId, itemId, index, remoteUrl) {
   } catch { /* ещё нет — качаем сейчас */ }
   if (!remoteUrl) return false;
   try {
-    const response = await safeFetch(remoteUrl, { headers: { 'user-agent': UA, accept: '*/*' } });
+    const response = await safeFetch(remoteUrl, { headers: { 'user-agent': UA, accept: '*/*' }, signal: AbortSignal.timeout(15000) });
     if (!response.ok) return false;
     const bin = Buffer.from(await response.arrayBuffer());
     if (bin.length < 200) return false;
     await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
     await writeFile(target, bin).catch(() => {});
+      pruneMediaCache().catch(() => {});   // кэш не должен расти без предела
     const size = imageSize(bin);
     if (size) await writeFile(target + '.json', JSON.stringify(size)).catch(() => {});
     return true;
@@ -2468,7 +2487,6 @@ async function serveMedia(req, res, url) {
   const feedId = url.searchParams.get('f') ?? '';
   // Короткая ссылка на картинку поста: отдаём из кэша, при промахе качаем и кэшируем.
   const postId = url.searchParams.get('k') ?? '';
-  if (postId) console.log('media: f=' + feedId + ' k=' + postId + ' i=' + (url.searchParams.get('i') ?? '0'));
   // Идентификаторы приходят из адреса: без проверки «../» выводил за каталог медиа.
   if (postId && !mediaPathFor(feedId, postId, 0)) {
     res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('плохие параметры');
@@ -2479,8 +2497,7 @@ async function serveMedia(req, res, url) {
     const target = mediaPathFor(feedId, postId, index);
     try {
       const data = await readFile(target);
-      console.log('media ok из кэша, байт ' + data.length);
-      res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
+      res.writeHead(200, { 'content-type': sniffImageType(data), 'cache-control': 'private, max-age=86400' });
       return res.end(data);
     } catch { /* ещё не скачано */ }
     const stored = (await store.body(feedId, postId)) ?? {};
@@ -2501,14 +2518,14 @@ async function serveMedia(req, res, url) {
       const bin = Buffer.from(await response.arrayBuffer());
       await mkdir(MEDIA_DIR, { recursive: true }).catch(() => {});
       await writeFile(target, bin).catch(() => {});
+      pruneMediaCache().catch(() => {});   // кэш не должен расти без предела
       res.writeHead(200, {
         'content-type': response.headers.get('content-type') ?? 'image/jpeg',
         'cache-control': 'private, max-age=86400',
       });
-      console.log('media ok скачано, байт ' + bin.length);
       return res.end(bin);
     } catch (err) {
-      console.log('media FAIL ' + String(err.message));
+      log(`медиа: не удалось получить пост ${postId}: ${err.message}`);
       // Ссылка устарела (Telegram отдаёт 404/500) — перечитываем пост и ждём,
       // пока появится свежий файл. Иначе первый запрос отдавал 404 и картинка
       // навсегда оставалась сломанной в браузере.
@@ -2521,7 +2538,6 @@ async function serveMedia(req, res, url) {
           try {
             const data = await readFile(target);
             res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
-            console.log('media ok после перечитывания, байт ' + data.length);
             return res.end(data);
           } catch { /* ещё не появился */ }
         }
@@ -2560,19 +2576,9 @@ async function serveMedia(req, res, url) {
 }
 
 // Временный журнал запросов: видно, что клиент просит в момент, когда статья
-// пропадает. Пишем строкой, на ответы не влияет.
-const API_LOG_FILE = path.join(DATA_DIR, 'api-log.txt');
-async function apiLog(req, url) {
-  try {
-    const ua = String(req.headers['user-agent'] ?? '').slice(0, 20);
-    const line = `${new Date().toISOString()} ${req.method} ${url.pathname}${url.search} ua=${ua}\n`;
-    await appendFile(API_LOG_FILE, line);
-  } catch { /* журнал не критичен */ }
-}
 
 async function api(req, res, url) {
   const route = `${req.method} ${url.pathname}`;
-  if (url.pathname.startsWith('/api/')) apiLog(req, url);
 
   // ---------------------------------------------------- вход и настройки
   if (route === 'GET /api/session') {
