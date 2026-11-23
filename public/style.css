@@ -1352,3 +1352,22 @@ body.actions-hidden .a-actions.floating { opacity: 0; pointer-events: none; }
 
 /* Строка версии в подвале: на 30% меньше обычного текста, чтобы не отвлекала. */
 #sidebar-version { font-size: 10px; opacity: .8; }
+
+/* Форма входа: подпись над полем, оба поля одинаковой ширины и по ширине окна,
+   кнопка «Войти» справа. Раньше поля были в строку с подписью и на планшете
+   вылезали за окно, а ширина зависела от длины слова «Логин» / «Пароль». */
+#login-modal .modal-body { padding-bottom: 4px; }
+#login-modal .row-line { display: block; margin-bottom: 10px; }
+#login-modal .row-line input[type="text"],
+#login-modal .row-line input[type="password"] {
+  display: block; box-sizing: border-box;
+  width: 100%; max-width: 100%; min-width: 0; margin-top: 4px;
+}
+#login-modal .row-line.check {
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px;
+}
+#login-modal .btn-row { justify-content: flex-end; margin-top: 10px; }
+@media (max-width: 420px) {
+  #login-modal .btn-row { justify-content: stretch; }
+  #login-modal .btn-row .btn { width: 100%; }
+}
