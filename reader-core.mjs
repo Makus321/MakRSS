@@ -45,6 +45,7 @@ import {
   telegramBotMe, telegramGetUpdates, parseBotUpdate, telegramFileUrl,
 } from './lib/telegram.mjs';
 import { Store } from './lib/store.mjs';
+import { safeFetch } from './lib/net-guard.mjs';
 import { handleFever } from './lib/fever.mjs';
 import { commentsProviderFor } from './lib/comments.mjs';
 import {
@@ -2003,7 +2004,7 @@ async function serveVideo(req, res, url) {
       referer: telegramCdn ? 'https://t.me/' : parsed.origin + '/',
     };
     if (req.headers.range) headers.range = req.headers.range;   // перемотка
-    const response = await fetch(source, { headers, signal: controller.signal });
+    const response = await safeFetch(source, { headers, signal: controller.signal });
     if (!response.ok && response.status !== 206) throw new Error(`ответ ${response.status}`);
     const out = {
       'content-type': String(response.headers.get('content-type') ?? 'video/mp4'),
@@ -2085,7 +2086,7 @@ async function serveThumb(req, res, url) {
   } catch { /* ещё не скачивали */ }
 
   try {
-    const response = await fetch(source, {
+    const response = await safeFetch(source, {
       headers: { 'user-agent': UA, accept: 'image/*' },
       signal: AbortSignal.timeout(15000),
     });
@@ -2245,12 +2246,12 @@ async function reachableImage(url) {
   if (!/^https?:\/\//i.test(value)) return false;
   const headers = { 'user-agent': 'Mozilla/5.0 (compatible; MakRSS/1.0)', accept: 'image/*' };
   try {
-    const head = await fetch(value, { method: 'HEAD', headers, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+    const head = await safeFetch(value, { method: 'HEAD', headers, redirect: 'follow', signal: AbortSignal.timeout(8000) });
     if (head.ok && /^image\//i.test(head.headers.get('content-type') || '')) return true;
     if (head.status !== 403 && head.status !== 405) return false;
   } catch { /* пробуем обычным запросом */ }
   try {
-    const get = await fetch(value, { headers: { ...headers, range: 'bytes=0-1024' }, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+    const get = await safeFetch(value, { headers: { ...headers, range: 'bytes=0-1024' }, redirect: 'follow', signal: AbortSignal.timeout(8000) });
     return get.ok && /^image\//i.test(get.headers.get('content-type') || '');
   } catch { return false; }
 }
@@ -2309,7 +2310,7 @@ async function serveImage(req, res, url) {
   } catch { /* ещё не скачивали */ }
 
   try {
-    const response = await fetch(source, {
+    const response = await safeFetch(source, {
       // Хотлинк-защита: часть сайтов отдаёт картинку только с реферером
       // своей статьи. Берём его из параметра r, иначе — с главной сайта.
       headers: { 'user-agent': UA, accept: 'image/*', referer: pageReferer(parsed, url) },
@@ -2362,7 +2363,7 @@ async function cachePostMedia(feedId, itemId, html, limit = 12) {
     const target = path.join(MEDIA_DIR, postMediaFile(feedId, itemId, index));
     try { await readFile(target); saved += 1; continue; } catch { /* ещё нет в кэше */ }
     try {
-      const response = await fetch(urls[index], { headers: { 'user-agent': UA, accept: '*/*' } });
+      const response = await safeFetch(urls[index], { headers: { 'user-agent': UA, accept: '*/*' } });
       if (!response.ok) continue;
       const bin = Buffer.from(await response.arrayBuffer());
       if (bin.length < 200) continue;
@@ -2384,7 +2385,7 @@ async function ensureCachedMedia(feedId, itemId, index, remoteUrl) {
   } catch { /* ещё нет — качаем сейчас */ }
   if (!remoteUrl) return false;
   try {
-    const response = await fetch(remoteUrl, { headers: { 'user-agent': UA, accept: '*/*' } });
+    const response = await safeFetch(remoteUrl, { headers: { 'user-agent': UA, accept: '*/*' } });
     if (!response.ok) return false;
     const bin = Buffer.from(await response.arrayBuffer());
     if (bin.length < 200) return false;
@@ -2481,7 +2482,7 @@ async function serveMedia(req, res, url) {
       // Пробуем дважды: Telegram иногда отдаёт файл не с первого раза.
       let response = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        response = await fetch(remote, { headers: { 'user-agent': UA, accept: '*/*' } }).catch(() => null);
+        response = await safeFetch(remote, { headers: { 'user-agent': UA, accept: '*/*' } }).catch(() => null);
         if (response?.ok) break;
         await sleep(400);
       }
