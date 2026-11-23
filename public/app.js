@@ -2521,8 +2521,6 @@ async function showCommentsOnly(id) {
   state.selectedId = id;
   state.collapsedItems.delete(id);
   state.commentsOnly.add(id);
-  // Раскрываем статью: иначе не срабатывали readOnExpand и докачка текста.
-  await expandItem(id);
   renderList();
   const element = document.querySelector(`.article[data-item="${id}"]`);
   if (element) scrollInList(element, 'start');
