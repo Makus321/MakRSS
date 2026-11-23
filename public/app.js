@@ -828,11 +828,18 @@ function renderToolbar() {
   // Когда список «заморожен», в шапке считаем ровно показанное: иначе было
   // «2 статьи», а карточка одна — просто новая статья ещё ждёт кнопку «Показать».
   // Сами новые статьи показываем отдельной припиской, чтобы не путать с фильтром.
+  // Числа в шапке должны совпадать с деревом (там серверные счётчики), а про
+  // зафиксированный список говорим отдельно: «в списке 2, новых 1».
   const frozenIds = state.listFrozen && state.snapshot?.ids instanceof Set ? state.snapshot.ids : null;
   const shownItems = frozenIds ? state.data.items.filter((item) => frozenIds.has(item.id)) : viewItems;
-  const unread = shownItems.filter((i) => !i.read).length;
-  const totalShown = shownItems.length;
+  const shownUnread = shownItems.filter((i) => !i.read).length;
+  const unread = curFeed ? Number(curFeed.unread ?? 0) : viewItems.filter((i) => !i.read).length;
+  const totalShown = curFeed ? (unreadModeFor() ? Number(curFeed.unread ?? 0) : Number(curFeed.total ?? 0)) : viewItems.length;
   const pendingNew = pendingNewCount();
+  // Приписка только когда список уже собран: на пустом снимке «в списке 0» пугает.
+  const listNote = frozenIds && shownUnread > 0 && shownUnread < unread
+    ? ` · в списке ${shownUnread} — нажмите «Показать»`
+    : '';
   // «3 мин назад», но «только что» и «вчера» — уже готовые слова, «назад» к ним не идёт.
   const ago = timeAgo(state.data.lastRefresh);
   const refreshed = state.data.lastRefresh
@@ -840,13 +847,13 @@ function renderToolbar() {
     : 'ещё не обновлялось';
   // Про «новые» пишем один раз: если в текущей ленте ждут показа N статей —
   // говорим про них, иначе показываем итог последнего обновления.
-  const added = pendingNew
-    ? ` · новых: ${pendingNew} — нажмите «Показать»`
-    : (Number.isFinite(state.data.lastRefreshAdded)
-      ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
-      : '');
+  // Если в ленте ждут показа новые статьи, про них скажет listNote ниже,
+  // а здесь оставляем только итог последнего обновления, чтобы не повторяться.
+  const added = Number.isFinite(state.data.lastRefreshAdded)
+    ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
+    : '';
   const pendingHint = '';
-  $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}${pendingHint}`;
+  $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}${listNote}`;
   // Диагностика по ссылке ?debug=1: видно, где теряется статья.
   if (new URLSearchParams(location.search).get('debug') === '1') {
     const raw = state.data.items.filter((item) => state.view.type !== 'feed' || item.feedId === state.view.id);
