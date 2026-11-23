@@ -2,6 +2,12 @@
    Статья раскрывается прямо в списке; если текста нет — он докачивается по клику. */
 
 const $ = (sel) => document.querySelector(sel);
+
+/** id статьи в CSS-селекторе: экранируем, иначе спецсимволы ломают querySelector. */
+function cssId(value) {
+  const raw = String(value ?? '');
+  return typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(raw) : raw.replace(/"/g, '\"');
+}
 /**
  * Ручные решения пользователя по отметкам. Объявлены в самом начале: их читают
  * функции, которые вызываются при старте, — раньше объявления ниже приводили
@@ -707,7 +713,7 @@ function renderSidebar() {
         data-feed-row="${esc(feed.id)}" draggable="true" title="${esc(feed.lastError || feed.url)}">
       <span class="fav" aria-hidden="true">
         <span class="fav-letter">${esc(letter)}</span>
-        ${faviconFailed.has(feed.id) ? '' : `<img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy" onerror="window.__faviconFailed('${esc(feed.id)}'); this.remove()">`}
+        ${faviconFailed.has(feed.id) ? '' : `<img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy">`}
       </span>
       <span class="row-name${feed.unread ? ' unread' : ''}">${esc(feed.title)}</span>
       <span class="row-actions">
@@ -1334,7 +1340,7 @@ async function markCommentsSeen(id, maxId, options = {}) {
   }
   const left = loaded?.newIds?.length ?? 0;
     // Счётчик в карточке обновляем сразу: иначе «+N» висит до перезагрузки.
-    const chip = document.querySelector(`.article[data-item="${id}"] .comment-chip`);
+    const chip = document.querySelector(`.article[data-item="${cssId(id)}"] .comment-chip`);
     if (chip && Number.isFinite(Number(item?.commentsCount))) {
       chip.textContent = `💬 ${item.commentsCount}`;
       if (left) chip.insertAdjacentHTML("beforeend", ` <b class="comment-delta">+${left}</b>`);
@@ -1554,7 +1560,7 @@ function articleHtml(item) {
   const thumb = thumbSource
     ? `<img class="a-thumb" src="${esc(imageSrc(item))}" alt="" loading="lazy"
          referrerpolicy="no-referrer"
-        onerror="this.remove()">`
+        data-thumb="1">`
     : '';
   // Картинка показывается только в «Кратко»: от этого зависит отступ текста слева.
   const hasThumb = Boolean(thumb) && mode === 'compact-thumb';
@@ -1828,7 +1834,7 @@ async function pumpCoverQueue() {
  * Полная пересборка (renderList) сбрасывала прокрутку, и лента прыгала вверх.
  */
 function patchComments(id) {
-  const row = document.querySelector(`#list .article[data-item="${id}"]`);
+  const row = document.querySelector(`#list .article[data-item="${cssId(id)}"]`);
   const item = state.data.items.find((i) => i.id === id);
   if (!row || !item) return false;
   const block = row.querySelector('.a-comments');
@@ -1850,7 +1856,7 @@ function patchComments(id) {
 
 
 function patchCard(id) {
-  const row = document.querySelector(`#list .article[data-item="${id}"]`);
+  const row = document.querySelector(`#list .article[data-item="${cssId(id)}"]`);
   const item = state.data.items.find((i) => i.id === id);
   if (!row || !item) return false;
   const list = $('#list');
@@ -1860,7 +1866,7 @@ function patchCard(id) {
   const fresh = holder.firstElementChild;
   if (!fresh) return false;
   row.replaceWith(fresh);
-  const after = document.querySelector(`#list .article[data-item="${id}"]`);
+  const after = document.querySelector(`#list .article[data-item="${cssId(id)}"]`);
   if (after && list) {
     const delta = after.getBoundingClientRect().top - top;
     if (Math.abs(delta) > 1) list.scrollTop += delta;   // сохраняем позицию чтения
@@ -1936,7 +1942,7 @@ function renderList() {
     // Берём первый якорь, который после перерисовки на месте: если статью
     // убрали из списка, выравниваемся по следующей видимой.
     for (const [id, top] of anchors) {
-      const again = listEl.querySelector(`.article[data-item="${id}"]`);
+      const again = listEl.querySelector(`.article[data-item="${cssId(id)}"]`);
       if (!again) continue;
       listEl.scrollTop += again.getBoundingClientRect().top - top;
       break;
@@ -1992,11 +1998,11 @@ function updateFooterStats() {
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
   // Только версия разбора (без «1.»): она меняется, когда меняется разбор текста.
   const parseVersion = String(state.serverVersion ?? '').split('.').pop() || '?';
-  const versionTitle = 'Клиент ' + APP_VERSION + ', стили ' + styleVersion + ', версия разбора ' + parseVersion;
-  const trafficTitle = 'Трафик ленты' + (traffic.label ? ` «${traffic.label}»` : '') + ': '
+  const versionTitle = esc('Клиент ' + APP_VERSION + ', стили ' + styleVersion + ', версия разбора ' + parseVersion);
+  const trafficTitle = esc('Трафик ленты' + (traffic.label ? ` «${traffic.label}»` : '') + ': '
     + sizeLabel(traffic.total) + ' (данные ' + sizeLabel(traffic.list)
     + ', тексты ' + sizeLabel(traffic.bodies)
-    + ', картинки ' + sizeLabel(traffic.images) + ')';
+    + ', картинки ' + sizeLabel(traffic.images) + ')');
   label.innerHTML = `<span title="${versionTitle}">` + APP_VERSION + '.' + styleVersion + '.' + parseVersion + '</span>'
     + ' · ' + icon('⇣', trafficTitle) + ' ' + sizeLabel(traffic.total)
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
@@ -2519,10 +2525,10 @@ async function showCommentsOnly(id) {
   state.collapsedItems.delete(id);
   state.commentsOnly.add(id);
   renderList();
-  const element = document.querySelector(`.article[data-item="${id}"]`);
+  const element = document.querySelector(`.article[data-item="${cssId(id)}"]`);
   if (element) scrollInList(element, 'start');
   await loadComments(id, Boolean(state.comments.get(id)?.ok));
-  const block = document.querySelector(`.article[data-item="${id}"] .a-comments`);
+  const block = document.querySelector(`.article[data-item="${cssId(id)}"] .a-comments`);
   if (block) scrollInList(block, 'nearest');
 }
 
@@ -2669,7 +2675,7 @@ window.addEventListener('pagehide', flushNow);
  * уходил из списка, а кнопка продолжала показывать прежнее состояние.
  */
 function syncReadButton(id, read) {
-  const row = document.querySelector(`.article[data-item="${id}"]`);
+  const row = document.querySelector(`.article[data-item="${cssId(id)}"]`);
   const button = row?.querySelector('[data-read]');
   if (!button) return;
   button.dataset.value = read ? '0' : '1';
@@ -2709,7 +2715,7 @@ async function markRead(ids, read, { silent = false } = {}) {
 
 /** Точечно показывает/снимает отметку «прочитано» у строки списка. */
 function updateRowReadMark(id, read) {
-  const row = document.querySelector(`.article[data-item="${id}"]`);
+  const row = document.querySelector(`.article[data-item="${cssId(id)}"]`);
   if (!row) return;
   row.classList.toggle('read', read);
   row.classList.toggle('unread', !read);
@@ -2788,7 +2794,7 @@ function playVideo(button) {
 
 /** Обновляет только вид звёздочки: статус и иконку, без перерисовки списка. */
 function updateStarVisual(id, starred) {
-  const row = document.querySelector(`.article[data-item="${id}"]`);
+  const row = document.querySelector(`.article[data-item="${cssId(id)}"]`);
   if (!row) return;
   row.classList.toggle('starred', Boolean(starred));
   for (const button of row.querySelectorAll('[data-star]')) {
@@ -2853,7 +2859,7 @@ async function toggleStar(id, event) {
     if (state.view.type === 'starred' && !next) {
       item.starred = false;
       pendingUnstar.add(id);
-      const row = document.querySelector(`.article[data-item="${id}"]`);
+      const row = document.querySelector(`.article[data-item="${cssId(id)}"]`);
       const button = row?.querySelector('[data-star]');
       if (button) {
         button.classList.remove('on');
@@ -3116,7 +3122,7 @@ $('#list').addEventListener('click', async (event) => {
     const jump = commentsBtn.dataset.jump === '1';
     await loadComments(id, Boolean(state.comments.get(id)?.ok));   // повторное нажатие — обновить
     if (jump) {
-      const block = document.querySelector(`.article[data-item="${id}"] .a-comments`);
+      const block = document.querySelector(`.article[data-item="${cssId(id)}"] .a-comments`);
       if (block) scrollInList(block, 'start');
     }
     return;
@@ -3451,7 +3457,7 @@ $('#comments-top').addEventListener('click', async () => {
   const item = state.data.items.find((i) => i.id === id);
   if (isExpanded(item)) {
     await loadComments(id, Boolean(state.comments.get(id)?.ok));
-    const block = document.querySelector(`.article[data-item="${id}"] .a-comments`);
+    const block = document.querySelector(`.article[data-item="${cssId(id)}"] .a-comments`);
     if (block) scrollInList(block, 'start');
     return;
   }
@@ -4501,6 +4507,17 @@ function setupLightboxHandlers() {
 }
 
 function startEvents() {
+  // Ошибки картинок ловим делегированно, без инлайн onerror в разметке.
+  document.addEventListener('error', (event) => {
+    const img = event.target;
+    if (!(img instanceof HTMLImageElement)) return;
+    if (img.dataset.thumb) { img.remove(); return; }
+    if (img.closest('#tree')) {
+      const row = img.closest('[data-feed-row]');
+      if (row?.dataset.feedRow) faviconFailed.add(row.dataset.feedRow);
+      img.remove();
+    }
+  }, true);
   if (!('EventSource' in window) || events) return;
   try {
     events = new EventSource('/api/events');
@@ -4876,9 +4893,13 @@ function sanitize(html, baseUrl, { slot = true } = {}) {
   const embedLink = (url, title) => {
     const decoded = String(url)
       .replace(/&#0*38;|&amp;/gi, '&')
-      .replace(/&quot;/g, '"');
+      .replace(/&quot;/g, '"')
+      .trim();
+    // Вставляем в href и data-embed только http(s): иначе ссылка вида
+    // javascript:… выполнилась бы в контексте читалки.
+    if (!/^https?:/i.test(decoded)) return '';
     if (isAdEmbed(decoded)) return '';
-    const key = decoded.trim().toLowerCase().replace(/\/+$/, '');
+    const key = decoded.toLowerCase().replace(/\/+$/, '');
     if (seenEmbeds.has(key)) return '';
     seenEmbeds.add(key);
     const safe = decoded.replace(/"/g, '&quot;');
