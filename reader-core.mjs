@@ -2112,7 +2112,18 @@ async function serveThumb(req, res, url) {
     res.writeHead(200, { 'content-type': /gif/i.test(type) ? 'image/gif' : type, 'cache-control': 'private, max-age=604800' });
     res.end(buffer);
   } catch {
-    // Не получилось — отдаём браузеру исходный адрес, просто без кэша.
+    // Не получилось — отдаём браузеру адрес картинки, но для Telegram
+    // ссылка на CDN быстро устаревает: ведём на наш кэш медиа, а не на источник,
+    // иначе миниатюра в свёрнутой карточке пропадала навсегда.
+    const found = findItem(id);
+    const isTelegram = String(found?.feed?.kind ?? '').startsWith('telegram');
+    if (isTelegram && found) {
+      res.writeHead(302, {
+        location: `/api/media?f=${encodeURIComponent(found.feed.id)}&k=${encodeURIComponent(id)}&i=0`,
+        'cache-control': 'no-store',
+      });
+      return res.end();
+    }
     res.writeHead(302, { location: source, 'cache-control': 'no-store' });
     res.end();
   }
