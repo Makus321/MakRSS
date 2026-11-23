@@ -838,10 +838,14 @@ function renderToolbar() {
   const refreshed = state.data.lastRefresh
     ? `обновлено ${/^\d/.test(ago) ? `${ago} назад` : ago}`
     : 'ещё не обновлялось';
-  const added = Number.isFinite(state.data.lastRefreshAdded)
-    ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
-    : '';
-  const pendingHint = pendingNew ? ` · новых: ${pendingNew} — нажмите «Показать»` : '';
+  // Про «новые» пишем один раз: если в текущей ленте ждут показа N статей —
+  // говорим про них, иначе показываем итог последнего обновления.
+  const added = pendingNew
+    ? ` · новых: ${pendingNew} — нажмите «Показать»`
+    : (Number.isFinite(state.data.lastRefreshAdded)
+      ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
+      : '');
+  const pendingHint = '';
   $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}${pendingHint}`;
   // Диагностика по ссылке ?debug=1: видно, где теряется статья.
   if (new URLSearchParams(location.search).get('debug') === '1') {
