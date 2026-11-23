@@ -1502,6 +1502,8 @@ function buildPayload() {
     addedByFeed: lastAddedByFeed,
     revision: Number(db.revision) || 0,
     serverVersion: SERVER_TAG,
+    // Сборка сервера: клиент показывает её в подвале, не запрашивая /api/version.
+    buildVersion: APP_VERSION,
     nextRefreshAt,
     limits: { maxUnreadPerFeed: MAX_UNREAD_PER_FEED, keepReadDays: keepReadDays() },
   };
@@ -2757,6 +2759,8 @@ async function api(req, res, url) {
       seenMax: Number(found.item.commentsSeenMaxId) || 0,
       revision: db.revision,
       serverVersion: SERVER_TAG,
+    // Сборка сервера: клиент показывает её в подвале, не запрашивая /api/version.
+    buildVersion: APP_VERSION,
     });
   }
 
@@ -3458,6 +3462,7 @@ async function staticFile(req, res, url) {
  * @param {{ dataDir?: string, login?: string, apiKey?: string, secret?: string, tag?: string }} options
  */
 export async function init(options = {}) {
+  await loadVersion();   // номер сборки нужен в полезной нагрузке клиента
   if (options.dataDir) DATA_DIR = path.resolve(options.dataDir);
   MEDIA_DIR = path.join(DATA_DIR, 'media');
   logTag = options.tag ?? '';

@@ -377,6 +377,7 @@ window.addEventListener('online', () => flushSettings());
 const rememberData = (data) => {
   if (!looksLikeData(data)) return false;         // ответ без данных (нет сети, кэш) — не трогаем состояние
   if (data.serverVersion) state.serverVersion = data.serverVersion;
+  if (data.buildVersion) state.buildVersion = data.buildVersion;   // сборка сервера для подвала
   // Отметки о прочтении, сделанные без сети, важнее того, что пришло с сервера.
   applyPendingReads(data.items);
   state.data = data;

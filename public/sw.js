@@ -8,7 +8,7 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v299';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
+const CACHE = 'rss-shell-v300';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
 const DATA_CACHE = 'rss-data-v180';
 const MEDIA_CACHE = 'rss-media-v151';
 
@@ -74,13 +74,15 @@ async function negativeCache(request, cacheName) {
 // Оболочка версионируется через ?v=: сопоставляем по пути, чтобы кэш не
 // промахивался, когда index.html просит /app.js?v=331, а в кэше /app.js.
 async function shellFirst(request) {
-  const url = new URL(request.url);
+  // Кэшируем под ТОЧНЫМ адресом запроса (с ?v=): иначе ответ из кэша имеет
+  // url без версии, и import.meta.url в app.js теряет номер сборки (1.0 вместо 1.335).
   const cache = await caches.open(CACHE);
-  const cached = await cache.match(url.pathname, { ignoreSearch: true })
-    || await cache.match(request, { ignoreSearch: true });
+  const exact = await cache.match(request);
+  if (exact) return exact;
+  const cached = await cache.match(request, { ignoreSearch: true });
   if (cached) return cached;
   const fresh = await fetch(request);
-  if (fresh && fresh.ok) cache.put(url.pathname, fresh.clone()).catch(() => {});
+  if (fresh && fresh.ok) cache.put(request, fresh.clone()).catch(() => {});
   return fresh;
 }
 
@@ -148,7 +150,7 @@ self.addEventListener('fetch', (event) => {
         }
         return fresh;
       } catch {
-        const shell = await caches.match('/index.html') ?? await caches.match('/') ?? await caches.match(request);
+        const shell = await caches.match('/index.html', { ignoreSearch: true }) ?? await caches.match('/', { ignoreSearch: true }) ?? await caches.match(request, { ignoreSearch: true });
         if (shell) return shell;
         throw new Error('нет сети и кэша');
       }
