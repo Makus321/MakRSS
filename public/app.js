@@ -51,6 +51,46 @@ function askConfirm(title, text) {
   });
 }
 
+/**
+ * Окно ввода вместо window.prompt: в установленном приложении на телефоне
+ * системный prompt может не показываться, и действие выполнялось с пустым
+ * значением. Возвращает null, если пользователь отказался.
+ */
+function askPrompt(title, text, initial = '') {
+  return new Promise((resolve) => {
+    const modal = $('#prompt-modal');
+    if (!modal) { resolve(window.prompt(text, initial)); return; }
+    const input = $('#prompt-input');
+    $('#prompt-title').textContent = title;
+    $('#prompt-text').textContent = text;
+    input.value = initial;
+    modal.hidden = false;
+    const done = (answer) => {
+      modal.hidden = true;
+      $('#prompt-ok').removeEventListener('click', ok);
+      $('#prompt-cancel').removeEventListener('click', cancel);
+      input.removeEventListener('keydown', keys);
+      modal.removeEventListener('click', backdrop);
+      if (answer !== null) input.value = '';
+      resolve(answer);
+    };
+    const ok = () => done(input.value);
+    const cancel = () => done(null);
+    const backdrop = (event) => { if (event.target === modal) done(null); };
+    // Enter подтверждает, Esc отменяет — так же, как системный prompt.
+    const keys = (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); ok(); }
+      else if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+    };
+    $('#prompt-ok').addEventListener('click', ok);
+    $('#prompt-cancel').addEventListener('click', cancel);
+    input.addEventListener('keydown', keys);
+    modal.addEventListener('click', backdrop);
+    // Выделяем текст: чаще всего нужно заменить, а не дописать.
+    setTimeout(() => { input.focus(); input.select(); }, 30);
+  });
+}
+
 const PREF_KEY = 'rss.prefs';
 // Раз в час читалка в фоне просит сервер докачать полные тексты и прогревает
 // кэш статей — чтобы при плохой связи они открывались из памяти.
@@ -2752,7 +2792,7 @@ async function shareItem(id) {
     await navigator.clipboard.writeText(url);
     toast('Ссылка скопирована');
   } catch {
-    window.prompt('Ссылка на статью:', url);
+    await askPrompt('Ссылка на статью', 'Скопируйте адрес вручную', url);
   }
 }
 
@@ -2950,7 +2990,7 @@ async function saveTree() {
 /** Переименование ленты (используется и кнопкой, и долгим тапом). */
 async function renameFeedPrompt(feedId) {
   const feed = feedById(feedId);
-  const name = prompt('Название ленты:', feed?.title ?? '');
+  const name = await askPrompt('Название ленты', 'Как подписать ленту в дереве подписок', feed?.title ?? '');
   if (!name?.trim()) return;
   try { applyPayload(await api('/api/feeds/rename', { id: feed.id, title: name.trim() })); }
   catch (err) { toast(err.message, true); }
@@ -2959,7 +2999,7 @@ async function renameFeedPrompt(feedId) {
 /** Отписка от ленты. */
 async function removeFeedPrompt(feedId) {
   const feed = feedById(feedId);
-  if (!confirm(`Отписаться от «${feed?.title ?? ''}»?`)) return;
+  if (!(await askConfirm('Отписаться', `Отписаться от «${feed?.title ?? ''}»?`))) return;
   try {
     applyPayload(await api('/api/feeds/remove', { id: feed.id }));
     if (state.view.type === 'feed' && state.view.id === feed.id) state.view = { type: 'unread', id: null };
@@ -3219,7 +3259,7 @@ $('#tree').addEventListener('click', async (event) => {
   const renameFolder = event.target.closest('[data-folder-rename]');
   if (renameFolder) {
     const folder = state.data.folders.find((f) => f.id === renameFolder.dataset.folderRename);
-    const name = prompt('Название папки:', folder?.name ?? '');
+    const name = await askPrompt('Название папки', 'Как подписать папку в дереве', folder?.name ?? '');
     if (name?.trim()) {
       try { applyPayload(await api('/api/folders/rename', { id: folder.id, name: name.trim() })); } catch (err) { toast(err.message, true); }
     }
@@ -3229,7 +3269,7 @@ $('#tree').addEventListener('click', async (event) => {
   if (delFolder) {
     const folder = state.data.folders.find((f) => f.id === delFolder.dataset.folderDel);
     const count = state.data.feeds.filter((f) => f.folderId === folder.id).length;
-    if (!confirm(`Удалить папку «${folder?.name}»?${count ? `\nЛент внутри: ${count} — они вернутся в корень.` : ''}`)) return;
+    if (!(await askConfirm('Удалить папку', `Удалить папку «${folder?.name}»?${count ? ` Лент внутри: ${count} — они вернутся в корень.` : ''}`))) return;
     try {
       applyPayload(await api('/api/folders/remove', { id: folder.id, deleteFeeds: false }));
       if (state.view.type === 'folder' && state.view.id === folder.id) state.view = { type: 'unread', id: null };
@@ -3358,7 +3398,7 @@ document.querySelector('.nav').addEventListener('click', (event) => {
 });
 
 $('#new-folder').addEventListener('click', async () => {
-  const name = prompt('Название папки:');
+  const name = await askPrompt('Новая папка', 'Название папки', '');
   if (!name?.trim()) return;
   try { applyPayload(await api('/api/folders', { name: name.trim() })); } catch (err) { toast(err.message, true); }
 });
@@ -3552,11 +3592,11 @@ $('#filters-list').addEventListener('click', async (event) => {
     return;
   }
   if (event.target.closest('[data-filter-edit]')) {
-    const entered = window.prompt('Слово или фраза для фильтра:', filter.query);
+    const entered = await askPrompt('Фильтр', 'Слово или фраза для фильтра', filter.query);
     if (entered === null) return;
     const query = entered.trim();
     if (!query) { toast('Пустое слово — фильтр не изменён', true); return; }
-    const mode = window.confirm('ОК — скрывать такие статьи; Отмена — показывать только такие') ? 'hide' : 'only';
+    const mode = (await askConfirm('Что делать со статьями', 'Да — скрывать такие статьи, Отмена — показывать только такие')) ? 'hide' : 'only';
     await saveFeedFilters(feed.id, feed.filters.map((f) => (f.id === filter.id ? { ...f, query, mode } : f)));
     toast('Фильтр изменён');
   }
@@ -4055,7 +4095,7 @@ $('#save-credentials').addEventListener('click', async () => {
   } catch (err) { toast(err.message, true); }
 });
 $('#logout-btn').addEventListener('click', async () => {
-  if (!confirm('Выйти из аккаунта?')) return;
+  if (!(await askConfirm('Выход', 'Выйти из аккаунта?'))) return;
   await api('/api/logout', {}).catch(() => {});
   location.reload();
 });
