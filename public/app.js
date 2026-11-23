@@ -4527,6 +4527,8 @@ function startEvents() {
   if (!('EventSource' in window) || events) return;
   try {
     events = new EventSource('/api/events');
+    // Пока живые события подключены — опрос данных можно делать редким.
+    events.onopen = () => { state.eventsReady = true; };
   } catch { return; }
   events.onmessage = async (event) => {
     let payload = null;
@@ -4536,6 +4538,7 @@ function startEvents() {
     await loadData({ poll: true });
   };
   events.onerror = () => {
+    state.eventsReady = false;
     // EventSource переподключается сам; при разрыве продолжаем опрос по таймеру.
   };
 }
@@ -4819,6 +4822,9 @@ let pollTimer = null;              // таймер опроса сервера (
   // Опрос с адаптивным шагом: feverMode() читаем НА КАЖДОЙ итерации.
   // Раньше интервал вычислялся один раз при старте скрипта — до загрузки
   // настроек с сервера, поэтому режим Fever не влиял на частоту.
+  // С живыми событиями (SSE) изменения приходят сразу, поэтому опрос остаётся
+  // только страховкой: иначе простой стоил ~2 КБ в минуту. Если события оборвутся,
+  // onerror вернёт обычный интервал опроса.
   const schedulePoll = () => {
     pollTimer = setTimeout(async () => {
       try {
@@ -4826,7 +4832,7 @@ let pollTimer = null;              // таймер опроса сервера (
         else if (!document.hidden) await loadData({ poll: true });
       } catch { /* следующий шаг всё равно назначим */ }
       schedulePoll();
-    }, feverMode() ? 60_000 : 20_000);
+    }, state.eventsReady ? 300_000 : (feverMode() ? 60_000 : 20_000));
     pollTimer.unref?.();
   };
   schedulePoll();
