@@ -75,6 +75,32 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
+/**
+ * Отдаёт файл из public/ напрямую. Возвращает false, если это не файл
+ * интерфейса (тогда запросом занимается ядро читалки).
+ */
+async function serveStaticFromPublic(req, res, url) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  const rel = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname).replace(/^\/+/, '');
+  if (!rel || rel.includes('..')) return false;
+  const file = path.join(PUBLIC_DIR, rel);
+  if (!file.startsWith(PUBLIC_DIR + path.sep)) return false;
+  const ext = path.extname(file).toLowerCase();
+  if (!MIME[ext]) return false;
+  try {
+    const data = await readFile(file);
+    res.writeHead(200, {
+      'content-type': MIME[ext],
+      'cache-control': ext === '.html' ? 'no-cache' : 'public, max-age=86400',
+    });
+    if (req.method === 'HEAD') { res.end(); return true; }
+    res.end(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const users = await new Users(DATA_DIR, log).init();
 await ensureDefaultAdmin(users, { login: DEFAULT_LOGIN, password: DEFAULT_PASSWORD, log });
 
@@ -601,7 +627,9 @@ pre{white-space:pre-wrap;font-size:13px;color:#9a9a9a}</style></head><body>
     if (user) users.touch(user).catch(() => {});
     if (!user) {
       if (url.pathname.startsWith('/api/')) return json(res, 401, { ok: false, error: 'нужен вход', authRequired: true });
-      // Интерфейс отдаём: паролей в нём нет, а данные он запросит уже с сессией.
+      // Файлы интерфейса отдаём напрямую: паролей в них нет, а поднимать
+      // ради статики ядро администратора — лишняя память на каждый запрос.
+      if (await serveStaticFromPublic(req, res, url)) return;
       const fallback = users.all.find((u) => u.role === 'admin') ?? users.all[0];
       if (!fallback) return json(res, 500, { ok: false, error: 'нет ни одного пользователя' });
       const core = await coreFor(fallback);

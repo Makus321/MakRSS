@@ -143,6 +143,8 @@ async function refreshVersion() {
 }
 
 const PARSER_VERSION = 18;
+// Версия разовой чистки сохранённых тел: растёт, когда нужно перечистить.
+const CLEANUP_VERSION = 1;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
 // видео), старые тексты надо перекачать — иначе они остаются в прежнем виде.
 const BODY_VERSION = 15;   // 15: короткие заголовки разделов не теряются
@@ -407,12 +409,23 @@ const toMeta = (item) => ({
 
 const feedById = (id) => db.feeds.find((f) => f.id === id) ?? null;
 
-function findItem(id) {
+// Индекс «id статьи → лента и статья». Перестраивается при смене ревизии:
+// линейный обход всех лент на каждый id был заметен в /api/read и /api/state.
+let itemIndexCache = { revision: -1, map: new Map() };
+
+function itemIndex() {
+  if (itemIndexCache.revision === db.revision) return itemIndexCache.map;
+  const map = new Map();
   for (const feed of db.feeds) {
-    const item = (db.items[feed.id] ?? []).find((i) => i.id === id);
-    if (item) return { feed, item };
+    for (const item of db.items[feed.id] ?? []) map.set(item.id, { feed, item });
   }
-  return null;
+  itemIndexCache = { revision: db.revision, map };
+  return map;
+}
+
+function findItem(id) {
+  if (!id) return null;
+  return itemIndex().get(String(id)) ?? null;
 }
 
 const nextFeedOrder = () => db.feeds.reduce((max, f) => Math.max(max, Number(f.order) || 0), 0) + 1;
@@ -1852,6 +1865,7 @@ function settingsView(req) {
 // ------------------------------------------------------------- Telegram-бот
 
 let botLoopRunning = false;
+let botStopped = false;                // просим цикл бота завершиться
 
 const botFeedFor = (channel) => db.feeds.find((f) => f.kind === 'telegram-bot'
   && (String(f.chatId ?? '') === String(channel.id)
@@ -1911,11 +1925,12 @@ async function storeBotPost({ channel, post }) {
 }
 
 async function startTelegramBot() {
+  botStopped = false;                    // новый запуск — сбрасываем просьбу остановиться
   if (botLoopRunning || !telegramToken()) return;
   botLoopRunning = true;
   let offset = Number(settings().telegram.lastUpdateId) || 0;
   log(`Telegram-бот: слушаю обновления каналов (offset ${offset})`);
-  while (true) {
+  while (!botStopped) {
     if (!telegramToken()) {
       botLoopRunning = false;
       log('Telegram-бот: токен убран — опрос остановлен');
@@ -3556,7 +3571,13 @@ export async function init(options = {}) {
 
   await dedupeFeeds();
   await backfillContentLength();
-  await cleanupStoredBodies();
+  // Чистка тел — разовая миграция: раньше она читала ВСЕ content/*.json
+  // при каждом старте службы. Теперь только когда меняется версия чистки.
+  if (db.cleanupVersion !== CLEANUP_VERSION) {
+    db.cleanupVersion = CLEANUP_VERSION;
+    await cleanupStoredBodies();
+    store.saveStateSoon();
+  }
   await migrateTelegramTitles();
 
   // Когда меняется разбор страницы, сохранённые тексты надо перекачать. Снимаем
@@ -3634,6 +3655,8 @@ export async function shutdown() {  try {
 
 /** Полная остановка: снимаем таймеры, чтобы удалённый пользователь не тянул ленты. */
 export function stop() {
+  botStopped = true;                     // останавливаем опрос Telegram
+  botLoopRunning = false;
   if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
   if (pumpTimer) { clearTimeout(pumpTimer); pumpTimer = null; }
   nextRefreshAt = null;
