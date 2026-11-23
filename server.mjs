@@ -16,6 +16,7 @@ import {
   cookieHeader, issueSession, parseCookies, readSession, safeEqual,
 } from './lib/auth.mjs';
 import { Users, ensureDefaultAdmin, userDir } from './lib/users.mjs';
+import { flushAllStores } from './lib/store.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -655,13 +656,19 @@ server.listen(PORT, HOST, async () => {
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, async () => {
-    log('останов: сохраняю состояние');
+    log('останов: сохраняю состояние и тексты статей');
+    // Страховка: systemd не должен убивать процесс раньше, чем закончится запись.
+    const guard = setTimeout(() => process.exit(0), 8000);
+    guard.unref?.();
     for (const core of cores.values()) {
       try {
         const mod = await core;
         await mod.shutdown?.();
       } catch { /* экземпляр мог не подняться */ }
     }
+    // Контрольная досыпка: flushAllStores сохраняет и state.json, и content/*.json.
+    await flushAllStores().catch(() => {});
+    clearTimeout(guard);
     process.exit(0);
   });
 }
