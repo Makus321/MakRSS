@@ -8,7 +8,7 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v297';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
+const CACHE = 'rss-shell-v298';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
 const DATA_CACHE = 'rss-data-v180';
 const MEDIA_CACHE = 'rss-media-v151';
 
@@ -49,7 +49,7 @@ self.addEventListener('activate', (event) => {
   // Список статей НЕ кэшируем: если большой ответ (~8 МБ) обрывался, из кэша
   // возвращалась старая копия, и в ленте оставались карточки удалённых статей.
   // Тела статей кэшируем по-прежнему — иначе не работает чтение офлайн.
-  const isData = (path) => path === '/api/bodies';
+const isFavicon = (path) => path === '/api/favicon';   // 404 значка запоминаем, чтобы не спрашивать снова
 const isVideo = (path) => path === '/api/video';
 // Видео НЕ кэшируем: браузер запрашивает файл частями (Range), а cacheFirst
 // отдавал целую копию из кэша — из-за этого плеер не начинал воспроизведение.
@@ -69,6 +69,19 @@ async function negativeCache(request, cacheName) {
   }
   if (response.ok) await cache.put(request, response.clone()).catch(() => {});
   return response;
+}
+
+// Оболочка версионируется через ?v=: сопоставляем по пути, чтобы кэш не
+// промахивался, когда index.html просит /app.js?v=331, а в кэше /app.js.
+async function shellFirst(request) {
+  const url = new URL(request.url);
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(url.pathname, { ignoreSearch: true })
+    || await cache.match(request, { ignoreSearch: true });
+  if (cached) return cached;
+  const fresh = await fetch(request);
+  if (fresh && fresh.ok) cache.put(url.pathname, fresh.clone()).catch(() => {});
+  return fresh;
 }
 
 async function cacheFirst(request, cacheName) {
@@ -107,33 +120,17 @@ self.addEventListener('fetch', (event) => {
 
   // Вход, админка, Fever и всё остальное «действия» — без кэша.
   if (/^\/(fever|admin)/.test(url.pathname)) return;
-  if (/^\/api\//.test(url.pathname) && !isData(url.pathname) && !isMedia(url.pathname)) return;
+  // Неудачные значки запоминаем: иначе битый фавикон запрашивался при каждой отрисовке.
+  if (isFavicon(url.pathname)) {
+    event.respondWith(negativeCache(request, MEDIA_CACHE).catch(() => Response.error()));
+    return;
+  }
+  // Остальные /api/ идут в сеть напрямую: у них своя логика обновления.
+  if (/^\/api\//.test(url.pathname) && !isMedia(url.pathname)) return;
 
   if (isVideo(url.pathname)) return;   // видео — только сеть, без кэша
   if (isMedia(url.pathname)) {
     event.respondWith(cacheFirst(request, MEDIA_CACHE).catch(() => Response.error()));
-    return;
-  }
-  if (isData(url.pathname)) {
-    // Если ни кэша, ни сети — отдаём ошибку сети, а не пустой JSON: иначе клиент
-    // принимал «{}» за настоящие данные и падал на state.data.items.
-    // Данные читалки — «сначала сеть, кэш только как запасной вариант».
-    // stale-while-revalidate удваивал запросы: каждый вызов ещё раз ходил
-    // в сеть за обновлением, даже если ответ только что получен.
-    event.respondWith((async () => {
-      try {
-        const fresh = await fetch(request);
-        if (fresh && fresh.ok) {
-          const cache = await caches.open(DATA_CACHE);
-          cache.put(request, fresh.clone()).catch(() => {});
-        }
-        return fresh;
-      } catch {
-        const cached = await caches.match(request);
-        if (cached) return cached;
-        return Response.error();
-      }
-    })());
     return;
   }
 
@@ -158,9 +155,9 @@ self.addEventListener('fetch', (event) => {
     }
     if (isStatic(url.pathname)) {
       try {
-        return await cacheFirst(request, CACHE);
+        return await shellFirst(request);
       } catch {
-        const cached = await caches.match(request);
+        const cached = await caches.match(request, { ignoreSearch: true });
         if (cached) return cached;
         throw new Error('нет сети и кэша');
       }

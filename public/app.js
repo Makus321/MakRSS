@@ -2521,6 +2521,8 @@ async function showCommentsOnly(id) {
   state.selectedId = id;
   state.collapsedItems.delete(id);
   state.commentsOnly.add(id);
+  // Раскрываем статью: иначе не срабатывали readOnExpand и докачка текста.
+  await expandItem(id);
   renderList();
   const element = document.querySelector(`.article[data-item="${id}"]`);
   if (element) scrollInList(element, 'start');
@@ -2601,29 +2603,39 @@ function applyPendingReads(items) {
 }
 
 /** Отправляет накопленные отметки. Без сети просто попробуем позже. */
+let flushingReads = false;         // идёт отправка отметок
+let flushAgain = false;              // пришли новые, пока шла отправка
+
 async function flushPendingReads() {
-  // navigator.onLine врёт за прокси, VPN и в PWA: отметки копились в очереди и
-  // никогда не уходили. Пробуем отправлять всегда, а ошибку просто игнорируем.
-  if (!pendingReads.size) return;
-  const byValue = new Map([[true, []], [false, []]]);
-  for (const [id, read] of pendingReads) byValue.get(read).push(id);
-  for (const [read, ids] of byValue) {
-    if (!ids.length) continue;
-    try {
-      const payload = await api('/api/read', { ids, read, light: true });
-    if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
-      if (payload?.ok === false) continue;
-      // Из очереди убираем ТОЛЬКО подтверждённые сервером отметки.
-      // Если подтверждения нет (старый ответ, сбой) — оставляем и повторим.
-      const confirmed = Array.isArray(payload?.applied) ? new Set(payload.applied) : null;
-      const unknown = new Set(Array.isArray(payload?.missing) ? payload.missing : []);
-      for (const id of ids) {
-        if (!confirmed || confirmed.has(id) || unknown.has(id)) pendingReads.delete(id);
-      }
-      savePendingReads();
-      if (payload?.data) rememberData(payload.data);
-      updateFooterStats();   // очередь уменьшилась — показываем сразу
-    } catch { /* нет сети — повторим позже */ }
+  // Параллельные вызовы (опрос + прокрутка + visibilitychange) слали дубли:
+  // пока идёт отправка, новые отметки ждут следующего запуска.
+  if (flushingReads) { flushAgain = true; return; }
+  flushingReads = true;
+  try {
+    if (!pendingReads.size) return;
+    const byValue = new Map([[true, []], [false, []]]);
+    for (const [id, read] of pendingReads) byValue.get(read).push(id);
+    for (const [read, ids] of byValue) {
+      if (!ids.length) continue;
+      try {
+        const payload = await api('/api/read', { ids, read, light: true });
+        if (Number.isFinite(payload?.revision)) state.revision = payload.revision;
+        if (payload?.ok === false) continue;
+        // Из очереди убираем ТОЛЬКО подтверждённые сервером отметки.
+        // Если подтверждения нет (старый ответ, сбой) — оставляем и повторим.
+        const confirmed = Array.isArray(payload?.applied) ? new Set(payload.applied) : null;
+        const unknown = new Set(Array.isArray(payload?.missing) ? payload.missing : []);
+        for (const id of ids) {
+          if (!confirmed || confirmed.has(id) || unknown.has(id)) pendingReads.delete(id);
+        }
+        savePendingReads();
+        if (payload?.data) rememberData(payload.data);
+        updateFooterStats();   // очередь уменьшилась — показываем сразу
+      } catch { /* нет сети — повторим позже */ }
+    }
+  } finally {
+    flushingReads = false;
+    if (flushAgain) { flushAgain = false; flushPendingReads().catch(() => {}); }
   }
 }
 
@@ -4179,6 +4191,7 @@ async function submitLogin() {
     await loadSettings();
     await loadData();
     hideLoader();
+    afterAuthInit();                          // SSE и раздел — сразу после входа
     toast(`Здравствуйте, ${login}`);
   } catch (err) {
     const message = String(err?.message ?? '').trim();
@@ -4478,13 +4491,31 @@ function setupSplitter() {
  * без ожидания двухминутного опроса.
  */
 let events = null;
-function startEvents() {
+/**
+ * Всё, что нужно после успешной авторизации: восстановить раздел и включить
+ * живые события. Раньше вызывалось только в start(), поэтому после ручного
+ * входа не работали ни SSE, ни закрытие лайтбокса до перезагрузки страницы.
+ */
+function afterAuthInit() {
+  // Лайтбокс навешиваем здесь же: после ручного входа start() не вызывается.
+  setupLightboxHandlers();
+  restoreView();
+  startEvents();
+}
+let lightboxHandlersReady = false;   // слушатели просмотра картинок навешиваем один раз
+
+function setupLightboxHandlers() {
+  if (lightboxHandlersReady) return;
+  lightboxHandlersReady = true;
   // Просмотр картинки: повторный клик по ней или по затемнению закрывает,
   // Esc — тоже. Так чтение возвращается на то же место: список не сдвигался.
   $('#lightbox')?.addEventListener('click', (event) => { event.preventDefault(); closeLightbox(); });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && lightboxVisible()) { event.preventDefault(); closeLightbox(); }
   });
+}
+
+function startEvents() {
   if (!('EventSource' in window) || events) return;
   try {
     events = new EventSource('/api/events');
@@ -4762,28 +4793,35 @@ async function start() {
   } catch { /* сервер недоступен */ }
   await loadSettings();
   await loadData();
-  restoreView();          // возвращаемся в ту ленту и с тем фильтром, что были
+  afterAuthInit();        // восстановить раздел и включить живые события
   hideLoader();                           // данные пришли — снимаем затемнение
   // Сборка сервера: показываем в подвале вместо тега формата данных.
   api('/api/version').then((res) => {
     if (res?.version) { state.buildVersion = res.version; updateFooterStats(); }
   }).catch(() => {});
-  startEvents();
 }
 
 start();
+let pollTimer = null;              // таймер опроса сервера (перепланируется сам)
+
 // Опрашиваем всегда: иначе при раскрытой статье список и время «замирают».
   // Опрос сервера, счётчики и время не мешают прокрутке: пока она идёт,
   // задачи откладываются и выполняются, когда список остановился.
   // В режиме Fever работаем «по синхронизации»: опрос редкий, без лишнего фона.
-  setInterval(() => {
-    if (state.scrolling) { state.deferredPoll = true; return; }
-    if (document.hidden) return;
-    loadData({ poll: true });
-    // Опрос чаще: отметки о прочтении, сделанные в другом клиенте (Fever),
-  // должны появляться здесь за считанные секунды. Ответ «не изменилось»
-  // весит пару сотен байт, так что это дёшево.
-  }, feverMode() ? 60_000 : 20_000);
+  // Опрос с адаптивным шагом: feverMode() читаем НА КАЖДОЙ итерации.
+  // Раньше интервал вычислялся один раз при старте скрипта — до загрузки
+  // настроек с сервера, поэтому режим Fever не влиял на частоту.
+  const schedulePoll = () => {
+    pollTimer = setTimeout(async () => {
+      try {
+        if (state.scrolling) state.deferredPoll = true;
+        else if (!document.hidden) await loadData({ poll: true });
+      } catch { /* следующий шаг всё равно назначим */ }
+      schedulePoll();
+    }, feverMode() ? 60_000 : 20_000);
+    pollTimer.unref?.();
+  };
+  schedulePoll();
   setInterval(() => {
     if (feverMode()) return;                       // в Fever очередь не опрашиваем
     if (state.scrolling || document.hidden) return;
