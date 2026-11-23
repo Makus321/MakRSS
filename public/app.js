@@ -825,8 +825,14 @@ function renderToolbar() {
   const curFeed = state.view.type === 'feed' ? viewFeed() : null;
   const viewItems = itemsOfView().filter((item) => !unreadModeFor() || !item.read);
   const items = viewItems;
-  const unread = curFeed ? Number(curFeed.unread ?? 0) : viewItems.filter((i) => !i.read).length;
-  const totalShown = curFeed ? (unreadModeFor() ? Number(curFeed.unread ?? 0) : Number(curFeed.total ?? 0)) : viewItems.length;
+  // Когда список «заморожен», в шапке считаем ровно показанное: иначе было
+  // «2 статьи», а карточка одна — просто новая статья ещё ждёт кнопку «Показать».
+  // Сами новые статьи показываем отдельной припиской, чтобы не путать с фильтром.
+  const frozenIds = state.listFrozen && state.snapshot?.ids instanceof Set ? state.snapshot.ids : null;
+  const shownItems = frozenIds ? state.data.items.filter((item) => frozenIds.has(item.id)) : viewItems;
+  const unread = shownItems.filter((i) => !i.read).length;
+  const totalShown = shownItems.length;
+  const pendingNew = pendingNewCount();
   // «3 мин назад», но «только что» и «вчера» — уже готовые слова, «назад» к ним не идёт.
   const ago = timeAgo(state.data.lastRefresh);
   const refreshed = state.data.lastRefresh
@@ -835,7 +841,8 @@ function renderToolbar() {
   const added = Number.isFinite(state.data.lastRefreshAdded)
     ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
     : '';
-  $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}`;
+  const pendingHint = pendingNew ? ` · новых: ${pendingNew} — нажмите «Показать»` : '';
+  $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}${pendingHint}`;
   // Диагностика по ссылке ?debug=1: видно, где теряется статья.
   if (new URLSearchParams(location.search).get('debug') === '1') {
     const raw = state.data.items.filter((item) => state.view.type !== 'feed' || item.feedId === state.view.id);
@@ -4822,7 +4829,7 @@ async function start() {
 }
 
 // Диагностика по ссылке ?debug=1: доступ к внутренним функциям из консоли.
-if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, viewKey };
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, viewKey };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)
