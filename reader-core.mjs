@@ -119,19 +119,26 @@ function rememberSeen(id) {
 // Версия берётся из номера сборки в public/index.html (app.js?v=NNN), поэтому
 // сервер и клиент всегда сообщают одинаковую версию.
 let APP_VERSION = '1.0.0';
+let APP_VERSION_STAMP = 0;
+// Номер сборки читаем из public/index.html. Путь берём из PUBLIC_DIR:
+// в ES-модуле __dirname нет, из-за этого версия всегда оставалась 1.0.0.
+// Файл перечитываем только когда он изменился (mtime), а не на каждый запрос.
 async function loadVersion() {
   try {
-    const html = await readFile(path.join(__dirname, 'public', 'index.html'), 'utf8');
+    const file = path.join(PUBLIC_DIR, 'index.html');
+    const info = await stat(file);
+    if (info.mtimeMs === APP_VERSION_STAMP) return APP_VERSION;
+    const html = await readFile(file, 'utf8');
     const build = Number.parseInt(/app\.js\?v=(\d+)/.exec(html)?.[1] ?? '0', 10) || 0;
     if (build) APP_VERSION = `1.0.${build}`;
+    APP_VERSION_STAMP = info.mtimeMs;
   } catch { /* останется версия по умолчанию */ }
+  return APP_VERSION;
 }
 
-// Версию читаем заново на каждый запрос: после обновления файлов (без
-// перезапуска службы) сервер не должен сообщать устаревшую версию.
+// Обновление без перезапуска: файлы могли заменить, версия должна догнать.
 async function refreshVersion() {
-  await loadVersion();
-  return APP_VERSION;
+  return loadVersion();
 }
 
 const PARSER_VERSION = 18;
@@ -3036,13 +3043,13 @@ async function api(req, res, url) {
       ok: true,
       item: {
         ...found.item,
-        hasFull: String(feed?.kind ?? '').startsWith('telegram') ? false : hasText,
+        hasFull: String(found.feed?.kind ?? '').startsWith('telegram') ? false : hasText,
         feedId: found.feed.id,
         feedTitle: found.feed.title,
         read: Boolean(db.read[found.item.id]),
         starred: Boolean(db.starred[found.item.id]),
         content: body.content ?? '',
-        fullHtml: String(feed?.kind ?? '').startsWith('telegram') ? '' : (body.fullHtml ?? ''),
+        fullHtml: String(found.feed?.kind ?? '').startsWith('telegram') ? '' : (body.fullHtml ?? ''),
         fullFetchedAt: body.fullFetchedAt ?? null,
       },
     });

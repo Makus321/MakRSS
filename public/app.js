@@ -911,13 +911,15 @@ function renderFilterRow() {
   const query = state.query.trim();
   const isFeed = state.view.type === 'feed';
   row.hidden = !query;
+  // Счётчик фильтров обновляем всегда, даже без поискового запроса:
+  // раньше эта строка стояла после `if (!query) return;` и число не показывалось.
+  const total = state.data.feeds.reduce((sum, feed) => sum + (feed.filters?.length ?? 0), 0);
+  $('#filters-btn').textContent = total ? `Фильтры (${total})` : 'Фильтры';
   if (!query) return;
   $('#filter-term').textContent = query;
   $('#filter-hide').disabled = !isFeed;
   $('#filter-only').disabled = !isFeed;
   $('#filter-hint').textContent = isFeed ? '' : 'фильтр задаётся для отдельной ленты';
-  const total = state.data.feeds.reduce((sum, feed) => sum + (feed.filters?.length ?? 0), 0);
-  $('#filters-btn').textContent = total ? `Фильтры (${total})` : 'Фильтры';
 }
 
 function isExpanded(item) {
@@ -1535,7 +1537,7 @@ function articleHtml(item) {
   const thumb = thumbSource
     ? `<img class="a-thumb" src="${esc(imageSrc(item))}" alt="" loading="lazy"
          referrerpolicy="no-referrer"
-         onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${esc(thumbSource)}';}else{this.remove();}">`
+        onerror="this.remove()">`
     : '';
   // Картинка показывается только в «Кратко»: от этого зависит отступ текста слева.
   const hasThumb = Boolean(thumb) && mode === 'compact-thumb';
@@ -2973,7 +2975,11 @@ document.addEventListener('keydown', (event) => {
     case ' ': event.preventDefault(); if (index >= 0) expandItem(items[index].id); break;
     case 'm': {
       const item = items.find((i) => i.id === state.selectedId);
-      if (item) markRead([item.id], !item.read).then(() => toast(item.read ? 'Непрочитано' : 'Прочитано'));
+        // Статус запоминаем ДО markRead: он мутирует item.read, и тост врал.
+        if (item) {
+          const nextRead = !item.read;
+          markRead([item.id], nextRead).then(() => toast(nextRead ? 'Прочитано' : 'Непрочитано'));
+        }
       break;
     }
     case 's': if (state.selectedId) toggleStar(state.selectedId); break;
