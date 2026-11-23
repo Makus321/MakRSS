@@ -2498,11 +2498,23 @@ async function serveMedia(req, res, url) {
       return res.end(bin);
     } catch (err) {
       console.log('media FAIL ' + String(err.message));
-      // Ссылка устарела (Telegram отдаёт 404/500) — перечитываем пост в фоне,
-      // чтобы получить свежие адреса картинок; сейчас честно отвечаем 404.
+      // Ссылка устарела (Telegram отдаёт 404/500) — перечитываем пост и ждём,
+      // пока появится свежий файл. Иначе первый запрос отдавал 404 и картинка
+      // навсегда оставалась сломанной в браузере.
       const feed = feedById(feedId);
       const post = (db.items[feedId] ?? []).find((i) => i.id === postId);
-      if (feed && post) enrichTelegramItem(feed, post).catch(() => false);
+      if (feed && post) {
+        enrichTelegramItem(feed, post).catch(() => false);
+        for (let wait = 0; wait < 10; wait += 1) {
+          await sleep(250);
+          try {
+            const data = await readFile(target);
+            res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
+            console.log('media ok после перечитывания, байт ' + data.length);
+            return res.end(data);
+          } catch { /* ещё не появился */ }
+        }
+      }
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('картинка недоступна');
       return undefined;
     }
