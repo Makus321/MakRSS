@@ -2872,10 +2872,13 @@ async function api(req, res, url) {
     for (const feed of db.feeds) {
       feedUnread[feed.id] = (db.items[feed.id] ?? []).filter((i) => !db.read[i.id]).length;
     }
+    // Непрочитанные считаем по реально существующим статьям: в db.read остаются
+    // записи об удалённых чисткой статьях, и простое вычитание давало неверное число.
+    const unreadExisting = Object.values(db.items ?? {}).reduce((sum, list) => sum + list.reduce((n, it) => n + (db.read[it.id] ? 0 : 1), 0), 0);
     return json(res, 200, {
       ok: true,
       revision: db.revision,
-      counts: { all: allItems, unread: allItems - Object.keys(db.read ?? {}).length, starred: Object.keys(db.starred ?? {}).length },
+      counts: { all: allItems, unread: unreadExisting, starred: Object.keys(db.starred ?? {}).length },
       feedUnread,
       items,
       missing,

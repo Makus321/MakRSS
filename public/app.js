@@ -329,6 +329,23 @@ const looksLikeData = (data) => Boolean(data) && Array.isArray(data.items) && Ar
  */
 const pendingSettings = { patch: {}, timer: null, busy: false };
 
+/**
+ * Настройка ленты: сразу меняем объект ленты у себя и отправляем на сервер.
+ * Сервер отвечает только ревизией (без данных), поэтому без локального
+ * применения настройка вступала в силу лишь на следующем полном опросе.
+ */
+async function applyFeedSetting(patch) {
+  const feed = viewFeed();
+  if (!feed) return;
+  Object.assign(feed, patch);
+  try {
+    const answer = await api('/api/feeds/view', { id: feed.id, ...patch });
+    if (Number.isFinite(answer?.revision)) state.revision = answer.revision;
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
 function pushSettings(patch) {
   Object.assign(pendingSettings.patch, patch);
   clearTimeout(pendingSettings.timer);
@@ -2895,7 +2912,7 @@ async function setViewMode(mode) {
     const feed = state.data.feeds.find((f) => f.id === state.view.id);
     if (feed) feed.view = mode;
     try {
-      applyPayload(await api('/api/feeds/view', { id: state.view.id, view: mode }));
+       await applyFeedSetting({ view: mode });
       toast(`Канал показывает статьи: ${modeLabel(mode)}`);
       render();
     } catch (err) { toast(err.message, true); }
@@ -3377,7 +3394,7 @@ $('#images-only').addEventListener('change', async (event) => {
   if (state.view.type !== 'feed') return;
   try {
     const onlyImages = event.target.value === 'yes';
-    applyPayload(await api('/api/feeds/view', { id: state.view.id, imagesOnly: onlyImages }));
+     await applyFeedSetting({ imagesOnly: onlyImages });
     state.bodies.clear();           // текст перерисуем заново — уже без разметки
     render();
     toast(onlyImages ? 'В этой ленте показываются только картинки' : 'Показываю статьи как обычно');
@@ -3386,7 +3403,7 @@ $('#images-only').addEventListener('change', async (event) => {
 $('#sort-select').addEventListener('change', async (event) => {
   const sort = event.target.value === 'asc' ? 'asc' : 'desc';
   if (state.view.type === 'feed') {
-    try { applyPayload(await api('/api/feeds/view', { id: state.view.id, sort })); } catch (err) { toast(err.message, true); }
+     await applyFeedSetting({ sort });
   } else {
     state.settings.defaultSort = sort;
     pushSettings({ defaultSort: sort });
@@ -3687,7 +3704,8 @@ $('#add-input').addEventListener('keydown', (event) => { if (event.key === 'Ente
 $('#lines-select').addEventListener('change', async (event) => {
   const lines = Number(event.target.value) || 2;
   if (state.view.type === 'feed') {
-    try { applyPayload(await api('/api/feeds/view', { id: state.view.id, lines })); } catch (err) { toast(err.message, true); }
+     await applyFeedSetting({ lines });
+    renderList();                             // перерисовать сразу, без ожидания опроса
   } else {
     state.settings.defaultLines = lines;
     pushSettings({ defaultLines: lines });
@@ -4581,7 +4599,8 @@ function setupMobile() {
     const lines = Math.min(12, Math.max(1, Number(event.target.value) || 2));
     closeHeadMenu();
     if (state.view.type === 'feed') {
-      try { applyPayload(await api('/api/feeds/view', { id: state.view.id, lines })); } catch (err) { toast(err.message, true); }
+       await applyFeedSetting({ lines });
+      renderList();                           // иначе список ждал следующего опроса
     } else {
       state.settings.defaultLines = lines;
       pushSettings({ defaultLines: lines });
