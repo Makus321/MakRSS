@@ -1448,12 +1448,13 @@ function switchView(view) {
   state.snapshot = null;                 // снимок строим заново из свежих данных
   state.listFrozen = false;
   // Засекаем окно измерения: сколько трафика ушло на открытие этой ленты.
-  state.traffic.winFeed = viewFeed?.()?.title ?? viewFolder?.()?.name ?? '';
-  state.traffic.winFrom = performance.now();
-  state.traffic.winUntil = state.traffic.winFrom + 4000;
-  state.traffic.winTotal = 0;
-  state.traffic.winList = 0;
-  state.traffic.winImages = 0;
+  // Новая лента — новый отсчёт: считаем всё, что придёт после этого момента.
+  state.traffic.label = viewFeed?.()?.title ?? viewFolder?.()?.name ?? '';
+  state.traffic.from = performance.now();
+  state.traffic.total = 0;
+  state.traffic.list = 0;
+  state.traffic.images = 0;
+  state.traffic.bodies = 0;
   // Пока раздел догружается, показываем заглушку: иначе сначала рисовался
   // неполный список, а через секунду статьи вставлялись сверху и сразу
   // помечались прочитанными, потому что оказывались выше линии чтения.
@@ -1967,15 +1968,16 @@ function updateFooterStats() {
   const styleTag = document.querySelector('link[rel="stylesheet"]');
   const styleVersion = /v=(\d+)/.exec(styleTag?.href ?? '')?.[1] ?? '?';
   const pendingCount = pendingReads.size;
-  const traffic = state.traffic ?? { winTotal: 0, winList: 0, winImages: 0, winFeed: '' };
+  const traffic = state.traffic ?? { total: 0, list: 0, images: 0, bodies: 0, label: '' };
   const problem = state.listError || state.lastError || state.refreshError || '';
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
-  // Трафик последнего открытия ленты из дерева: данные + картинки.
-  const openTitle = 'Открытие ленты' + (traffic.winFeed ? ` «${traffic.winFeed}»` : '') + ': '
-    + sizeLabel(traffic.winTotal) + ' (данные ' + sizeLabel(traffic.winList)
-    + ', картинки ' + sizeLabel(traffic.winImages) + ')';
+  // Трафик текущей ленты: всё, что пришло после её открытия (загрузка и листание).
+  const trafficTitle = 'Трафик ленты' + (traffic.label ? ` «${traffic.label}»` : '') + ': '
+    + sizeLabel(traffic.total) + ' (данные ' + sizeLabel(traffic.list)
+    + ', тексты ' + sizeLabel(traffic.bodies)
+    + ', картинки ' + sizeLabel(traffic.images) + ')';
   label.innerHTML = APP_VERSION + '.' + styleVersion + '.' + (state.serverVersion ?? '?')
-    + ' · ' + icon('⇣', openTitle) + ' ' + sizeLabel(traffic.winTotal)
+    + ' · ' + icon('⇣', trafficTitle) + ' ' + sizeLabel(traffic.total)
     + ' · ' + icon('⇅', 'Отметок в очереди на отправку') + ' ' + pendingCount
     + ' · ' + (problem
       ? icon('⚠', 'Ошибка: ' + problem, ' warn')
@@ -1986,21 +1988,19 @@ function updateFooterStats() {
 // ------- учёт трафика: сколько реально пришло по сети за сессию -------
 // Берём transferSize из Performance API: это сжатый размер с учётом кэша
 // (повторный ответ из кэша даёт 0, то есть трафика не было).
-state.traffic = { total: 0, list: 0, images: 0, winFrom: 0, winUntil: 0, winTotal: 0, winList: 0, winImages: 0, winFeed: '' };
+// Учёт трафика текущего раздела: считаем ВСЁ, что приходит после открытия
+// ленты, — данные, картинки, тексты. При переключении ленты счётчик с нуля.
+state.traffic = { from: 0, total: 0, list: 0, images: 0, bodies: 0, label: '' };
 function noteTraffic(entry) {
   const bytes = Number(entry.transferSize) || 0;
-  if (!bytes) return;
-  state.traffic.total += bytes;
+  if (!bytes || !state.traffic.from) return;
+  if (entry.startTime < state.traffic.from) return;   // загружено до открытия ленты
   const url = entry.name || '';
-  if (url.includes('/api/items')) state.traffic.list += bytes;
+  state.traffic.total += bytes;
+  if (url.includes('/api/items') || url.includes('/api/data')) state.traffic.list += bytes;
+  else if (url.includes('/api/bodies')) state.traffic.bodies += bytes;
   else if (/\.(webp|jpe?g|png|gif|avif)(\?|$)/i.test(url) || url.includes('/api/cover') || url.includes('/api/media')) state.traffic.images += bytes;
   updateFooterStats();
-  // Отдельно копим «загрузку ленты»: время от клика по дереву до ~4 секунд после.
-  if (state.traffic.winUntil && entry.startTime >= state.traffic.winFrom && entry.startTime <= state.traffic.winUntil) {
-    state.traffic.winTotal += bytes;
-    if (url.includes('/api/items')) state.traffic.winList += bytes;
-    else if (/\.(webp|jpe?g|png|gif|avif)(\?|$)/i.test(url) || url.includes('/api/cover') || url.includes('/api/media')) state.traffic.winImages += bytes;
-  }
 }
 try {
   new PerformanceObserver((list) => { for (const entry of list.getEntries()) noteTraffic(entry); })
