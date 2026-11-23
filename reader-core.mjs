@@ -3683,6 +3683,15 @@ export function revision() {
   return Number(db?.revision) || 0;
 }
 
+/**
+ * Идёт ли прямо сейчас обновление лент. Нужно серверу: клиент показывает
+ * «крутящиеся» значки по этому флагу, и когда новых статей нет, ревизия не
+ * меняется — без отдельного сообщения значки продолжали бы крутиться.
+ */
+export function isRefreshing() {
+  return Boolean(refreshing);
+}
+
 /** Сохраняет состояние перед остановкой процесса. */
 export async function shutdown() {  try {
     if (store) await store.flush();

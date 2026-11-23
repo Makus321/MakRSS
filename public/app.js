@@ -4515,6 +4515,16 @@ function startEvents() {
   events.onmessage = async (event) => {
     let payload = null;
     try { payload = JSON.parse(event.data); } catch { return; }
+    // Сервер вместе с ревизией присылает признак «идёт обновление». Без него
+    // значки крутились до следующего опроса, если новых статей не появилось
+    // (ревизия не меняется — сообщать было не о чем).
+    if (typeof payload?.refreshing === 'boolean' && payload.refreshing !== Boolean(state.data.refreshing)) {
+      state.data.refreshing = payload.refreshing;
+      // Значки «обновить» есть и в дереве, и в шапке — обновляем оба места.
+      renderSidebar();
+      renderToolbar();
+      updateFooterStats();
+    }
     const revision = Number(payload?.revision);
     if (!Number.isFinite(revision) || revision === Number(state.revision)) return;
     await loadData({ poll: true });
@@ -4816,6 +4826,16 @@ let pollTimer = null;              // таймер опроса сервера (
         if (state.scrolling) state.deferredPoll = true;
         else if (!document.hidden) await loadData({ poll: true });
       } catch { /* следующий шаг всё равно назначим */ }
+      // Пока идёт обновление, ждать пять минут нельзя: значки должны гаснуть
+      // сразу после окончания, поэтому на этот случай шаг короче.
+      if (state.data.refreshing) {
+        clearTimeout(pollTimer);
+        pollTimer = setTimeout(async () => {
+          try { await loadData({ poll: true }); } catch { /* повторим */ }
+          schedulePoll();
+        }, 10_000);
+        return;
+      }
       schedulePoll();
     }, state.eventsReady ? 300_000 : (feverMode() ? 60_000 : 20_000));
     pollTimer.unref?.();

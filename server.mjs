@@ -395,13 +395,19 @@ async function pushRevisions() {
     const user = users.byId(userId);
     if (!user || user.disabled || !cores.has(userId)) continue;
     let value = 0;
+    let busy = false;
     try {
       const core = await cores.get(userId);
       value = Number(core.revision?.() ?? 0);
+      busy = Boolean(core.isRefreshing?.());
     } catch { continue; }
-    if (revisions.get(userId) === value) continue;
-    revisions.set(userId, value);
-    const message = `data: ${JSON.stringify({ revision: value })}\n\n`;
+    // Сравниваем не только ревизию, но и признак «идёт обновление»: иначе при
+    // отсутствии новых статей клиент не узнаёт, что обновление закончилось, и
+    // значки «крутятся» до следующего планового опроса.
+    const key = `${value}:${busy ? 1 : 0}`;
+    if (revisions.get(userId) === key) continue;
+    revisions.set(userId, key);
+    const message = `data: ${JSON.stringify({ revision: value, refreshing: busy })}\n\n`;
     for (const res of set) {
       try { res.write(message); } catch { /* соединение уже закрыто */ }
     }
@@ -483,13 +489,16 @@ async function onRequest(req, res) {
         'x-accel-buffering': 'no',
       });
       let initial = 0;
+      let initialBusy = false;
       try {
         const core = await coreFor(watcher);
         initial = Number(core.revision?.() ?? 0);
+        initialBusy = Boolean(core.isRefreshing?.());
       } catch { /* ядро поднимется при следующем запросе */ }
       res.write('retry: 5000\n\n');
-      res.write(`data: ${JSON.stringify({ revision: initial })}\n\n`);
-      revisions.set(watcher.id, initial);
+      // Сразу отдаём и признак обновления: клиент не должен ждать второго события.
+      res.write(`data: ${JSON.stringify({ revision: initial, refreshing: initialBusy })}\n\n`);
+      revisions.set(watcher.id, `${initial}:${initialBusy ? 1 : 0}`);
       subscribe(watcher, res);
       return undefined;
     }
