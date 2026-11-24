@@ -1019,7 +1019,16 @@ async function fetchFullText(feedId, itemId) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     if (!/html/i.test(res.contentType)) throw new Error(`не HTML (${res.contentType || 'тип неизвестен'})`);
     const article = extractArticle(res.text, target.link);
-    if (article.textLength < FULLTEXT_MIN_ARTICLE_CHARS || looksLikePageChrome(article.html)) {
+    // Порог «это статья, а не меню» сравниваем с тем, что уже есть из ленты:
+    // у коротких постов (цитата в LiveJournal и подобное) текста меньше 400
+    // символов, и раньше они целиком отбрасывались — карточка открывалась пустой.
+    const knownBefore = htmlToText((await store.body(feedId, itemId))?.content ?? '') || (target.excerpt ?? '');
+    // Порог считаем от текста ленты: у коротких постов он и сам короткий, а строгие
+    // 400 символов отсекали честные записи. Ниже 120 символов не опускаемся —
+    // это уже защита от меню вместо статьи.
+    const knownLen = htmlToText(knownBefore).length;
+    const minChars = Math.min(FULLTEXT_MIN_ARTICLE_CHARS, Math.max(120, Math.floor(knownLen * 0.8)));
+    if (article.textLength < minChars || looksLikePageChrome(article.html)) {
       // Либо текста нет, либо это шапка/меню сайта — тогда остаётся текст из ленты.
       target.fullTriedAt = new Date().toISOString();
       store.saveStateSoon(400, { bump: false });
