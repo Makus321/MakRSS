@@ -1017,8 +1017,11 @@ async function enrichTelegramItem(feed, item) {
 }
 
 async function fetchFullText(feedId, itemId) {
-  const feed = feedById(feedId);
-  const target = feed ? (db.items[feedId] ?? []).find((i) => i.id === itemId) : null;
+  // Ищем статью через общий индекс: так работают и обычные ленты, и
+  // виртуальная «Читают сейчас» — её ленты нет в db.feeds, но статья есть.
+  const found = findItem(itemId);
+  const feed = found?.feed ?? null;
+  const target = found?.item ?? null;
   if (!feed || !target) return { ok: false, error: 'статья не найдена' };
   // Посты Telegram уже содержат полный текст: ссылка ведёт на страницу канала,
   // и «докачка» подменяла текст посторонней страницей.
@@ -1565,6 +1568,8 @@ async function refreshHabrNow({ force = false } = {}) {
     const known = new Set((db.items[HABR_NOW_ID] ?? []).map((item) => item.id));
     const same = fresh.length === known.size && fresh.every((item) => known.has(item.id));
     db.items[HABR_NOW_ID] = fresh.map((item) => ({ ...item, addedAt: new Date().toISOString() }));
+    // Тела ушедших статей больше не нужны: чистим, иначе папка content растёт.
+    await store.pruneContent(HABR_NOW_ID, new Set(fresh.map((item) => item.id))).catch(() => {});
     invalidateItemIndex();
     if (!same) {
       bumpItemsRevision();

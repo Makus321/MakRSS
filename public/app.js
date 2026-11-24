@@ -801,13 +801,13 @@ function renderSidebar() {
   const feedRow = (feed) => {
     const active = state.view.type === 'feed' && state.view.id === feed.id;
     const letter = (feed.title || '?').trim().charAt(0).toUpperCase();
-    return `<li><div class="row feed-row${active ? ' active' : ''}${feed.lastError ? ' warn' : ''}"
+    return `<li><div class="row feed-row${active ? ' active' : ''}${feed.virtual ? ' virtual-row' : ''}${feed.lastError ? ' warn' : ''}"
         data-feed-row="${esc(feed.id)}" draggable="${feed.virtual ? 'false' : 'true'}" title="${esc(feed.lastError || feed.url)}">
       <span class="fav" aria-hidden="true">
-        <span class="fav-letter">${esc(letter)}</span>
-        ${faviconFailed.has(feed.id) ? '' : `<img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy">`}
+        <span class="fav-letter">${feed.virtual ? '◷' : esc(letter)}</span>
+        ${feed.virtual || faviconFailed.has(feed.id) ? '' : `<img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy">`}
       </span>
-      <span class="row-name${feed.unread ? ' unread' : ''}">${esc(feed.title)}</span>
+      <span class="row-name${feed.unread ? ' unread' : ''}">${esc(feed.title)}${feed.virtual ? '<span class="row-tag">витрина</span>' : ''}</span>
       <span class="row-actions">
         ${feed.virtual ? '' : `<button data-feed-rename="${esc(feed.id)}" title="Переименовать">✎</button>
         <button class="del" data-feed-del="${esc(feed.id)}" title="Отписаться">×</button>`}

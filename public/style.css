@@ -431,6 +431,19 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
 .row.drop-target { outline: 1px dashed var(--accent); outline-offset: -1px; }
 .row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-name.unread { font-weight: 600; }
+
+/* «Читают сейчас» — витрина Хабра, а не обычная подписка: строку помечаем,
+   чтобы её не путали с лентой. Значок-часы вместо буквы и метка «витрина». */
+.feed-row.virtual-row .row-name { font-style: italic; }
+.feed-row.virtual-row .fav-letter { color: var(--accent); }
+.feed-row .row-tag {
+  margin-left: 6px; padding: 0 5px;
+  font-size: 10px; font-style: normal; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--line); border-radius: 6px;
+  vertical-align: 1px;
+}
+.feed-row.virtual-row.active .row-tag { color: var(--accent); border-color: var(--accent); }
 /* Папка в дереве — крупнее и жирнее подписок, чтобы не терялась. */
 .folder-row .row-name { font-weight: 700; font-size: calc(14.5px * var(--ui-scale, 1)); letter-spacing: .01em; }
 /* Иконка подписки: картинка сайта, а если её нет — первая буква названия. */
