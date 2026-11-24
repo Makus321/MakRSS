@@ -49,7 +49,7 @@ import { handleFever } from './lib/fever.mjs';
 import { commentsProviderFor } from './lib/comments.mjs';
 import {
   hashPassword, verifyPassword, feverApiKey, newSecret, safeEqual,
-  issueSession, readSession, parseCookies, cookieHeader,
+  issueSession, readSession, parseBasicAuth, parseCookies, cookieHeader,
 } from './lib/auth.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -266,10 +266,8 @@ function isAuthenticated(req, url) {
   if (!authEnabled()) return true;
   if (sessionUser(req)) return true;
   const header = req.headers.authorization ?? '';
-  if (header.startsWith('Basic ')) {
-    const [user, password] = Buffer.from(header.slice(6), 'base64').toString('utf8').split(':');
-    if (checkPassword(user, password)) return true;
-  }
+  const basic = parseBasicAuth(header);
+  if (basic && checkPassword(basic.login, basic.password)) return true;
   if (checkApiKey(url?.searchParams?.get('api_key'))) return true;
   return false;
 }

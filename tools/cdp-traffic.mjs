@@ -20,7 +20,8 @@ for (let i = 2; i < process.argv.length; i += 2) {
 }
 
 const port = Number(args.get('port') ?? 9223);
-// Адрес обязателен: в примерах был боевой сайт, и запуск «по умолчанию» ходил в интернет.\nconst targetUrl = args.get('url') ?? process.env.RSS_TEST_URL ?? 'http://127.0.0.1:8787/';
+// Адрес задаётся явно: раньше в примерах был боевой сайт, и запуск «по умолчанию» ходил в интернет.
+const targetUrl = args.get('url') ?? process.env.RSS_TEST_URL ?? 'http://127.0.0.1:8787/';
 const loginName = process.env.RSS_TEST_LOGIN ?? '';
 const loginSecret = process.env.RSS_TEST_PASS ?? '';
 const scrollSteps = Number(args.get('scroll') ?? 10);

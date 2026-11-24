@@ -13,7 +13,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  cookieHeader, issueSession, parseCookies, readSession, safeEqual,
+  cookieHeader, issueSession, parseBasicAuth, parseCookies, readSession, safeEqual,
 } from './lib/auth.mjs';
 import { Users, ensureDefaultAdmin, userDir } from './lib/users.mjs';
 import { flushAllStores } from './lib/store.mjs';
@@ -218,11 +218,11 @@ function currentUser(req, url) {
     const user = users.byLogin(session.user);
     if (user && !user.disabled) return user;
   }
-  const header = req.headers.authorization ?? '';
-  if (header.startsWith('Basic ')) {
-    const [login, password] = Buffer.from(header.slice(6), 'base64').toString('utf8').split(':');
-    const user = users.byLogin(login);
-    if (user && users.verify(user, password)) return user;
+  // Логин и пароль может разделять не только первый «:» — пароль бывает с двоеточием.
+  const basic = parseBasicAuth(req.headers.authorization);
+  if (basic) {
+    const user = users.byLogin(basic.login);
+    if (user && users.verify(user, basic.password)) return user;
   }
   const key = url?.searchParams?.get('api_key');
   if (key) {
