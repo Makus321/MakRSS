@@ -48,6 +48,8 @@ import { Store } from './lib/store.mjs';
 import { safeFetch, SsrfError } from './lib/net-guard.mjs';
 import { handleFever } from './lib/fever.mjs';
 import { commentsProviderFor } from './lib/comments.mjs';
+import { fetchMostReading, isMostReadingFresh } from './lib/habr-now.mjs';
+import { linkKey, itemsWithLinks } from './lib/read-link.mjs';
 import {
   hashPassword, verifyPassword, feverApiKey, newSecret, safeEqual,
   issueSession, readSession, parseBasicAuth, parseCookies, cookieHeader,
@@ -147,6 +149,13 @@ const PARSER_VERSION = 18;
 // что в ленте появились новые статьи и нужен полный список, а не только отметки.
 let itemsRevision = 0;
 const bumpItemsRevision = () => { itemsRevision += 1; };
+
+// Виртуальная лента «Читают сейчас»: статьи лежат в db.items, но самой ленты в
+// db.feeds нет — поэтому её не трогают обновление, чистка фильтров и лимиты.
+const HABR_NOW_ID = 'habr-now';
+const HABR_NOW_TITLE = 'Хабр · Читают сейчас';
+// Блок показываем только тем, кто читает Хабр через RSS.
+const HABR_RSS_RE = /^https?:\/\/(?:www\.)?habr\.com\/ru\/rss\/(?:articles|all|top|feed|hubs)/i;
 // Версия разовой чистки сохранённых тел: растёт, когда нужно перечистить.
 const CLEANUP_VERSION = 1;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
@@ -480,6 +489,12 @@ function itemIndex() {
   const map = new Map();
   for (const feed of db.feeds) {
     for (const item of db.items[feed.id] ?? []) map.set(item.id, { feed, item });
+  }
+  // Виртуальная лента «Читают сейчас»: её статьи тоже должны находиться по id —
+  // иначе не работают миниатюры, отметки и докачка текста.
+  const virtual = habrNowFeedView();
+  if (virtual) {
+    for (const item of db.items[HABR_NOW_ID] ?? []) map.set(item.id, { feed: virtual, item });
   }
   itemIndexCache = { revision: db.revision, map };
   return map;
@@ -1506,6 +1521,62 @@ async function purgeFiltered(feedId) {
   return removed;
 }
 
+/** Есть ли у пользователя подписка на хабровский RSS — без неё блок «Читают сейчас» не нужен. */
+function hasHabrFeed() {
+  return db.feeds.some((feed) => HABR_RSS_RE.test(String(feed.url ?? '')));
+}
+
+/** Как виртуальная лента выглядит в ответе клиенту (null — показывать нечего). */
+function habrNowFeedView() {
+  const list = db.items[HABR_NOW_ID] ?? [];
+  if (!list.length || !hasHabrFeed()) return null;
+  return {
+    id: HABR_NOW_ID,
+    title: HABR_NOW_TITLE,
+    url: 'https://habr.com/ru/feed/',
+    kind: 'habr',
+    virtual: true,
+    folderId: null,
+    filters: [],
+    order: 0,
+    total: list.length,
+    unread: list.filter((item) => !db.read[item.id]).length,
+    withFullText: 0,
+  };
+}
+
+/**
+ * Обновляет «Читают сейчас» и переносит свежий список в db.items.
+ * Id статей стабильные, поэтому отметки прочитанного переживают обновление.
+ */
+let habrNowBusy = false;
+async function refreshHabrNow({ force = false } = {}) {
+  if (!hasHabrFeed()) {
+    if (db.items[HABR_NOW_ID]) { delete db.items[HABR_NOW_ID]; invalidateItemIndex(); }
+    return;
+  }
+  if (habrNowBusy) return;
+  if (!force && isMostReadingFresh() && (db.items[HABR_NOW_ID] ?? []).length) return;
+  habrNowBusy = true;
+  try {
+    const result = await fetchMostReading({ force });
+    const fresh = (result.items ?? []).filter((item) => item?.id && item?.link);
+    if (!fresh.length) return;                      // Хабр не ответил — оставляем прошлый список
+    const known = new Set((db.items[HABR_NOW_ID] ?? []).map((item) => item.id));
+    const same = fresh.length === known.size && fresh.every((item) => known.has(item.id));
+    db.items[HABR_NOW_ID] = fresh.map((item) => ({ ...item, addedAt: new Date().toISOString() }));
+    invalidateItemIndex();
+    if (!same) {
+      bumpItemsRevision();
+      store.saveStateSoon();                        // новая ревизия → клиент перезаберёт список
+    }
+  } catch (err) {
+    log(`«Читают сейчас»: ${err?.message ?? err}`);
+  } finally {
+    habrNowBusy = false;
+  }
+}
+
 function feedView(feed) {
   // Считаем только то, что реально показывается: фильтры ленты («скрыть/только»)
   // отсекают статьи, и раньше дерево показывало 2, а в списке была 1.
@@ -1545,7 +1616,21 @@ function payloadItem(feed, item) {
     read: Boolean(db.read[item.id]) || undefined,
     starred: Boolean(db.starred[item.id]) || undefined,
     starredAt: Number(db.starred[item.id]) || undefined,   // старые отметки без времени — в конце
+    // «Читают сейчас»: 👁 сколько прочитали и сколько читают прямо сейчас.
+    readers: Number.isFinite(item.readers) ? item.readers : undefined,
+    currentlyReading: Number.isFinite(item.currentlyReading) ? item.currentlyReading : undefined,
+    readingTime: Number.isFinite(item.readingTime) ? item.readingTime : undefined,
   };
+}
+
+/** Ставит «Читают сейчас» сразу после хабровской ленты, а не в конец дерева. */
+function withVirtualFeed(list, virtualFeed) {
+  if (!virtualFeed) return list;
+  const after = list.findIndex((feed) => HABR_RSS_RE.test(String(feed?.url ?? '')));
+  if (after < 0) return [...list, virtualFeed];
+  const copy = [...list];
+  copy.splice(after + 1, 0, virtualFeed);
+  return copy;
 }
 
 function buildPayload() {
@@ -1589,8 +1674,16 @@ function buildPayload() {
     }
   }
   items.sort(byDateDesc);
+  // «Читают сейчас»: виртуальная лента + её статьи. Обновление запускаем здесь,
+  // не дожидаясь ответа: первый запрос вернёт список как есть, а когда Хабр
+  // ответит, ревизия изменится и клиент перезаберёт данные.
+  if (hasHabrFeed() && !isMostReadingFresh()) refreshHabrNow().catch(() => {});
+  const virtualFeed = habrNowFeedView();
+  if (virtualFeed) {
+    for (const item of db.items[HABR_NOW_ID] ?? []) items.push(payloadItem(virtualFeed, item));
+  }
   return {
-    feeds: feeds.map(feedView),
+    feeds: withVirtualFeed(feeds.map(feedView), virtualFeed),
     folders: [...db.folders].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     items,
     counts: {
@@ -3373,6 +3466,20 @@ async function api(req, res, url) {
       if (read) db.read[id] = stamp;
       else delete db.read[id];
     }
+    // Отметки одной и той же статьи не должны расходиться между «Читают сейчас»
+    // и обычной лентой Хабра: связываем их по ссылке.
+    const linkKeys = new Set();
+    for (const id of ids) {
+      const key = linkKey(findItem(id)?.item?.link);
+      if (key) linkKeys.add(key);
+    }
+    if (linkKeys.size) {
+      const mirrored = itemsWithLinks([...db.feeds.map((feed) => db.items[feed.id] ?? []), db.items[HABR_NOW_ID] ?? []], linkKeys);
+      for (const item of mirrored) {
+        if (read) db.read[item.id] = stamp; else delete db.read[item.id];
+        if (!ids.includes(item.id) && !applied.includes(item.id)) applied.push(item.id);
+      }
+    }
     pruneState();
     store.saveStateSoon();
     // Чистим только те ленты, которых коснулась операция.
@@ -3636,6 +3743,10 @@ export async function init(options = {}) {
   await store.init();
   db = store.state;
   seenIdsInit();   // память удалённых прочитанных id
+
+  // «Читают сейчас»: список нужен сразу после старта, а не после первого
+  // открытия ленты. Запрос фоновый — старт из-за него не задерживаем.
+  refreshHabrNow().catch(() => {});
 
   // Однократно поднимаем revision: в списке появились новые поля (отметка
   // комментариев), а готовый ответ /api/data кэшируется по revision — без этого
@@ -3959,6 +4070,7 @@ async function periodicRefresh() {
     refreshing = false;
     scheduleFullText();
     pruneEverything().catch(() => {});
+    refreshHabrNow().catch(() => {});   // «Читают сейчас» обновляем вместе с лентами
   }
 }
 

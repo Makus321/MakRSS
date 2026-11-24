@@ -142,6 +142,16 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));
 
+/** Компактное число для меток: 40447 -> «40 тыс.», 1200 -> «1,2 тыс.», 2500000 -> «2,5 млн». */
+const shortNumber = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return '';
+  const round = (x) => (Math.round(x * 10) / 10).toString().replace('.', ',');
+  if (n < 1000) return String(Math.round(n));
+  if (n < 1000000) return `${n >= 100000 ? Math.round(n / 1000) : round(n / 1000)} тыс.`;
+  return `${round(n / 1000000)} млн`;
+};
+
 const plural = (n, one, few, many) => {
   const mod10 = n % 10;
   const mod100 = n % 100;
@@ -560,6 +570,9 @@ function dayLabel(iso) {
 // ------------------------------------------------------------------ выборка
 
 const viewFeed = () => state.data.feeds.find((f) => f.id === state.view.id) ?? null;
+
+/** Текущая лента — виртуальная («Читают сейчас»)? У неё свои правила показа. */
+const virtualFeedView = () => (state.view.type === 'feed' ? Boolean(feedById(state.view.id)?.virtual) : false);
 const viewFolder = () => state.data.folders.find((f) => f.id === state.view.id) ?? null;
 const feedById = (id) => state.data.feeds.find((f) => f.id === id) ?? null;
 
@@ -623,6 +636,9 @@ function unreadModeFor(view = state.view) {
   if (view.type === 'unread') return true;
   if (view.type === 'starred') return false;
   if (view.type === 'feed') {
+    // «Читают сейчас» показывает все десять всегда: прочитанное просто
+    // приглушается, как в блоке на самом Хабре. Пустого списка не бывает.
+    if (feedById(view.id)?.virtual) return false;
     const saved = state.prefs.feedUnread?.[view.id];
     return typeof saved === 'boolean' ? saved : unreadDefault();
   }
@@ -786,15 +802,15 @@ function renderSidebar() {
     const active = state.view.type === 'feed' && state.view.id === feed.id;
     const letter = (feed.title || '?').trim().charAt(0).toUpperCase();
     return `<li><div class="row feed-row${active ? ' active' : ''}${feed.lastError ? ' warn' : ''}"
-        data-feed-row="${esc(feed.id)}" draggable="true" title="${esc(feed.lastError || feed.url)}">
+        data-feed-row="${esc(feed.id)}" draggable="${feed.virtual ? 'false' : 'true'}" title="${esc(feed.lastError || feed.url)}">
       <span class="fav" aria-hidden="true">
         <span class="fav-letter">${esc(letter)}</span>
         ${faviconFailed.has(feed.id) ? '' : `<img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy">`}
       </span>
       <span class="row-name${feed.unread ? ' unread' : ''}">${esc(feed.title)}</span>
       <span class="row-actions">
-        <button data-feed-rename="${esc(feed.id)}" title="Переименовать">✎</button>
-        <button class="del" data-feed-del="${esc(feed.id)}" title="Отписаться">×</button>
+        ${feed.virtual ? '' : `<button data-feed-rename="${esc(feed.id)}" title="Переименовать">✎</button>
+        <button class="del" data-feed-del="${esc(feed.id)}" title="Отписаться">×</button>`}
       </span>
       ${badge(
       // В режиме «Все» показываем, сколько статей всего, иначе — сколько непрочитанных.
@@ -863,6 +879,8 @@ function renderToolbar() {
   const unread = unreadShown;
   const totalShown = unreadModeFor() ? unreadShown : viewItems.length;
   const pendingNew = pendingNewCount();
+  // «Читают сейчас» живёт своей жизнью: показываем, что список живой и когда ждать обновления.
+  const virtualNote = virtualFeedView() ? ` · список обновляется каждые 10 минут` + (unreadShown ? '' : ', всё прочитано') : '';
   const listNote = pendingNew > 0
     ? ` · новых: ${pendingNew} — нажмите «Показать»`
     : '';
@@ -878,7 +896,7 @@ function renderToolbar() {
     : (Number.isFinite(state.data.lastRefreshAdded)
       ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
       : '');
-  $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}${listNote}`;
+  $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}${listNote}${virtualNote}`;
   // Режим «Непрочитанные / Все» — только для текущей ленты.
   $('#unread-mode').value = unreadModeFor() ? 'unread' : 'all';
   $('#unread-mode-wrap').hidden = state.view.type === 'starred';
@@ -1639,6 +1657,7 @@ function articleHtml(item) {
           ${item.author && item.author !== item.feedTitle ? `<span>${esc(item.author)}</span>` : ''}
           ${downloaded ? '<span class="flag">скачан</span>' : ''}
           ${item.read ? '<span class="flag read-mark">✓ прочитано</span>' : ''}
+          ${Number.isFinite(item.readers) ? `<span class="flag" title="Сколько раз статью прочитали на Хабре">👁 ${shortNumber(item.readers)}</span>` : ''}
           ${item.comments
             ? (Number.isFinite(item.commentsCount)
               ? `<button class="flag comment-chip${item.commentsCount ? '' : ' empty'}" data-comments="${esc(item.id)}" data-comments-only="1" title="Показать комментарии, не раскрывая статью">💬 ${item.commentsCount}${commentDelta(item)}</button>`
