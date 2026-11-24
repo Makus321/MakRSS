@@ -1567,6 +1567,11 @@ async function refreshHabrNow({ force = false } = {}) {
     if (!fresh.length) return;                      // Хабр не ответил — оставляем прошлый список
     const known = new Set((db.items[HABR_NOW_ID] ?? []).map((item) => item.id));
     const same = fresh.length === known.size && fresh.every((item) => known.has(item.id));
+    // Сколько статей пришло на смену ушедшим: дерево показывает «(+N)»,
+    // как у обычных лент, — так замена состава видна сразу.
+    const replaced = fresh.filter((item) => !known.has(item.id)).length;
+    // При самой первой загрузке «новых» нет: сравнивать не с чем.
+    if (known.size && replaced) lastAddedByFeed[HABR_NOW_ID] = replaced;
     db.items[HABR_NOW_ID] = fresh.map((item) => ({ ...item, addedAt: new Date().toISOString() }));
     // Тела ушедших статей больше не нужны: чистим, иначе папка content растёт.
     await store.pruneContent(HABR_NOW_ID, new Set(fresh.map((item) => item.id))).catch(() => {});

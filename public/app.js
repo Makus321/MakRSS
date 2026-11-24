@@ -1515,7 +1515,11 @@ function switchView(view) {
   // Иначе до десяти минут показывали бы вчерашний состав, а статьи,
   // ушедшие из блока на сайте, оставались бы в ленте.
   if (state.view.type === 'feed' && feedById(state.view.id)?.virtual) {
-    api('/api/habr-now/refresh', {}).then(() => loadData({ poll: false })).catch(() => {});
+    api('/api/habr-now/refresh', {}).then(() => {
+      // Список открыли — метку «(+N)» больше не держим: новое уже на экране.
+      if (state.data.addedByFeed) delete state.data.addedByFeed[state.view.id];
+      return loadData({ poll: false });
+    }).catch(() => {});
   }
   state.viewOffset = 0;
   state.viewTotal = 0;
@@ -4968,7 +4972,7 @@ async function start() {
   hideLoader();                           // данные пришли — снимаем затемнение
 }
 
-if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, viewKey };
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, renderSidebar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, viewKey };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)
