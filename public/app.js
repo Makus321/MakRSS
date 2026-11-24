@@ -4868,7 +4868,7 @@ async function start() {
   hideLoader();                           // данные пришли — снимаем затемнение
 }
 
-if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, updateFooterStats, viewKey };
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, updateFooterStats, ensureBodiesNeeded, expandItem, viewKey };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)
