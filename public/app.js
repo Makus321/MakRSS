@@ -2020,7 +2020,9 @@ function updateFooterStats() {
   const pendingCount = pendingReads.size;
   const traffic = state.traffic ?? { total: 0, list: 0, images: 0, bodies: 0, label: '' };
   const problem = state.listError || state.lastError || state.refreshError || '';
-  const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
+  // title приходит из данных (ошибки лент, названия), поэтому экранируем: иначе
+  // кавычка в тексте ломала разметку подвала.
+  const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${esc(title)}">${mark}</span>`;
   // Только версия разбора (без «1.»): она меняется, когда меняется разбор текста.
   const parseVersion = String(state.serverVersion ?? '').split('.').pop() || '?';
   // Время сборки сервера: по нему видно, что серверные правки уже на месте.
@@ -2162,7 +2164,7 @@ function updateActiveArticle() {
   // Запоминаем положение списка: если перерисовка не сдвинула его, рамку не меняем.
   activeMeta = { id: activeId, scrollTop: scrollNow };
   if (!activeId) return;
-  const target2 = list.querySelector(`.article[data-item="${activeId}"]`);
+  const target2 = list.querySelector(`.article[data-item="${cssId(activeId)}"]`);
   if (target2 && !target2.classList.contains('active')) target2.classList.add('active');
 }
 
@@ -2355,7 +2357,7 @@ function checkScrolledPast() {
   if (!activeId) return;
   const item = state.data.items.find((i) => i.id === activeId);
   if (!item || item.read) return;
-  const row = list.querySelector(`.article[data-item="${activeId}"]`);
+  const row = list.querySelector(`.article[data-item="${cssId(activeId)}"]`);
   const rect = row?.getBoundingClientRect();
   if (!rect || rect.top >= contentTopY(list) - 1) return;
   markReadOnce(activeId, true);
@@ -2563,7 +2565,7 @@ async function goRelative(id, delta) {
     actions.style.display = 'none';
   }
   renderToolbar();
-  scrollArticleToTop(document.querySelector(`.article[data-item="${target.id}"]`));
+  scrollArticleToTop(document.querySelector(`.article[data-item="${cssId(target.id)}"]`));
 }
 
 /**
@@ -4856,7 +4858,7 @@ async function start() {
   hideLoader();                           // данные пришли — снимаем затемнение
 }
 
-if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, viewKey };
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, updateFooterStats, viewKey };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)

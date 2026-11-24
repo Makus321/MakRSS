@@ -450,7 +450,7 @@ Node.js, certbot и всё остальное скрипт ставит сам (
 ### Параметры запуска
 
 ```bash
-DOMAIN=rss.example.com      # домен (по умолчанию rss.letsplay.today)
+DOMAIN=rss.example.com      # ваш домен, на который выпускается сертификат
 EMAIL=you@example.com       # почта для Let's Encrypt; без неё — регистрация без почты
 APP_DIR=/opt/rss-reader     # куда положить код
 DATA_DIR=/var/lib/rss-reader # где хранить данные
