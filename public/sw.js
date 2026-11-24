@@ -8,7 +8,7 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v332';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
+const CACHE = 'rss-shell-v333';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
 const DATA_CACHE = 'rss-data-v180';
 const MEDIA_CACHE = 'rss-media-v151';
 
@@ -72,19 +72,37 @@ async function negativeCache(request, cacheName) {
   return response;
 }
 
-// Оболочка версионируется через ?v=: сопоставляем по пути, чтобы кэш не
-// промахивался, когда index.html просит /app.js?v=331, а в кэше /app.js.
+// Оболочка версионируется через ?v=: кэшируем под точным адресом запроса.
+// Версионные файлы ищем ТОЛЬКО точным совпадением: раньше второй поиск шёл с
+// ignoreSearch и на новый /app.js?v=400 отдавал из кэша старый /app.js?v=399 —
+// поэтому после деплоя браузер продолжал работать на прежней сборке.
 async function shellFirst(request) {
-  // Кэшируем под ТОЧНЫМ адресом запроса (с ?v=): иначе ответ из кэша имеет
-  // url без версии, и import.meta.url в app.js теряет номер сборки (1.0 вместо 1.335).
+  const url = new URL(request.url);
+  const versioned = url.searchParams.has('v');
   const cache = await caches.open(CACHE);
   const exact = await cache.match(request);
   if (exact) return exact;
-  const cached = await cache.match(request, { ignoreSearch: true });
-  if (cached) return cached;
+  if (!versioned) {
+    const cached = await cache.match(request, { ignoreSearch: true });
+    if (cached) return cached;
+  }
   const fresh = await fetch(request);
-  if (fresh && fresh.ok) cache.put(request, fresh.clone()).catch(() => {});
+  if (fresh && fresh.ok) {
+    cache.put(request, fresh.clone()).catch(() => {});
+    if (versioned) await dropOldVersions(cache, url).catch(() => {});
+  }
   return fresh;
+}
+
+/** Убирает из кэша другие версии того же файла: /app.js?v=399 при запросе v=400. */
+async function dropOldVersions(cache, url) {
+  const keys = await cache.keys();
+  for (const key of keys) {
+    const known = new URL(key.url);
+    if (known.pathname !== url.pathname) continue;
+    if (known.search === url.search) continue;
+    await cache.delete(key).catch(() => {});
+  }
 }
 
 async function cacheFirst(request, cacheName) {

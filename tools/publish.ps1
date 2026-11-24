@@ -43,6 +43,12 @@ function Invoke-Git {
 }
 
 # --- 1. зеркало: git-репозиторий рядом с проектом ------------------------------
+# Номер сборки поднимаем сами: иначе версия в подвале и имя кэша оболочки
+# остаются прежними, и браузер продолжает работать на старых файлах.
+Write-Step "Поднимаю номер сборки"
+node (Join-Path $PSScriptRoot "bump-version.mjs")
+if ($LASTEXITCODE -ne 0) { throw "не удалось поднять версию (bump-version.mjs)" }
+
 Write-Step "Готовлю зеркало в $Stage"
 $hasRepo = Test-Path (Join-Path $Stage '.git')
 if (-not $hasRepo) {
