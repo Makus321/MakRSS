@@ -826,7 +826,9 @@ function renderSidebar() {
   const visibleFeeds = (list) => (state.prefs.treeFilter === 'unread'
     // Оставляем ленты с непрочитанным, текущую и те, у которых выбрано «показывать
     // все»: иначе лента с нулём непрочитанных пропадала из дерева.
-    ? list.filter((f) => f.unread > 0 || f.id === state.view.id || state.prefs.feedUnread?.[f.id] === false)
+    // «Читают сейчас» не скрываем никогда: это витрина Хабра, а не счётчик
+    // непрочитанного — когда всё прочитано, она должна оставаться на месте.
+    ? list.filter((f) => f.unread > 0 || f.id === state.view.id || f.virtual || state.prefs.feedUnread?.[f.id] === false)
     : list);
 
   for (const folder of folders) {
@@ -1509,6 +1511,12 @@ function switchView(view) {
   pendingUnstar.clear();                // и снятые в избранном карточки больше не держим
   state.framedIds.clear();              // в новом разделе рамка ещё ни на чём не была
   resetSnapshot();                      // в новой ленте список собирается заново
+  // «Читают сейчас» — живой блок: при открытии сразу спрашиваем Хабр.
+  // Иначе до десяти минут показывали бы вчерашний состав, а статьи,
+  // ушедшие из блока на сайте, оставались бы в ленте.
+  if (state.view.type === 'feed' && feedById(state.view.id)?.virtual) {
+    api('/api/habr-now/refresh', {}).then(() => loadData({ poll: false })).catch(() => {});
+  }
   state.viewOffset = 0;
   state.viewTotal = 0;
   if (PAGED_DATA) {

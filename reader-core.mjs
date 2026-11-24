@@ -3409,6 +3409,19 @@ async function api(req, res, url) {
     return json(res, 200, { ok: true, data: buildPayload() });
   }
 
+  if (route === 'POST /api/habr-now/refresh') {
+    // Открыли «Читают сейчас» — сразу спрашиваем Хабр (ответ обычно 304 по ETag).
+    await refreshHabrNow({ force: true }).catch(() => {});
+    const list = db.items[HABR_NOW_ID] ?? [];
+    return json(res, 200, {
+      ok: true,
+      items: list.length,
+      ids: list.map((item) => item.id),
+      unread: list.filter((item) => !db.read[item.id]).length,
+      revision: db.revision,
+    });
+  }
+
   if (route === 'POST /api/refresh') {
     const body = await readJson(req);
     const targets = body.id ? db.feeds.filter((f) => f.id === body.id) : db.feeds;
@@ -3421,6 +3434,9 @@ async function api(req, res, url) {
     (async () => {
       try {
         await refreshMany(targets, { force: Boolean(body.force) });
+        // Кнопка ⟳ обновляет и блок «Читают сейчас»: у него свой источник,
+        // и без этого свежий список приходил только через 10 минут.
+        await refreshHabrNow({ force: true }).catch(() => {});
       } catch (err) {
         log(`обновление: ${err.message}`);
       } finally {
