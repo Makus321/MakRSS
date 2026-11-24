@@ -1564,6 +1564,9 @@ function habrNowFeedView() {
  * Id статей стабильные, поэтому отметки прочитанного переживают обновление.
  */
 let habrNowBusy = false;
+// Первое обновление после старта не считаем «новыми статьями»: сравнивать не с чем —
+// в памяти ещё нет списка, который видел человек.
+let habrNowFirstLoad = true;
 async function refreshHabrNow({ force = false } = {}) {
   if (!hasHabrFeed()) {
     if (db.items[HABR_NOW_ID]) { delete db.items[HABR_NOW_ID]; invalidateItemIndex(); }
@@ -1580,9 +1583,19 @@ async function refreshHabrNow({ force = false } = {}) {
     const same = fresh.length === known.size && fresh.every((item) => known.has(item.id));
     // Сколько статей пришло на смену ушедшим: дерево показывает «(+N)»,
     // как у обычных лент, — так замена состава видна сразу.
-    const replaced = fresh.filter((item) => !known.has(item.id)).length;
+    const addedIds = fresh.filter((item) => !known.has(item.id)).map((item) => item.id);
+    const freshIds = new Set(fresh.map((item) => item.id));
+    const removedIds = [...known].filter((id) => !freshIds.has(id));
+    // Метку «(+N)» ставим только за основной список: запасной источник — это
+    // другой набор статей, и его подмена выглядела как «4 новых» на пустом месте.
+    if (known.size && addedIds.length && result.source === 'main' && !habrNowFirstLoad) {
+      lastAddedByFeed[HABR_NOW_ID] = addedIds.length;
+    }
+    habrNowFirstLoad = false;
+    if (addedIds.length || removedIds.length) {
+      log(`«Читают сейчас»: пришло ${addedIds.length}, ушло ${removedIds.length} (источник: ${result.source || 'нет'})`);
+    }
     // При самой первой загрузке «новых» нет: сравнивать не с чем.
-    if (known.size && replaced) lastAddedByFeed[HABR_NOW_ID] = replaced;
     db.items[HABR_NOW_ID] = fresh.map((item) => ({ ...item, addedAt: new Date().toISOString() }));
     // Тела ушедших статей больше не нужны: чистим, иначе папка content растёт.
     await store.pruneContent(HABR_NOW_ID, new Set(fresh.map((item) => item.id))).catch(() => {});
@@ -3779,7 +3792,9 @@ export async function init(options = {}) {
   if (options.dataDir) DATA_DIR = path.resolve(options.dataDir);
   MEDIA_DIR = path.join(DATA_DIR, 'media');
   logTag = options.tag ?? '';
-  store = new Store(DATA_DIR, log);
+  // Виртуальная лента живёт в state.items без записи в state.feeds — говорим об этом хранилищу,
+  // иначе при загрузке состояния его чистка удаляла статьи витрины.
+  store = new Store(DATA_DIR, log, { virtualFeeds: [HABR_NOW_ID] });
   await store.init();
   db = store.state;
   seenIdsInit();   // память удалённых прочитанных id
