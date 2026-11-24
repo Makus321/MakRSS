@@ -699,10 +699,9 @@ async function refreshCommentCounts(limit = COMMENT_COUNT_SYNC_LIMIT) {
   if (virtual) sources.push([virtual, db.items[HABR_NOW_ID] ?? []]);
   for (const [feed, list] of sources) {
     for (const item of list) {
-      // Считаем счётчики и у прочитанных статей, если человек уже смотрел их
-      // комментарии: именно там появляется «+N новых».
-      const engaged = Number(item.commentsSeenCount) > 0;
-      if (db.read[item.id] && !db.starred[item.id] && !engaged) continue;
+      // Считаем только там, где это интересно: непрочитанное и избранное
+      // (включая прочитанное избранное — оно может «ожить» новыми комментариями).
+      if (db.read[item.id] && !db.starred[item.id]) continue;
       const provider = commentsProviderFor(feed, item);
       if (!provider?.count) continue;
       const checkedAt = item.commentsCountAt ? Date.parse(item.commentsCountAt) : 0;
