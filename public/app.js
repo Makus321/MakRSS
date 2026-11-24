@@ -766,10 +766,14 @@ function renderSidebar() {
     if (!item.read) { row.unread += 1; unreadAll += 1; }
     perFeed.set(item.feedId, row);
   }
-  // Счётчики берём у сервера: он знает про новые статьи, которых ещё нет в списке.
+  // Числа в дереве считаем по данным клиента: они всегда совпадают с тем, что
+  // видно в списке (серверный счётчик считает по своей копии базы).
   const feeds = rawFeeds.map((feed) => ({
     ...feed,
-    unread: Number.isFinite(feed.unread) ? feed.unread : (perFeed.get(feed.id)?.unread ?? 0),
+    // Число непрочитанных — по данным клиента: серверный счётчик считает по
+    // своей копии базы и может отличаться от того, что реально видно в списке
+    // (например, статью скрыл фильтр ленты уже после подсчёта).
+    unread: perFeed.get(feed.id)?.unread ?? (Number.isFinite(feed.unread) ? feed.unread : 0),
     total: perFeed.get(feed.id)?.total ?? feed.total ?? 0,
   }));
   $('#badge-unread').textContent = unreadAll || '';
@@ -853,8 +857,11 @@ function renderToolbar() {
   const items = viewItems;
   // Числа в шапке совпадают с деревом (там серверные счётчики), а про новые статьи,
   // которые ещё ждут кнопку «Показать», говорит отдельная приписка.
-  const unread = curFeed ? Number(curFeed.unread ?? 0) : viewItems.filter((i) => !i.read).length;
-  const totalShown = curFeed ? (unreadModeFor() ? Number(curFeed.unread ?? 0) : Number(curFeed.total ?? 0)) : viewItems.length;
+  // Числа шапки берём из тех же данных, что и список: иначе в шапке «2 статьи»,
+  // а карточек 1 — серверный счётчик считался по своей копии базы.
+  const unreadShown = viewItems.filter((i) => !i.read).length;
+  const unread = unreadShown;
+  const totalShown = unreadModeFor() ? unreadShown : viewItems.length;
   const pendingNew = pendingNewCount();
   const listNote = pendingNew > 0
     ? ` · новых: ${pendingNew} — нажмите «Показать»`
