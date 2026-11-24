@@ -447,6 +447,15 @@ const feedById = (id) => db.feeds.find((f) => f.id === id) ?? null;
 // линейный обход всех лент на каждый id был заметен в /api/read и /api/state.
 let itemIndexCache = { revision: -1, map: new Map() };
 
+/**
+ * Сбрасывает индекс статей. Нужен при любой мутации db.items или db.feeds:
+ * ревизия растёт не всегда (pruneFeed и purgeFiltered удаляют статьи без нового
+ * шага), и тогда индекс продолжал отдавать уже удалённые статьи.
+ */
+export function invalidateItemIndex() {
+  itemIndexCache = { revision: -1, map: new Map() };
+}
+
 function itemIndex() {
   if (itemIndexCache.revision === db.revision) return itemIndexCache.map;
   const map = new Map();
@@ -514,6 +523,7 @@ async function dedupeFeeds() {
     log(`удалён дубликат ленты «${feed.title}» (${feed.url})`);
   }
   db.feeds = db.feeds.filter((f) => !ids.has(f.id));
+  invalidateItemIndex();
   store.saveStateSoon();
 }
 
@@ -621,6 +631,7 @@ async function mergeItems(feedId, fresh) {
     if (at >= 0) deduped[at] = keep;
   }
   db.items[feedId] = deduped;
+  invalidateItemIndex();
 
   // Тела статей — в отдельные файлы.
   for (const item of fresh) {
@@ -723,6 +734,7 @@ async function pruneFeed(feedId) {
     }
     keep.sort(byDateDesc);
     db.items[feedId] = keep;
+  invalidateItemIndex();
     await store.pruneContent(feedId, keepIds);
     log(`лента ${feedId}: удалено ${removed} старых прочитанных статей (непрочитанных ${keptUnread} сохранено)`);
   }
@@ -1349,6 +1361,7 @@ async function addFeed(input, folderId = null, preferredTitle = '') {
     lastModified: '',
   };
   db.feeds.push(feed);
+  invalidateItemIndex();
   const added = await mergeItems(feed.id, parsed.items);
   store.saveStateSoon();
   log(`+ ${source.kind === 'telegram' ? 'канал Telegram' : 'лента'} «${feed.title}» (${parsed.format}), статей ${added}`);
@@ -1454,6 +1467,7 @@ async function purgeFiltered(feedId) {
     delete db.starred[item.id];
   }
   db.items[feedId] = keep;
+  invalidateItemIndex();
   await store.pruneContent(feedId, keepIds);
   store.saveStateSoon();
   return removed;
@@ -1938,6 +1952,7 @@ async function storeBotPost({ channel, post }) {
       lastModified: '',
     };
     db.feeds.push(feed);
+  invalidateItemIndex();
     log(`+ канал Telegram через бота: «${channel.title}»`);
   }
   feed.lastFetched = new Date().toISOString();
@@ -3181,6 +3196,7 @@ async function api(req, res, url) {
     db.feeds = db.feeds.filter((f) => f.id !== id);
     for (const item of db.items[id] ?? []) { delete db.read[item.id]; delete db.starred[item.id]; }
     delete db.items[id];
+  invalidateItemIndex();
     await store.removeFeed(id);
     store.saveStateSoon();
     return json(res, 200, { ok: true, data: buildPayload() });
@@ -3227,6 +3243,7 @@ async function api(req, res, url) {
         await store.removeFeed(feed.id);
       }
       db.feeds = db.feeds.filter((f) => f.folderId !== id);
+    invalidateItemIndex();
     } else {
       for (const feed of affected) feed.folderId = null;
     }
@@ -3276,7 +3293,6 @@ async function api(req, res, url) {
         store.saveStateSoon();
         if (!body.id) scheduleFullText();
         schedulePeriodicRefresh();
-        refreshCommentCounts().catch(() => 0);
       }
     })();
     return undefined;
@@ -3704,6 +3720,7 @@ export async function shutdown() {  try {
 
 /** Полная остановка: снимаем таймеры, чтобы удалённый пользователь не тянул ленты. */
 export function stop() {
+  stopped = true;
   botStopped = true;                     // останавливаем опрос Telegram
   botLoopRunning = false;
   if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
@@ -3887,6 +3904,9 @@ async function cleanupStoredBodies() {
 
 async function periodicRefresh() {
   if (!db.feeds.length) return;
+  // Пока идёт обновление (ручное или по расписанию), второе не запускаем: раньше
+  // два прохода шли параллельно, дублировали загрузку лент и спорили за запись.
+  if (refreshing) return;
   refreshing = true;
   try {
     const results = await refreshMany(db.feeds);
@@ -3924,7 +3944,11 @@ async function pruneEverything() {
 let refreshTimer = null;
 let nextRefreshAt = null;
 let refreshScheduledOnce = false;
+/** Остановлены ли фоновые задачи: после stop() новые таймеры не ставим. */
+let stopped = false;
+
 function schedulePeriodicRefresh() {
+  if (stopped) return;
   if (refreshTimer) clearTimeout(refreshTimer);
   const minutes = Math.max(MIN_REFRESH_MINUTES, Number(settings().refreshMinutes) || REFRESH_MINUTES);
   // Первый запуск каждого пользователя сдвигаем: иначе на сервере с несколькими
