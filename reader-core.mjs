@@ -744,7 +744,17 @@ async function pruneFeed(feedId) {
         const hash = createHash('sha1').update(String(item.imageFileId)).digest('hex').slice(0, 24);
         await unlink(path.join(MEDIA_DIR, hash)).catch(() => {});
       }
-      if (item.image && /^https?:\/\//i.test(item.image)) await unlink(thumbFileFor(item.image)).catch(() => {});
+      if (item.image && /^https?:\/\//i.test(item.image)) {
+        // Миниатюра кешируется в двух файлах: исходник и сжатый WebP.
+        const thumb = thumbFileFor(item.image);
+        await unlink(thumb).catch(() => {});
+        await unlink(`${thumb}.webp`).catch(() => {});
+      }
+      // Картинки Telegram-поста: индексов немного, проверяем первые десять.
+      for (let index = 0; index < 10; index += 1) {
+        const file = mediaPathFor(feedId, item.id, index);
+        if (file) await unlink(file).catch(() => {});
+      }
     }
     keep.sort(byDateDesc);
     db.items[feedId] = keep;
