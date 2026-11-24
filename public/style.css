@@ -566,9 +566,15 @@ select:focus-visible { outline: none; }
 }
 /* Фон при наведении и раскрытии не меняем — иначе светлая тема перестаёт быть белой. */
 .article.selected { background: var(--article-bg); }
-/* Прочитанное и непрочитанное выглядят одинаково: фон как у панели (белый/тёмный).
-   Прочитанное отличается только отметкой «✓». */
-.article.read, .article.selected.read, .article.unread { background: var(--article-bg); opacity: 1; }
+/* Непрочитанное должно выделяться среди прочитанного: фон у всех карточек как у
+   панели, но прочитанные приглушены, а непрочитанные — полного контраста. */
+.article.read, .article.selected.read, .article.unread { background: var(--article-bg); }
+/* Прочитанная карточка приглушена, но наведение, рамка и раскрытие возвращают
+   полный контраст — чтобы читать текст было комфортно. */
+.article.read { opacity: .62; }
+.article.read:hover, .article.read.active, .article.read.expanded { opacity: 1; }
+/* У прочитанной заголовок легче: в списке сразу видно, что уже прочитано. */
+.article.read .a-title { font-weight: 500; }
 .flag.read-mark { color: var(--muted); border-color: var(--line); }
 /* Активная статья — та, что читается сейчас или вот-вот станет прочитанной
    при прокрутке: тонкая рамка цвета темы. */

@@ -692,10 +692,17 @@ async function mergeItems(feedId, fresh) {
  */
 async function refreshCommentCounts(limit = COMMENT_COUNT_SYNC_LIMIT) {
   const candidates = [];
-  for (const feed of db.feeds) {
-    for (const item of db.items[feed.id] ?? []) {
-      // Считаем только там, где это интересно: непрочитанное и избранное.
-      if (db.read[item.id] && !db.starred[item.id]) continue;
+  // Виртуальная лента «Читают сейчас» тоже участвует: у её статей есть
+  // обсуждение на Хабре, и «+N новых» должно работать как у обычных лент.
+  const sources = db.feeds.map((feed) => [feed, db.items[feed.id] ?? []]);
+  const virtual = habrNowFeedView();
+  if (virtual) sources.push([virtual, db.items[HABR_NOW_ID] ?? []]);
+  for (const [feed, list] of sources) {
+    for (const item of list) {
+      // Считаем счётчики и у прочитанных статей, если человек уже смотрел их
+      // комментарии: именно там появляется «+N новых».
+      const engaged = Number(item.commentsSeenCount) > 0;
+      if (db.read[item.id] && !db.starred[item.id] && !engaged) continue;
       const provider = commentsProviderFor(feed, item);
       if (!provider?.count) continue;
       const checkedAt = item.commentsCountAt ? Date.parse(item.commentsCountAt) : 0;
