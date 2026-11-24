@@ -1395,8 +1395,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 @media (prefers-reduced-motion: reduce) {
   .app-spinner { animation-duration: 2.4s; }
 }
-/* Просмотр картинки на весь экран: затемнение и изображение по ширине окна.
-   Повторный клик по картинке или фону закрывает просмотр. */
+/* Просмотр картинки: затемнение и изображение шириной с колонку текста статьи.
+   Повторный клик по картинке или фону закрывает просмотр.
+   Ширину колонки подставляет скрипт (openLightbox), здесь — только оформление. */
 .lightbox {
   position: fixed; inset: 0; z-index: 90;
   display: grid; place-items: center;
@@ -1405,8 +1406,15 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   cursor: zoom-out;
 }
 .lightbox[hidden] { display: none; }
+/* Рамка по размеру картинки: кнопка «поделиться» стоит в её правом верхнем углу. */
+.lightbox-frame {
+  position: relative;
+  margin: 0;
+  max-width: 100%;
+}
 .lightbox img {
-  width: auto; height: auto;
+  display: block;
+  width: 100%; height: auto;
   max-width: min(100vw - 24px, 1600px);
   max-height: calc(100vh - 24px);
   object-fit: contain;
@@ -1414,6 +1422,21 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   background: var(--panel);
   box-shadow: var(--shadow);
 }
+/* Кнопка «поделиться картинкой» поверх правого верхнего угла изображения. */
+.lightbox-share {
+  position: absolute; top: 8px; right: 8px;
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  font-size: 19px; line-height: 1;
+  color: #fff;
+  background: rgba(10, 14, 20, .62);
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: 10px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.lightbox-share:hover { background: rgba(10, 14, 20, .85); }
+.lightbox-share:active { transform: scale(.96); }
 /* Пока смотрим картинку, страница под ней не прокручивается. */
 body.lightbox-open { overflow: hidden; }
 /* В тексте статьи картинка выглядит кликабельной. */

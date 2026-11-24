@@ -103,6 +103,7 @@ const state = {
   session: { authRequired: false, authenticated: true },
   view: { type: 'unread', id: null },   // unread | starred | feed | folder (all — только как запасной)
   snapshot: null,                       // состав списка, зафиксированный при входе в ленту
+    lightboxShare: null,                  // картинка в просмотре: адрес и подпись для «Поделиться»
   activeId: null,                       // статья, на которой сейчас рамка
   framedIds: new Set(),                 // статьи, на которых рамка уже побывала в этом разделе
   query: '',
@@ -4141,20 +4142,65 @@ $('#clear-tg').addEventListener('click', async () => {
  * лент выглядел как «пустое приложение». hideLoader снимает затемнение.
  */
 /**
- * Просмотр картинки на весь экран: клик по изображению в тексте статьи
- * открывает затемнение с картинкой по ширине экрана, повторный клик — закрывает.
+ * Просмотр картинки: клик по изображению в тексте открывает затемнение с картинкой
+ * шириной в колонку чтения статьи (на телефоне — во всю ширину экрана).
+ * Повторный клик по фону или картинке закрывает; кнопка в правом верхнем углу
+ * отдаёт картинку в системное «Поделиться».
  */
 function openLightbox(image) {
   const box = $('#lightbox');
   const big = $('#lightbox-img');
+  const frame = $('#lightbox-frame');
   if (!box || !big) return;
   // У ленивых картинок адрес лежит в data-src: src может быть заглушкой.
   const src = image.dataset.src || image.currentSrc || image.src || '';
   if (!src) return;
   big.src = src;
   big.alt = image.alt || '';
+  // Ширина колонки чтения: та же, что у текста статьи, но не больше окна.
+  const column = image.closest('.a-body, .comment-body');
+  const limit = Math.max(280, window.innerWidth - 24);
+  const width = column ? Math.min(limit, Math.round(column.getBoundingClientRect().width)) : limit;
+  if (frame) frame.style.width = width ? `${width}px` : '';
+  state.lightboxShare = {
+    src,
+    title: image.alt || image.title || document.querySelector('#view-title')?.textContent || 'Картинка',
+  };
   box.hidden = false;
   document.body.classList.add('lightbox-open');
+}
+
+/**
+ * Отдаёт картинку из просмотра: сначала как файл (нативный лист «Поделиться»),
+ * потом как ссылку, в крайнем случае копирует адрес в буфер.
+ */
+async function shareLightboxImage() {
+  const data = state.lightboxShare;
+  if (!data?.src) return;
+  const title = String(data.title || 'Картинка').trim();
+  try {
+    if (navigator.canShare && navigator.share) {
+      const response = await fetch(data.src, { credentials: 'include' }).catch(() => null);
+      if (response?.ok) {
+        const blob = await response.blob();
+        const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+        const file = new File([blob], `image.${ext}`, { type: blob.type });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title });
+          return;
+        }
+      }
+    }
+    if (navigator.share) {
+      await navigator.share({ title, url: data.src });
+      return;
+    }
+    await navigator.clipboard.writeText(data.src);
+    toast('Ссылка на картинку скопирована');
+  } catch (err) {
+    if (err?.name === 'AbortError') return;          // пользователь закрыл лист
+    toast(`Не удалось поделиться: ${err.message ?? err}`, true);
+  }
 }
 
 function closeLightbox() {
@@ -4549,7 +4595,17 @@ function setupLightboxHandlers() {
   lightboxHandlersReady = true;
   // Просмотр картинки: повторный клик по ней или по затемнению закрывает,
   // Esc — тоже. Так чтение возвращается на то же место: список не сдвигался.
-  $('#lightbox')?.addEventListener('click', (event) => { event.preventDefault(); closeLightbox(); });
+  // Клик по кнопке «поделиться» не должен закрывать просмотр.
+  $('#lightbox')?.addEventListener('click', (event) => {
+    if (event.target.closest('#lightbox-share')) return;
+    event.preventDefault();
+    closeLightbox();
+  });
+  $('#lightbox-share')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    shareLightboxImage();
+  });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && lightboxVisible()) { event.preventDefault(); closeLightbox(); }
   });
