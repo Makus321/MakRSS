@@ -706,12 +706,15 @@ async function refreshCommentCounts(limit = COMMENT_COUNT_SYNC_LIMIT) {
       if (!provider?.count) continue;
       const checkedAt = item.commentsCountAt ? Date.parse(item.commentsCountAt) : 0;
       if (Number.isFinite(item.commentsCount) && Date.now() - checkedAt < COMMENT_COUNT_SYNC_MS) continue;
-      candidates.push({ item, provider, checkedAt });
+      // Витрину держим в начале очереди: её всего десять статей, и они
+      // не должны вытесняться сотнями статей из обычных лент.
+      candidates.push({ item, provider, checkedAt, virtual: feed.id === HABR_NOW_ID });
     }
   }
   if (!candidates.length) return 0;
   // Сначала самые свежие: у них обсуждение ещё идёт.
-  candidates.sort((a, b) => String(b.item.date ?? '').localeCompare(String(a.item.date ?? '')) || a.checkedAt - b.checkedAt);
+  candidates.sort((a, b) => Number(Boolean(b.virtual)) - Number(Boolean(a.virtual))
+    || String(b.item.date ?? '').localeCompare(String(a.item.date ?? '')) || a.checkedAt - b.checkedAt);
   const queue = candidates.slice(0, limit);
   let updated = 0;
   const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
@@ -1581,6 +1584,9 @@ async function refreshHabrNow({ force = false } = {}) {
     db.items[HABR_NOW_ID] = fresh.map((item) => ({ ...item, addedAt: new Date().toISOString() }));
     // Тела ушедших статей больше не нужны: чистим, иначе папка content растёт.
     await store.pruneContent(HABR_NOW_ID, new Set(fresh.map((item) => item.id))).catch(() => {});
+    // Свежие статьи блока сразу ставим в очередь на счётчики комментариев:
+    // у Хабра число в ответе есть, но живой пересчёт точнее и обновит «+N».
+    refreshCommentCounts().catch(() => {});
     invalidateItemIndex();
     if (!same) {
       bumpItemsRevision();
