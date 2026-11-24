@@ -699,16 +699,18 @@ async function refreshCommentCounts(limit = COMMENT_COUNT_SYNC_LIMIT) {
   if (virtual) sources.push([virtual, db.items[HABR_NOW_ID] ?? []]);
   for (const [feed, list] of sources) {
     for (const item of list) {
-      // Считаем только там, где это интересно: непрочитанное и избранное
-      // (включая прочитанное избранное — оно может «ожить» новыми комментариями).
-      if (db.read[item.id] && !db.starred[item.id]) continue;
+      // В витрине прочитанные статьи остаются в списке (они просто приглушены),
+      // поэтому её счётчики обновляем у всех десяти. В обычных лентах прочитанное
+      // без избранного не пересчитываем — в режиме «Непрочитанные» его не видно.
+      const isVirtual = feed.id === HABR_NOW_ID;
+      if (!isVirtual && db.read[item.id] && !db.starred[item.id]) continue;
       const provider = commentsProviderFor(feed, item);
       if (!provider?.count) continue;
       const checkedAt = item.commentsCountAt ? Date.parse(item.commentsCountAt) : 0;
       if (Number.isFinite(item.commentsCount) && Date.now() - checkedAt < COMMENT_COUNT_SYNC_MS) continue;
       // Витрину держим в начале очереди: её всего десять статей, и они
       // не должны вытесняться сотнями статей из обычных лент.
-      candidates.push({ item, provider, checkedAt, virtual: feed.id === HABR_NOW_ID });
+      candidates.push({ item, provider, checkedAt, virtual: isVirtual });
     }
   }
   if (!candidates.length) return 0;
