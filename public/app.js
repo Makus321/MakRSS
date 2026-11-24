@@ -844,38 +844,26 @@ function renderToolbar() {
   const curFeed = state.view.type === 'feed' ? viewFeed() : null;
   const viewItems = itemsOfView().filter((item) => !unreadModeFor() || !item.read);
   const items = viewItems;
-  // Когда список «заморожен», в шапке считаем ровно показанное: иначе было
-  // «2 статьи», а карточка одна — просто новая статья ещё ждёт кнопку «Показать».
-  // Сами новые статьи показываем отдельной припиской, чтобы не путать с фильтром.
-  // Числа в шапке должны совпадать с деревом (там серверные счётчики), а про
-  // зафиксированный список говорим отдельно: «в списке 2, новых 1».
-  const frozenIds = state.listFrozen && state.snapshot?.ids instanceof Set ? state.snapshot.ids : null;
-  const shownItems = frozenIds ? state.data.items.filter((item) => frozenIds.has(item.id)) : viewItems;
-  const shownUnread = shownItems.filter((i) => !i.read).length;
+  // Числа в шапке совпадают с деревом (там серверные счётчики), а про новые статьи,
+  // которые ещё ждут кнопку «Показать», говорит отдельная приписка.
   const unread = curFeed ? Number(curFeed.unread ?? 0) : viewItems.filter((i) => !i.read).length;
   const totalShown = curFeed ? (unreadModeFor() ? Number(curFeed.unread ?? 0) : Number(curFeed.total ?? 0)) : viewItems.length;
   const pendingNew = pendingNewCount();
-  // Приписка только когда список уже собран: на пустом снимке «в списке 0» пугает.
-  const listNote = frozenIds && shownUnread > 0 && shownUnread < unread
-    ? ` · в списке ${shownUnread} — нажмите «Показать»`
+  const listNote = pendingNew > 0
+    ? ` · новых: ${pendingNew} — нажмите «Показать»`
     : '';
   // «3 мин назад», но «только что» и «вчера» — уже готовые слова, «назад» к ним не идёт.
   const ago = timeAgo(state.data.lastRefresh);
   const refreshed = state.data.lastRefresh
     ? `обновлено ${/^\d/.test(ago) ? `${ago} назад` : ago}`
     : 'ещё не обновлялось';
-  // Про «новые» пишем один раз: если в текущей ленте ждут показа N статей —
-  // говорим про них, иначе показываем итог последнего обновления.
-  // Если в ленте ждут показа новые статьи, про них скажет listNote ниже,
-  // а здесь оставляем только итог последнего обновления, чтобы не повторяться.
-  // В ленте пишем только её новые статьи, в сводных разделах — общий итог обновления.
-  const feedAdded = state.view.type === 'feed' ? (Number(state.data.addedByFeed?.[state.view.id]) || 0) : 0;
+  // Итог последнего обновления — только в сводных разделах: в ленте про новые
+  // статьи уже сказано выше, повторять одним и тем же числом незачем.
   const added = state.view.type === 'feed'
-    ? (feedAdded ? `, новых в ленте: ${feedAdded}` : '')
+    ? ''
     : (Number.isFinite(state.data.lastRefreshAdded)
       ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
       : '');
-  const pendingHint = '';
   $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}${listNote}`;
   // Режим «Непрочитанные / Все» — только для текущей ленты.
   $('#unread-mode').value = unreadModeFor() ? 'unread' : 'all';
@@ -924,63 +912,47 @@ function renderToolbar() {
   renderNewRow();
 }
 
-/** Сколько новых статей пришло в текущий вид после того, как его открыли. */
-/** Сколько новых статей у ленты — по тому же правилу, что и плашка сверху. */
-
-/** Сумма серверных счётчиков «добавлено» по лентам текущего вида. */
-function pendingNewTotal() {
-  const added = state.data.addedByFeed ?? {};
-  const ids = Object.keys(added);
-  if (state.view.type === 'feed') return Number(added[state.view.id]) || 0;
-  return ids.reduce((sum, id) => sum + (Number(added[id]) || 0), 0);
-}
-
+/**
+ * Сколько новых статей пришло в текущий раздел уже после того, как список был
+ * зафиксирован. Раньше здесь суммировались серверные счётчики по всем лентам —
+ * поэтому плашка «Новых статей» всплывала и в сводных разделах, и считала чужие
+ * ленты, а кнопка «Показать» не могла ничего показать.
+ */
 function pendingNewCount() {
-  // Ровно то же число, что «(+N)» у ленты в дереве: раньше здесь считались
-  // статьи, которых нет в показанном списке (а он ограничен), и числа расходились.
-  return pendingNewTotal();
+  const ids = state.snapshot?.ids;
+  if (!state.listFrozen || !(ids instanceof Set) || !ids.size) return 0;
+  return itemsOfView().filter((item) => !item.read && !ids.has(item.id)).length;
 }
-
 
 /** Полоска «пришли новые статьи»: показываем, но в список не добавляем. */
 function renderNewRow() {
   const row = $('#new-row');
   if (!row) return;
   const count = pendingNewCount();
-  const total = pendingNewTotal();
-  // Плашка возвращается только когда сервер добавил новые статьи — то есть
-  // когда суммарный счётчик вырос. Закрытие остаётся в силе до этого момента.
-  if (state.newRowClosedTotal !== null && total > state.newRowClosedTotal) {
+  // Плашка возвращается, только когда новых статей стало больше, чем в момент
+  // закрытия: отметки «прочитано» её не оживляют.
+  if (state.newRowClosedTotal !== null && count > state.newRowClosedTotal) {
     state.newRowClosedTotal = null;
   }
   row.hidden = count === 0
-    || (state.newRowClosedTotal !== null && total <= state.newRowClosedTotal);
+    || (state.newRowClosedTotal !== null && count <= state.newRowClosedTotal);
   if (!count) return;
   $('#new-text').textContent = `Новых статей: ${count}`;
 }
 
 $('#new-close').addEventListener('click', () => {
-  // Запоминаем не ревизию (она меняется от любой отметки «прочитано»), а состав
-  // данных о новых статьях: плашка вернётся только после следующей синхронизации.
-  // Запоминаем суммарное число новых статей: пока сервер не добавит больше,
-  // плашка не возвращается (отметки «прочитано» и раскрытие её не оживляют).
-  state.newRowClosedTotal = pendingNewTotal();
+  // Запоминаем, сколько новых статей было в этот момент: плашка не вернётся, пока
+  // их не станет больше. Отметки «прочитано» её не оживляют.
+  state.newRowClosedTotal = pendingNewCount();
   $('#new-row').hidden = true;
 });
 
-  $('#new-show').addEventListener('click', async () => {
-    // Новые статьи приходят только с полной загрузкой списка: в дешёвой
-    // ветке (только счётчики) их в данных нет. Поэтому грузим и пересобираем
-    // снимок — иначе плашка «Показать новые» ничего не добавляла.
-    await loadData();
-    resetSnapshot();
-    state.resetScroll = true;
-    render();
-    // Плашку убираем сразу: статьи уже в списке, «закрыть» нажимать незачем.
-    state.newRowClosedTotal = pendingNewTotal();
-    const row = $('#new-row');
-    if (row) row.hidden = true;
-  });
+// «Показать» делает ровно то же, что клик по этой ленте в дереве: раздел
+// открывается заново, список собирается с нуля и встаёт наверх.
+$('#new-show').addEventListener('click', () => {
+  state.newRowClosedTotal = null;
+  switchView({ ...state.view });
+});
 
 /** Полоска под поиском: превратить запрос в фильтр текущей ленты. */
 function renderFilterRow() {
@@ -1497,8 +1469,9 @@ function switchView(view) {
   state.commentsOnly.clear();
   state.collapsedItems.clear();
   state.selectedId = null;
-  // Перешли в другую ленту — плашка «новые статьи» больше не актуальна.
-  state.newRowClosedTotal = pendingNewTotal();
+  // Перешли в другую ленту — плашка «новые статьи» больше не актуальна:
+  // у каждого раздела свой счётчик, при возврате он посчитается заново.
+  state.newRowClosedTotal = null;
   if ($('#new-row')) $('#new-row').hidden = true;
   manualRead.clear();                   // в другой ленте ручные отметки больше не приоритет
   pendingUnstar.clear();                // и снятые в избранном карточки больше не держим
