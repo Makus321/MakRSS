@@ -142,6 +142,11 @@ async function refreshVersion() {
 }
 
 const PARSER_VERSION = 18;
+
+// Счётчик изменений состава статей (не отметок): по нему клиент понимает,
+// что в ленте появились новые статьи и нужен полный список, а не только отметки.
+let itemsRevision = 0;
+const bumpItemsRevision = () => { itemsRevision += 1; };
 // Версия разовой чистки сохранённых тел: растёт, когда нужно перечистить.
 const CLEANUP_VERSION = 1;
 // Версия сохранённых полных текстов. Когда меняется разбор страницы (картинки,
@@ -538,6 +543,7 @@ async function dedupeFeeds() {
   }
   db.feeds = db.feeds.filter((f) => !ids.has(f.id));
   invalidateItemIndex();
+  bumpItemsRevision();
   store.saveStateSoon();
 }
 
@@ -646,6 +652,7 @@ async function mergeItems(feedId, fresh) {
   }
   db.items[feedId] = deduped;
   invalidateItemIndex();
+  if (added > 0) bumpItemsRevision();
 
   // Тела статей — в отдельные файлы.
   for (const item of fresh) {
@@ -759,6 +766,7 @@ async function pruneFeed(feedId) {
     keep.sort(byDateDesc);
     db.items[feedId] = keep;
   invalidateItemIndex();
+  if (removed > 0) bumpItemsRevision();
     await store.pruneContent(feedId, keepIds);
     log(`лента ${feedId}: удалено ${removed} старых прочитанных статей (непрочитанных ${keptUnread} сохранено)`);
   }
@@ -1492,6 +1500,7 @@ async function purgeFiltered(feedId) {
   }
   db.items[feedId] = keep;
   invalidateItemIndex();
+  if (removed > 0) bumpItemsRevision();
   await store.pruneContent(feedId, keepIds);
   store.saveStateSoon();
   return removed;
@@ -1596,6 +1605,7 @@ function buildPayload() {
     lastRefreshFeeds,
     addedByFeed: lastAddedByFeed,
     revision: Number(db.revision) || 0,
+    itemsRevision,                          // меняется только при появлении/удалении статей
     serverVersion: SERVER_TAG,
     // Сборка сервера: клиент показывает её в подвале, не запрашивая /api/version.
     serverBuild: SERVER_BUILD,
@@ -3152,7 +3162,7 @@ async function api(req, res, url) {
     // Сами статьи он забирает страницами, поэтому полный список здесь не отдаём.
     const rev = Number.parseInt(url.searchParams.get('rev') ?? '', 10);
     if (Number.isFinite(rev) && rev !== Number(db.revision)) {
-      return json(res, 200, { ok: true, changed: true, revision: db.revision });
+      return json(res, 200, { ok: true, changed: true, revision: db.revision, itemsRevision });
     }
     if (Number.isFinite(rev) && rev === Number(db.revision)) {
       // Ответ «ничего не изменилось» должен быть крошечным: только счётчики и
@@ -3167,6 +3177,7 @@ async function api(req, res, url) {
       return json(res, 200, {
         ok: true,
         unchanged: true,
+        itemsRevision,
         revision: db.revision,
       // Обратный отсчёт до автобновления и время последней синхронизации:
       // без них в компактном ответе счётчик замирал на 0:00.
@@ -3226,6 +3237,7 @@ async function api(req, res, url) {
     for (const item of db.items[id] ?? []) { delete db.read[item.id]; delete db.starred[item.id]; }
     delete db.items[id];
   invalidateItemIndex();
+  bumpItemsRevision();
     await store.removeFeed(id);
     store.saveStateSoon();
     return json(res, 200, { ok: true, data: buildPayload() });
@@ -3273,6 +3285,7 @@ async function api(req, res, url) {
       }
       db.feeds = db.feeds.filter((f) => f.folderId !== id);
     invalidateItemIndex();
+    bumpItemsRevision();
     } else {
       for (const feed of affected) feed.folderId = null;
     }

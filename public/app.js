@@ -433,6 +433,9 @@ const rememberData = (data) => {
   applyPendingReads(data.items);
   state.data = data;
   state.revision = data?.revision ?? state.revision;
+  // Версия состава статей: по ней отличаем «изменились только отметки» от
+  // «появились новые статьи» — во втором случае нужен полный список.
+  if (Number.isFinite(data?.itemsRevision)) state.itemsRevision = data.itemsRevision;
   return true;
 };
 
@@ -509,6 +512,9 @@ async function fetchViewInner(offset, reset) {
     revision: payload.revision ?? state.data.revision,
   };
   state.revision = payload.revision ?? state.revision;
+  // Версия состава статей: по ней потом отличаем «изменились только отметки»
+  // от «появились новые статьи, нужен полный список».
+  if (Number.isFinite(payload.itemsRevision)) state.itemsRevision = payload.itemsRevision;
   applyPendingReads(state.data.items);
   // Сервер удалил статьи (лимит хранения) — убираем их и из локальных списков,
   // иначе карточки остаются на экране, хотя данных о них уже нет.
@@ -4417,6 +4423,10 @@ async function loadData({ poll = false } = {}) {
     // Без этой ветки клиент навсегда оставался со старой копией состояния —
     // именно поэтому отметки из Fever и новые статьи не доходили.
     if (payload.changed) {
+      // Появились или удалились статьи — нужен полный список. Иначе в дереве
+      // счётчики растут, а в ленте новых карточек нет: ответ «changed» отдаёт
+      // только отметки, и статья «доходила» лишь при следующей полной загрузке.
+      if (Number(payload.itemsRevision) !== Number(state.itemsRevision)) return loadData({ poll: false });
       // Изменились отметки или счётчики: тянем только состояние видимых статей,
       // а не весь список (это в десятки раз дешевле).
       const ids = (state.data.items ?? []).map((item) => item.id);
@@ -4924,7 +4934,7 @@ async function start() {
   hideLoader();                           // данные пришли — снимаем затемнение
 }
 
-if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, updateFooterStats, ensureBodiesNeeded, expandItem, viewKey };
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, viewKey };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)
