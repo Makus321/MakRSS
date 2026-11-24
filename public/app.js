@@ -1531,7 +1531,14 @@ function switchView(view) {
     // догруженные статьи в него не попадут (в шапке 1, а карточек нет).
     state.snapshot = null;
     state.listFrozen = false;
+    // Список новой ленты показываем с самого верха: при переключении оставался
+    // прежний scrollTop, и первая карточка уезжала под шапку.
+    state.resetScroll = true;
     render();
+    const listEl = $('#list');
+    if (listEl) listEl.scrollTop = 0;
+    const paneEl = document.querySelector('.list-pane');
+    if (paneEl) paneEl.scrollTop = 0;
   }).catch(() => { hideLoader(); state.loadingView = false; render(); });
 }
 
