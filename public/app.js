@@ -712,10 +712,27 @@ function visibleItems() {
 
 // ---------------------------------------------------------------- отрисовка
 
+/**
+ * Служебная строка для ?debug=1: сколько статей пришло с сервера, сколько
+ * осталось после фильтров и режима «непрочитанные», какой снимок списка и
+ * сколько карточек нарисовано. Вызывается ПОСЛЕ renderList(), иначе цифры врут.
+ */
+function renderDebugInfo() {
+  if (!DEBUG) return;
+  const sub = document.querySelector('#view-sub');
+  if (!sub) return;
+  const inView = state.data.items.filter((item) => state.view.type !== 'feed' || item.feedId === state.view.id);
+  const afterFilters = inView.filter((item) => passesFeedFilters(item) && (!unreadModeFor() || !item.read));
+  const shown = state.snapshot?.ids?.size ?? 0;
+  const cards = document.querySelectorAll('#list .article').length;
+  sub.textContent += ` · в ленте ${inView.length}, после фильтров ${afterFilters.length}, снимок ${shown}, карточек ${cards}`;
+}
+
 function render() {
   renderSidebar();
   renderToolbar();
   renderList();
+  renderDebugInfo();
 }
 
 const badge = (unread, added = 0) => {
@@ -849,17 +866,15 @@ function renderToolbar() {
   // говорим про них, иначе показываем итог последнего обновления.
   // Если в ленте ждут показа новые статьи, про них скажет listNote ниже,
   // а здесь оставляем только итог последнего обновления, чтобы не повторяться.
-  const added = Number.isFinite(state.data.lastRefreshAdded)
-    ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
-    : '';
+  // В ленте пишем только её новые статьи, в сводных разделах — общий итог обновления.
+  const feedAdded = state.view.type === 'feed' ? (Number(state.data.addedByFeed?.[state.view.id]) || 0) : 0;
+  const added = state.view.type === 'feed'
+    ? (feedAdded ? `, новых в ленте: ${feedAdded}` : '')
+    : (Number.isFinite(state.data.lastRefreshAdded)
+      ? `, новых: ${state.data.lastRefreshAdded}${state.data.lastRefreshFeeds ? ` в ${state.data.lastRefreshFeeds} ${plural(state.data.lastRefreshFeeds, 'ленте', 'лентах', 'лентах')}` : ''}`
+      : '');
   const pendingHint = '';
   $('#view-sub').textContent = `${totalShown} ${plural(totalShown, 'статья', 'статьи', 'статей')}, ${unread} ${plural(unread, 'непрочитанная', 'непрочитанные', 'непрочитанных')} · ${refreshed}${added}${listNote}`;
-  // Диагностика по ссылке ?debug=1: видно, где теряется статья.
-  if (new URLSearchParams(location.search).get('debug') === '1') {
-    const raw = state.data.items.filter((item) => state.view.type !== 'feed' || item.feedId === state.view.id);
-    const rendered = document.querySelectorAll('#list .article').length;
-    $('#view-sub').textContent += ` · данные ${raw.length}, после фильтров ${viewItems.length}, снимок ${state.snapshot?.ids?.size ?? 0}, карточек ${rendered}`;
-  }
   // Режим «Непрочитанные / Все» — только для текущей ленты.
   $('#unread-mode').value = unreadModeFor() ? 'unread' : 'all';
   $('#unread-mode-wrap').hidden = state.view.type === 'starred';
@@ -4846,7 +4861,6 @@ async function start() {
   hideLoader();                           // данные пришли — снимаем затемнение
 }
 
-// Диагностика по ссылке ?debug=1: доступ к внутренним функциям из консоли.
 if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, viewKey };
 
 start();
