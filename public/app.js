@@ -807,11 +807,12 @@ function renderSidebar() {
         <span class="fav-letter">${feed.virtual ? '◷' : esc(letter)}</span>
         ${feed.virtual || faviconFailed.has(feed.id) ? '' : `<img src="/api/favicon?f=${esc(feed.id)}" alt="" loading="lazy">`}
       </span>
-      <span class="row-name${feed.unread ? ' unread' : ''}">${esc(feed.title)}${feed.virtual ? '<span class="row-tag">витрина</span>' : ''}</span>
-      <span class="row-actions">
-        ${feed.virtual ? '' : `<button data-feed-rename="${esc(feed.id)}" title="Переименовать">✎</button>
-        <button class="del" data-feed-del="${esc(feed.id)}" title="Отписаться">×</button>`}
-      </span>
+      <span class="row-name${feed.unread ? ' unread' : ''}">${esc(feed.title)}</span>
+      ${feed.virtual ? '<span class="row-tag">витрина</span>' : ''}
+      ${feed.virtual ? '' : `<span class="row-actions">
+        <button data-feed-rename="${esc(feed.id)}" title="Переименовать">✎</button>
+        <button class="del" data-feed-del="${esc(feed.id)}" title="Отписаться">×</button>
+      </span>`}
       ${badge(
       // В режиме «Все» показываем, сколько статей всего, иначе — сколько непрочитанных.
       state.prefs.feedUnread?.[feed.id] === false ? feed.total : feed.unread,

@@ -437,6 +437,7 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
 .feed-row.virtual-row .row-name { font-style: italic; }
 .feed-row.virtual-row .fav-letter { color: var(--accent); }
 .feed-row .row-tag {
+  flex: 0 0 auto; white-space: nowrap;
   margin-left: 6px; padding: 0 5px;
   font-size: 10px; font-style: normal; letter-spacing: .04em; text-transform: uppercase;
   color: var(--muted);
