@@ -194,7 +194,14 @@ function readRawBody(req, limit = 4 * 1024 * 1024) {
     const chunks = [];
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > limit) { reject(new Error('слишком большое тело запроса')); req.destroy(); return; }
+      if (size > limit) {
+        // Не рвём соединение: обработчик ещё должен ответить 413. Тело дочитываем вхолостую.
+        const error = new Error('слишком большое тело запроса');
+        error.statusCode = 413;
+        req.resume();
+        reject(error);
+        return;
+      }
       chunks.push(chunk);
     });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
@@ -202,11 +209,27 @@ function readRawBody(req, limit = 4 * 1024 * 1024) {
   });
 }
 
+/**
+ * Тело запроса в JSON. Битый JSON — это ошибка клиента (400), слишком большое
+ * тело — 413. Раньше оба случая превращались в пустой объект, и обработчик
+ * отвечал 500 или молча ничего не делал.
+ */
 const readJsonBody = async (req) => {
+  let raw = '';
   try {
-    return JSON.parse((await readRawBody(req)) || '{}');
+    raw = await readRawBody(req);
+  } catch (err) {
+    const error = new Error(err.message === 'слишком большое тело запроса' ? 'слишком большое тело запроса' : 'тело запроса не прочитано');
+    error.statusCode = err.message === 'слишком большое тело запроса' ? 413 : 400;
+    throw error;
+  }
+  if (!raw.trim()) return {};
+  try {
+    return JSON.parse(raw);
   } catch {
-    return {};
+    const error = new Error('битый JSON в теле запроса');
+    error.statusCode = 400;
+    throw error;
   }
 };
 
@@ -571,7 +594,8 @@ pre{white-space:pre-wrap;font-size:13px;color:#9a9a9a}</style></head><body>
       return json(res, 200, sessionPayload(user));
     }
     if (route === 'POST /api/logout') {
-      res.setHeader('set-cookie', cookieHeader(SESSION_COOKIE, '', { maxAge: 0 }));
+      // Как и при входе, флаг Secure ставим только на HTTPS: иначе браузер не примет cookie.
+      res.setHeader('set-cookie', cookieHeader(SESSION_COOKIE, '', { maxAge: 0, secure: requestIsHttps(req) }));
       return json(res, 200, { ok: true });
     }
 
@@ -647,8 +671,11 @@ pre{white-space:pre-wrap;font-size:13px;color:#9a9a9a}</style></head><body>
     const core = await coreFor(user);
     return core.handleRequest(req, res);
   } catch (err) {
-    log('ошибка обработки запроса:', err.stack ?? err.message);
-    if (!res.headersSent) json(res, 500, { ok: false, error: String(err.message ?? err) });
+    // Ошибки клиента (битый JSON, слишком большое тело) — короткая строка, без стека.
+    const status = Number(err.statusCode) || 500;
+    if (status >= 500) log('ошибка обработки запроса:', err.stack ?? err.message);
+    else log(`запрос отклонён (${status}): ${err.message}`);
+    if (!res.headersSent) json(res, status, { ok: false, error: String(err.message ?? err) });
     else res.end();
   }
 }
@@ -731,10 +758,27 @@ function requestIsHttps(req) {
 // ---- Лимит попыток входа (объявления на верхнем уровне: ниже по файлу
 //      они используются в обработчике /api/login) ----
 
-/** IP клиента: за прокси берём первый адрес из x-forwarded-for. */
+/**
+ * Доверенный ли адрес: только тогда верим заголовку X-Forwarded-For.
+ * Иначе любой клиент присылал случайный IP в заголовке и обходил лимит попыток.
+ */
+const TRUSTED_PROXIES = new Set(
+  String(process.env.TRUST_PROXY ?? '127.0.0.1,::1,::ffff:127.0.0.1')
+    .split(',').map((value) => value.trim()).filter(Boolean),
+);
+
+const isTrustedProxy = (address) => TRUSTED_PROXIES.has(String(address ?? '').trim());
+
+/**
+ * IP клиента. Заголовок X-Forwarded-For принимаем только от своего прокси:
+ * в остальных случаях используем адрес сокета, иначе лимит входа обходится
+ * подстановкой произвольного адреса в заголовок.
+ */
 function clientIp(req) {
+  const socketAddress = req.socket?.remoteAddress ?? "unknown";
+  if (!isTrustedProxy(socketAddress)) return socketAddress;
   const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim();
-  return forwarded || req.socket?.remoteAddress || 'unknown';
+  return forwarded || socketAddress;
 }
 
 // Попытки входа: ip -> { count, until }. Держим в памяти, хранилище не нужно.
@@ -742,6 +786,19 @@ const loginAttempts = new Map();   // ip -> { count, until }
 
 const LOGIN_MAX_TRIES = 10;
 const LOGIN_WINDOW_MS = 60_000;
+const LOGIN_MAX_ENTRIES = 5000;      // потолок карты: иначе перебор с разных IP растит память
+
+/** Выбрасывает истёкшие записи и не даёт карте расти без предела. */
+function pruneLoginAttempts() {
+  const now = Date.now();
+  for (const [ip, entry] of loginAttempts) {
+    if (now > entry.until) loginAttempts.delete(ip);
+  }
+  if (loginAttempts.size <= LOGIN_MAX_ENTRIES) return;
+  // Всё ещё много — удаляем самые старые окна, пока не уложимся в потолок.
+  const sorted = [...loginAttempts.entries()].sort((a, b) => a[1].until - b[1].until);
+  for (const [ip] of sorted.slice(0, loginAttempts.size - LOGIN_MAX_ENTRIES)) loginAttempts.delete(ip);
+}
 
 function loginBlocked(ip) {
   const entry = loginAttempts.get(ip);
@@ -752,6 +809,7 @@ function loginBlocked(ip) {
 
 function loginFailed(ip) {
   const now = Date.now();
+  if (loginAttempts.size > LOGIN_MAX_ENTRIES) pruneLoginAttempts();
   const entry = loginAttempts.get(ip);
   if (!entry || now > entry.until) {
     loginAttempts.set(ip, { count: 1, until: now + LOGIN_WINDOW_MS });
