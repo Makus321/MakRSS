@@ -44,7 +44,7 @@ import {
   telegramBotMe, telegramGetUpdates, parseBotUpdate, telegramFileUrl,
 } from './lib/telegram.mjs';
 import { Store } from './lib/store.mjs';
-import { safeFetch } from './lib/net-guard.mjs';
+import { safeFetch, SsrfError } from './lib/net-guard.mjs';
 import { handleFever } from './lib/fever.mjs';
 import { commentsProviderFor } from './lib/comments.mjs';
 import {
@@ -1660,7 +1660,7 @@ async function httpGetBinary(url, timeout = 15000) {
       signal: controller.signal,
       headers: { 'user-agent': UA, accept: 'image/avif,image/webp,image/png,image/*,*/*;q=0.5' },
     });
-    const buffer = res.ok ? Buffer.from(await res.arrayBuffer()) : null;
+    const buffer = res.ok ? await readLimited(res, MEDIA_MAX_BYTES, 'картинка') : null;
     return { ok: res.ok, status: res.status, type: res.headers.get('content-type') || '', buffer };
   } finally {
     clearTimeout(timer);
@@ -2072,7 +2072,7 @@ async function serveVideo(req, res, url) {
   if (nestedSource) source = decodeURIComponent(nestedSource[1]);
   let parsed;
   try { parsed = new URL(source); } catch { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('плохой адрес'); return; }
-  if (!/^https?:$/.test(parsed.protocol) || !isPublicUrl(parsed)) {
+  if (!/^https?:$/.test(parsed.protocol)) {
     res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('адрес не разрешён');
     return;
   }
@@ -2101,7 +2101,9 @@ async function serveVideo(req, res, url) {
     res.writeHead(response.status === 206 ? 206 : 200, out);
     for await (const chunk of response.body) res.write(chunk);
     res.end();
-  } catch {
+  } catch (err) {
+    // Приватный адрес: отвечаем 403, а не «не удалось получить».
+    if (err instanceof SsrfError) { if (!res.headersSent) res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }); res.end('адрес не разрешён'); return; }
     if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('видео не удалось получить');
   }
@@ -2175,8 +2177,7 @@ async function serveThumb(req, res, url) {
     });
     const type = String(response.headers.get('content-type') ?? '');
     if (!response.ok || !type.startsWith('image/')) throw new Error(`ответ ${response.status}`);
-    let buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length > THUMB_MAX_BYTES) throw new Error('слишком большая');
+    let buffer = await readLimited(response, THUMB_MAX_BYTES, 'миниатюра');
     // Анимированный GIF превращаем в статичную картинку — первый кадр.
     if (/gif/i.test(type)) buffer = firstGifFrame(buffer) ?? buffer;
 
@@ -2186,7 +2187,7 @@ async function serveThumb(req, res, url) {
     await mkdir(MEDIA_DIR, { recursive: true });
     pruneMediaCache().catch(() => {});
     if (small) {
-      await writeFile(file + '.webp', small).catch(() => {});
+      // compressToWebp уже сохранил файл атомарным переименованием — второй раз не пишем.
       res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800' });
       res.end(small);
       return;
@@ -2195,7 +2196,12 @@ async function serveThumb(req, res, url) {
     pruneMediaCache().catch(() => {});
     res.writeHead(200, { 'content-type': /gif/i.test(type) ? 'image/gif' : type, 'cache-control': 'private, max-age=604800' });
     res.end(buffer);
-  } catch {
+  } catch (err) {
+    // Приватный адрес: отдавать редирект на него нельзя — это обход проверки.
+    if (err instanceof SsrfError) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('адрес не разрешён');
+      return;
+    }
     // Не получилось — отдаём браузеру адрес картинки, но для Telegram
     // ссылка на CDN быстро устаревает: ведём на наш кэш медиа, а не на источник,
     // иначе миниатюра в свёрнутой карточке пропадала навсегда.
@@ -2230,14 +2236,7 @@ function imageFileFor(source) {
 }
 
 /** Не пускаем запросы внутрь локальной сети — только обычные внешние адреса. */
-function isPublicUrl(parsed) {
-  const host = parsed.hostname.toLowerCase();
-  if (host === 'localhost' || host === '::1' || host.endsWith('.local')) return false;
-  if (/^127\./.test(host) || /^0\./.test(host) || /^10\./.test(host) || /^169\.254\./.test(host)) return false;
-  if (/^192\.168\./.test(host)) return false;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
-  return true;
-}
+
 
 // Крупные картинки пережимаем в WebP: экономия в 3–10 раз, страница легче,
 // особенно на мобильном интернете. Инструмент cwebp (пакет webp) необязателен:
@@ -2246,6 +2245,7 @@ const IMG_RECOMPRESS_ABOVE = Number(process.env.IMG_RECOMPRESS_ABOVE || 60 * 102
 const IMG_WEBP_QUALITY = Number(process.env.IMG_WEBP_QUALITY || 75);
 const IMG_WEBP_WIDTH = Number(process.env.IMG_WEBP_WIDTH || 900);
 let webpAvailable = null;
+let webpSeq = 0;               // счётчик уникальных имён временных файлов
 
 async function runCwebp(args) {
   return new Promise((resolve) => {
@@ -2262,7 +2262,9 @@ async function compressToWebp(buffer, baseFile, { quality, width } = {}) {
   if (webpAvailable === false) return null;
   // Если параметры заданы явно (например, для иконок), порог не применяем.
   if (!quality && buffer.length < IMG_RECOMPRESS_ABOVE) return null;
-  const source = `${baseFile}.src`;
+  // Уникальное имя: два параллельных запроса одной картинки перезаписывали и удаляли
+  // общий .src друг у друга, и вместо картинки получался мусор.
+  const source = `${baseFile}.${process.pid}.${(webpSeq += 1)}.src`;
   const target = `${baseFile}.webp`;
   const tmp = `${baseFile}.${process.pid}.${Date.now()}.webp.tmp`;
   try {
@@ -2392,7 +2394,7 @@ async function serveImage(req, res, url) {
   const source = String(url.searchParams.get('u') ?? '');
   let parsed;
   try { parsed = new URL(source); } catch { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('плохой адрес'); return; }
-  if (!/^https?:$/.test(parsed.protocol) || !isPublicUrl(parsed)) {
+  if (!/^https?:$/.test(parsed.protocol)) {
     res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('адрес не разрешён');
     return;
   }
@@ -2419,21 +2421,21 @@ async function serveImage(req, res, url) {
     });
     const type = String(response.headers.get('content-type') ?? '');
     if (!response.ok || !type.startsWith('image/')) throw new Error(`ответ ${response.status}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length > IMG_MAX_BYTES) throw new Error('слишком большая');
+    const buffer = await readLimited(response, IMG_MAX_BYTES, 'картинка');
     await mkdir(MEDIA_DIR, { recursive: true });
     await writeFile(file, buffer).catch(() => {});
     pruneMediaCache().catch(() => {});
     const webp = await compressToWebp(buffer, file);
     if (webp) {
-      await writeFile(`${file}.webp`, webp).catch(() => {});
+      // Файл .webp уже сохранён внутри compressToWebp атомарным переименованием.
       res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800' });
       res.end(webp);
       return;
     }
     res.writeHead(200, { 'content-type': type, 'cache-control': 'private, max-age=604800' });
     res.end(buffer);
-  } catch {
+  } catch (err) {
+    if (err instanceof SsrfError) { res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('адрес не разрешён'); return; }
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('картинка не скачалась');
   }
 }
@@ -2593,7 +2595,7 @@ async function serveMedia(req, res, url) {
       await writeFile(target, bin).catch(() => {});
       pruneMediaCache().catch(() => {});   // кэш не должен расти без предела
       res.writeHead(200, {
-        'content-type': response.headers.get('content-type') ?? 'image/jpeg',
+        'content-type': sniffImageType(bin),
         'cache-control': 'private, max-age=86400',
       });
       return res.end(bin);
@@ -2610,7 +2612,7 @@ async function serveMedia(req, res, url) {
           await sleep(250);
           try {
             const data = await readFile(target);
-            res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
+            res.writeHead(200, { 'content-type': sniffImageType(data), 'cache-control': 'private, max-age=86400' });
             return res.end(data);
           } catch { /* ещё не появился */ }
         }
@@ -2630,7 +2632,7 @@ async function serveMedia(req, res, url) {
   const cached = path.join(MEDIA_DIR, key);
   try {
     const data = await readFile(cached);
-    res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
+    res.writeHead(200, { 'content-type': sniffImageType(data), 'cache-control': 'private, max-age=86400' });
     return res.end(data);
   } catch { /* ещё не скачано */ }
 
@@ -2643,7 +2645,8 @@ async function serveMedia(req, res, url) {
     const bin = await readLimited(fileResponse, BOT_FILE_MAX_BYTES, 'файл Telegram');
     const type = MEDIA_TYPES[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
     await writeFile(cached, bin);
-    res.writeHead(200, { 'content-type': type, 'cache-control': 'private, max-age=86400' });
+    pruneMediaCache().catch(() => {});   // кэш файлов бота тоже не должен расти без предела
+    res.writeHead(200, { 'content-type': sniffImageType(bin), 'cache-control': 'private, max-age=86400' });
     return res.end(bin);
   } catch (err) {
     res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' }).end(`не удалось получить файл: ${err.message}`);

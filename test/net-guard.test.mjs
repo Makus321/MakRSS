@@ -1,7 +1,7 @@
 // Тесты сетевого фильтра: приватные адреса не должны проходить, публичные — проходить.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isBlockedAddress, assertPublicUrl } from '../lib/net-guard.mjs';
+import { isBlockedAddress, assertPublicUrl, SsrfError } from '../lib/net-guard.mjs';
 
 test('приватные и служебные IPv4 блокируются', () => {
   for (const ip of ['127.0.0.1', '127.10.20.30', '10.0.0.1', '172.16.0.1', '172.31.255.255', '192.168.1.1',
@@ -37,4 +37,16 @@ test('локальные имена и недопустимые схемы от�
 test('публичный IP пропускается', async () => {
   const parsed = await assertPublicUrl('http://8.8.8.8/');
   assert.equal(parsed.hostname, '8.8.8.8');
+});
+
+test('отклонение адреса даёт SsrfError, а не общую ошибку', async () => {
+  for (const url of ['http://127.0.0.1/', 'http://169.254.169.254/', 'ftp://example.com/']) {
+    await assert.rejects(
+      () => assertPublicUrl(url),
+      (err) => err instanceof SsrfError && err.name === "SsrfError",
+      `ожидали SsrfError для ${url}`,
+    );
+  }
+  const parsed = await assertPublicUrl("http://8.8.8.8/");
+  assert.equal(parsed.hostname, "8.8.8.8");
 });
