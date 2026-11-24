@@ -29,6 +29,7 @@
 //   ANY  /fever/                        протокол Fever API для внешних клиентов
 
 import { readFile, writeFile, appendFile, mkdir, unlink, stat, readdir, rename } from 'node:fs/promises';
+import { statSync } from 'node:fs';
 import { gzip, brotliCompress, constants as zlibConstants } from 'node:zlib';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -151,6 +152,19 @@ const BODY_VERSION = 19;   // 19: чистка сохранённых тел н�
 // чтобы сразу видеть, что именно работает на сервере.
 const SERVER_VERSION = 1;
 const SERVER_TAG = `${SERVER_VERSION}.${BODY_VERSION}`;
+
+/**
+ * Время правки серверного кода: по нему видно, что на сервере уже новая версия,
+ * даже когда клиентские файлы не менялись.
+ */
+const SERVER_BUILD = (() => {
+  const files = [import.meta.url, new URL('./server.mjs', import.meta.url)];
+  let newest = 0;
+  for (const file of files) {
+    try { newest = Math.max(newest, statSync(fileURLToPath(file)).mtimeMs); } catch { /* файла нет */ }
+  }
+  return newest ? new Date(newest).toISOString() : null;
+})();
 
 const KEEP_READ_DAYS = Number(process.env.KEEP_READ_DAYS || argValue('keep-read-days', 30));   // потолок, если в настройках ничего нет
 const KEEP_READ_DAYS_DEFAULT = 14;                       // по умолчанию держим прочитанное 2 недели
@@ -1574,6 +1588,7 @@ function buildPayload() {
     revision: Number(db.revision) || 0,
     serverVersion: SERVER_TAG,
     // Сборка сервера: клиент показывает её в подвале, не запрашивая /api/version.
+    serverBuild: SERVER_BUILD,
     buildVersion: APP_VERSION,
     nextRefreshAt,
     limits: { maxUnreadPerFeed: MAX_UNREAD_PER_FEED, keepReadDays: keepReadDays() },
@@ -2886,6 +2901,7 @@ async function api(req, res, url) {
       revision: db.revision,
       serverVersion: SERVER_TAG,
     // Сборка сервера: клиент показывает её в подвале, не запрашивая /api/version.
+    serverBuild: SERVER_BUILD,
     buildVersion: APP_VERSION,
     });
   }

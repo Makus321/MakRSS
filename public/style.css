@@ -1454,3 +1454,6 @@ body.lightbox-open { overflow: hidden; }
   font-size: calc(14px * var(--ui-scale, 1)); color: var(--text);
 }
 #prompt-modal #prompt-input:focus { border-color: var(--accent); }
+
+/* Время сборки сервера в шапке настроек: мелкая служебная строка. */
+.settings-build { font-size: 11px; margin: 2px 0 8px; }

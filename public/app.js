@@ -425,7 +425,9 @@ window.addEventListener('online', () => flushSettings());
 
 const rememberData = (data) => {
   if (!looksLikeData(data)) return false;         // ответ без данных (нет сети, кэш) — не трогаем состояние
+
   if (data.serverVersion) state.serverVersion = data.serverVersion;
+  if (data.serverBuild) state.serverBuild = data.serverBuild;
   // Отметки о прочтении, сделанные без сети, важнее того, что пришло с сервера.
   applyPendingReads(data.items);
   state.data = data;
@@ -2048,7 +2050,13 @@ function updateFooterStats() {
   const icon = (mark, title, extra = '') => `<span class="foot-ico${extra}" title="${title}">${mark}</span>`;
   // Только версия разбора (без «1.»): она меняется, когда меняется разбор текста.
   const parseVersion = String(state.serverVersion ?? '').split('.').pop() || '?';
-  const versionTitle = esc('Клиент ' + APP_VERSION + ', стили ' + styleVersion + ', версия разбора ' + parseVersion);
+  // Время сборки сервера: по нему видно, что серверные правки уже на месте.
+  const serverBuildAt = state.serverBuild ? new Date(state.serverBuild) : null;
+  const serverBuildText = serverBuildAt && !Number.isNaN(serverBuildAt.getTime())
+    ? serverBuildAt.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '';
+  const versionTitle = esc('Клиент ' + APP_VERSION + ', стили ' + styleVersion + ', версия разбора ' + parseVersion
+    + (serverBuildText ? ', сервер обновлён ' + serverBuildText : ''));
   const trafficTitle = esc('Трафик ленты' + (traffic.label ? ` «${traffic.label}»` : '') + ': '
     + sizeLabel(traffic.total) + ' (данные ' + sizeLabel(traffic.list)
     + ', тексты ' + sizeLabel(traffic.bodies)
@@ -3772,6 +3780,19 @@ async function openSettings() {
   // выглядеть «мёртвой». Пока данные едут, поля приглушены и видна надпись
   // «загрузка…» — чтобы не казалось, что опции показаны неправильно.
   $('#settings-modal').hidden = false;
+  // Строка «когда обновлялся сервер»: видно, что серверные правки уже на месте.
+  const buildLabel = document.querySelector('#settings-server-build');
+  if (buildLabel) {
+    const at = state.serverBuild ? new Date(state.serverBuild) : null;
+    if (at && !Number.isNaN(at.getTime())) {
+      buildLabel.textContent = 'Сервер обновлён ' + at.toLocaleString('ru-RU', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+      buildLabel.hidden = false;
+    } else {
+      buildLabel.hidden = true;
+    }
+  }
   setSettingsLoading(true);
   startSettingsRefresh();
   try {
@@ -4373,6 +4394,7 @@ async function loadData({ poll = false } = {}) {
       if (!state_?.items) return loadData({ poll: false });
       if (Number.isFinite(state_.revision)) state.revision = state_.revision;
       if (state_.serverVersion) state.serverVersion = state_.serverVersion;
+  if (state_.serverBuild) state.serverBuild = state_.serverBuild;
       const touched = [];
       for (const item of state.data.items ?? []) {
         const flags = state_.items[item.id];
