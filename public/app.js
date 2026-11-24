@@ -18,6 +18,9 @@ const manualRead = new Map();
 const keepReadVisible = new Set();
 /** Копии прочитанных статей: если сервер пришлёт данные без них, всё равно покажем. */
 const keepReadItems = new Map();
+
+// в ленте, список не пересобираем — держим их у себя до клика в дереве или «Показать».
+const heldItems = new Map();
 /** Фавиконы, которые сервер не отдал: повторно не запрашиваем. */
 const faviconFailed = new Set();
 window.__faviconFailed = (feedId) => { faviconFailed.add(feedId); };        // id → прочитано/непрочитано (приоритет над автоматикой)
@@ -440,6 +443,17 @@ const rememberData = (data) => {
   if (data.serverVersion) state.serverVersion = data.serverVersion;
   if (data.serverBuild) state.serverBuild = data.serverBuild;
   // Отметки о прочтении, сделанные без сети, важнее того, что пришло с сервера.
+  // Пока открыта витрина, серверная ротация не должна менять список на экране:
+  // ушедшие статьи запоминаем и показываем дальше, новые придут по «Показать».
+  const virtualView = virtualFeedView();
+  if (virtualView && Array.isArray(data.items)) {
+    const freshIds = new Set(data.items.filter((item) => item.feedId === state.view.id).map((item) => item.id));
+    for (const item of state.data.items ?? []) {
+      if (item.feedId !== state.view.id || freshIds.has(item.id)) continue;
+      heldItems.set(item.id, item);
+    }
+    for (const id of [...heldItems.keys()]) if (freshIds.has(id)) heldItems.delete(id);
+  }
   applyPendingReads(data.items);
   state.data = data;
   state.revision = data?.revision ?? state.revision;
@@ -528,7 +542,7 @@ async function fetchViewInner(offset, reset) {
   applyPendingReads(state.data.items);
   // Сервер удалил статьи (лимит хранения) — убираем их и из локальных списков,
   // иначе карточки остаются на экране, хотя данных о них уже нет.
-  if (Array.isArray(payload.items) && state.snapshot?.ids) {
+  if (Array.isArray(payload.items) && state.snapshot?.ids && !virtualFeedView()) {
     const alive = new Set(state.data.items.map((i) => i.id));
     for (const id of [...state.snapshot.ids]) if (!alive.has(id)) state.snapshot.ids.delete(id);
     for (const id of [...keepReadVisible]) if (!alive.has(id)) { keepReadVisible.delete(id); keepReadItems.delete(id); }
@@ -669,6 +683,15 @@ function itemsOfView() {
     return true;
   });
   // В «Избранном» порядок — по времени добавления в избранное, а не по дате поста.
+  // Витрина: догружаем статьи, которые сервер уже заменил, но человек их видел.
+  if (state.view.type === 'feed' && heldItems.size && feedById(state.view.id)?.virtual) {
+    const shown = new Set(list.map((item) => item.id));
+    for (const [id, item] of heldItems) {
+      if (shown.has(id) || item.feedId !== state.view.id) continue;
+      list.push(item);
+    }
+    list.sort((a, b) => (Date.parse(b.date ?? 0) || 0) - (Date.parse(a.date ?? 0) || 0));
+  }
   if (state.view.type === 'starred') {
     return list.sort((a, b) => (Number(b.starredAt) || 0) - (Number(a.starredAt) || 0));
   }
@@ -1512,6 +1535,7 @@ function switchView(view) {
   pendingUnstar.clear();                // и снятые в избранном карточки больше не держим
   state.framedIds.clear();              // в новом разделе рамка ещё ни на чём не была
   resetSnapshot();                      // в новой ленте список собирается заново
+  heldItems.clear();                    // новый раздел — показываем свежий состав, без «удержанных»
   // «Читают сейчас» — живой блок: при открытии сразу спрашиваем Хабр.
   // Иначе до десяти минут показывали бы вчерашний состав, а статьи,
   // ушедшие из блока на сайте, оставались бы в ленте.
@@ -2757,6 +2781,8 @@ async function markRead(ids, read, { silent = false } = {}) {
   // интерфейс не должен ждать сервер и не должен «терять» отметку.
   const items = state.data.items ?? [];
   for (const item of items) if (ids.includes(item.id)) item.read = read;
+  // Удержанные статьи витрины живут отдельно от state.data — отметку ставим и им.
+  for (const item of heldItems.values()) if (ids.includes(item.id)) item.read = read;
   for (const id of ids) syncReadButton(id, read);   // метка на кнопке — сразу
   updateFooterStats();
   for (const id of ids) pendingReads.set(id, read);
@@ -4973,7 +4999,7 @@ async function start() {
   hideLoader();                           // данные пришли — снимаем затемнение
 }
 
-if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, renderSidebar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, viewKey };
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, renderSidebar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, rememberData, render, viewKey };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)
