@@ -2400,12 +2400,16 @@ async function ensureBodiesNeeded(force = false) {
   // Режим Fever: при листании тексты не докачиваем вовсе — только когда
   // пользователь сам раскрыл статью (тогда вызывается с force).
   if (feverMode() && !state.bodiesAllowed && !force) return;
-  if (state.loadingBodies) return;
+  // Если загрузка уже идёт, ждём её, а не выходим сразу: раньше второй вызов
+  // (например, из expandItem) возвращался мгновенно, и карточка оставалась
+  // с пустым телом — при том что первая загрузка ещё продолжалась.
+  if (state.loadingBodies) return state.bodiesPromise ?? undefined;
   if (state.scrolling) { state.deferredBodies = true; return; }
   const items = visibleItems().slice(0, state.limit);
   const need = items.filter((i) => isExpanded(i) && !isBodyLoaded(i.id)).map((i) => i.id);
   if (!need.length) return;
   state.loadingBodies = true;
+  state.bodiesPromise = (async () => {
   try {
     // Свой таймаут: зависший запрос раньше оставлял «Загрузка текста…» навсегда.
     state.bodyRetryCount = 0;                 // тела пришли — счётчик повторов сбрасываем
@@ -2440,7 +2444,10 @@ async function ensureBodiesNeeded(force = false) {
     }
   } finally {
     state.loadingBodies = false;
+    state.bodiesPromise = null;
   }
+  })();
+  return state.bodiesPromise;
 }
 
 // ------------------------------------------------------------------ докачка
@@ -2486,7 +2493,10 @@ async function expandItem(id) {
   state.collapsedItems.delete(id);
   state.expandedItems.add(id);
   if (!item.read && state.prefs.readOnExpand && autoReadAllowed(id)) markRead([id], true);
-  if (feverMode()) { state.bodiesAllowed = true; ensureBodiesNeeded(true); }
+  // Fever: раскрытие статьи пользователем разрешает докачку текстов. Раньше здесь
+  // же запускалась загрузка без await, второй вызов ниже выходил по «уже грузим»,
+  // и карточка оставалась с пустым телом.
+  if (feverMode()) state.bodiesAllowed = true;
   if (!isBodyLoaded(id)) {
     renderList();                       // покажет «Загрузка текста…»
     await ensureBodiesNeeded();
