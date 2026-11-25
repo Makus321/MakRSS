@@ -1,0 +1,21 @@
+# Единые правила для редакторов: без них файлы расходятся по переводам строк
+# и BOM (на Windows это уже случалось — .ps1 без BOM ломались при разборе).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{css,js,mjs,json,html,md}]
+indent_style = space
+indent_size = 2
+
+[*.ps1]
+end_of_line = crlf
+# PowerShell 5.1 читает .ps1 с кириллицей только при наличии BOM — деталь описана в AGENTS.md.
+charset = utf-8-bom
+
+[*.{cmd,bat}]
+end_of_line = crlf

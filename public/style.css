@@ -544,7 +544,7 @@ body.dragging .drop-hint.over { border-color: var(--accent); color: var(--accent
 .search { flex: 1; min-width: 90px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font-size: var(--fs-12); }
 .search:focus { border-color: var(--accent); }
 /* Выпадающие списки: рисуем рамку сами (appearance: none), иначе браузер при
-   наведении и в фокусе показывал свою непруглённую рамку поверх нашей. */
+   наведении и в фокусе показывал свою нескруглённую рамку поверх нашей. */
 select {
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
   padding: 4px 20px 4px 8px; font-size: var(--fs-12); cursor: pointer;
