@@ -1595,8 +1595,19 @@ async function refreshHabrNow({ force = false } = {}) {
     if (addedIds.length || removedIds.length) {
       log(`«Читают сейчас»: пришло ${addedIds.length}, ушло ${removedIds.length} (источник: ${result.source || 'нет'})`);
     }
-    // При самой первой загрузке «новых» нет: сравнивать не с чем.
-    db.items[HABR_NOW_ID] = fresh.map((item) => ({ ...item, addedAt: new Date().toISOString() }));
+    // Переносим служебные пометки статей, которые остались в блоке: иначе каждая
+    // ротация стирала «дочитано до» у комментариев и метку «скачан», и «+N новых»
+    // больше не появлялось.
+    const prevById = new Map((db.items[HABR_NOW_ID] ?? []).map((item) => [item.id, item]));
+    const KEEP_META = ['commentsSeenMaxId', 'commentsSeenCount', 'commentsSeenAt', 'commentsCountAt', 'hasFull', 'fullTriedAt', 'coverTriedAt'];
+    const withMeta = (item) => {
+      const prev = prevById.get(item.id);
+      if (!prev) return item;
+      const merged = { ...item };
+      for (const key of KEEP_META) if (prev[key] !== undefined) merged[key] = prev[key];
+      return merged;
+    };
+    db.items[HABR_NOW_ID] = fresh.map((item) => ({ ...withMeta(item), addedAt: new Date().toISOString() }));
     // Тела ушедших статей больше не нужны: чистим, иначе папка content растёт.
     await store.pruneContent(HABR_NOW_ID, new Set(fresh.map((item) => item.id))).catch(() => {});
     // Свежие статьи блока сразу ставим в очередь на счётчики комментариев:
