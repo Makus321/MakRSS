@@ -38,6 +38,24 @@
   --accent-contrast: #1b1206;
   --star: #f5c451;
   --shadow: 0 18px 40px rgba(0, 0, 0, .55);
+  /* Цвета состояний: ошибка и успех. В светлой теме переопределены ниже —
+     на белом эти оттенки дают контраст ниже AA. */
+  --danger: #e5573f;
+  --ok: #4a9c62;
+  /* Шкала слоёв: одна точка правды вместо чисел, разбросанных по файлу. */
+  --z-sticky: 10;      /* прилипающие заголовки внутри панелей */
+  --z-floating: 30;    /* плашка «новых статей» — ниже дерева */
+  --z-backdrop: 40;    /* затемнение под выдвинутым деревом */
+  --z-sidebar: 45;     /* само дерево подписок */
+  --z-modal: 50;       /* модальные окна */
+  --z-menu: 48;        /* меню «⋯»: выше дерева (45), но ниже модальных окон (50) */
+  --z-toast: 60;       /* всплывающие сообщения */
+  --z-loader: 80;      /* полноэкранный лоадер */
+  --z-lightbox: 90;    /* просмотр картинки */
+  /* Значения по умолчанию для переменных, которые раньше читались без объявления. */
+  --actions-stop: 140px;
+  --actions-min: 88px;
+  --badge-text: #2b2000;
   --w-side: 260px;
   --font-tree: 13px;
   --font-article: 14.5px;
@@ -62,6 +80,9 @@
   --accent-contrast: #1b1206;
   --star: #c98a00;
   --badge-bg: #ffd166;      /* плашка логина: светлая, чтобы тёмный текст читался */
+  /* На белом #e5573f даёт 3.6, а #4a9c62 — 3.4 (ниже AA); затемняем до 5.4 и 5.1. */
+  --danger: #c0392b;
+  --ok: #2e7d46;
   --shadow: 0 18px 40px rgba(20, 25, 35, .18);
   /* В светлой теме обычные статьи — на белом; прочитанные выглядят так же. */
   --article-bg: var(--panel);
@@ -347,7 +368,7 @@ a { color: var(--accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .add-status { font-size: calc(12px * var(--ui-scale, 1)); color: var(--muted); padding: 4px 12px 0; min-height: 16px; }
-.add-status.err { color: #e5573f; }
+.add-status.err { color: var(--danger); }
 
 .nav { display: flex; flex-direction: column; padding: 6px 8px 2px; }
 .nav-item {
@@ -461,7 +482,7 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
   color: var(--muted); cursor: pointer; font-size: calc(11px * var(--ui-scale, 1)); box-sizing: border-box;
 }
 .row-actions button:hover { color: var(--accent); border-color: var(--accent); }
-.row-actions button.del:hover { color: #e5573f; border-color: #e5573f; }
+.row-actions button.del:hover { color: var(--danger); border-color: var(--danger); }
 .drop-hint { display: none; margin: 0 12px 8px; padding: 6px; text-align: center; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: calc(11px * var(--ui-scale, 1)); }
 body.dragging .drop-hint { display: block; }
 body.dragging .drop-hint.over { border-color: var(--accent); color: var(--accent); }
@@ -483,7 +504,7 @@ body.dragging .drop-hint.over { border-color: var(--accent); color: var(--accent
 /* «Появились новые статьи» — плавающая плашка сверху. Раньше это была строка в
    шапке: во время чтения она появлялась и сдвигала весь список вниз. */
 .new-row {
-  position: fixed; z-index: 45; top: 10px; left: 50%; transform: translateX(-50%);
+  position: fixed; z-index: var(--z-floating); top: 10px; left: 50%; transform: translateX(-50%);
   /* Ширина подстраивается под экран: на телефоне почти вся ширина, на
      компьютере — заметная плашка, а не крошечная полоска. */
   width: min(560px, calc(100vw - 24px)); margin: 0;
@@ -753,7 +774,7 @@ body.dragging .tree-tail { display: flex; }
 .comment-body td, .comment-body th { border: 1px solid var(--line); padding: 3px 7px; }
 
 /* -------------------------------------------------------------- служебное */
-.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; z-index: 50; overflow-y: auto; }
+.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; z-index: var(--z-modal); overflow-y: auto; }
 .modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); width: min(760px, 100%); }
 .modal-box.small { width: min(380px, 100%); margin-top: 8vh; }
 /* Шапка окна остаётся на месте при прокрутке: в настройках список длинный,
@@ -761,7 +782,7 @@ body.dragging .tree-tail { display: flex; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line);
   /* Фон шапки отличается от тела окна, иначе при прокрутке она сливается
      с содержимым и «теряется». */
-  position: sticky; top: 0; z-index: 20;      /* выше содержимого окна */
+  position: sticky; top: 0; z-index: var(--z-sticky);      /* выше содержимого окна */
   background: var(--panel-2);
   border-radius: 14px 14px 0 0;
   box-shadow: 0 6px 10px -8px rgba(0, 0, 0, .55); }
@@ -796,10 +817,10 @@ body.dragging .tree-tail { display: flex; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .fever-info, .queue-info { font-size: calc(12px * var(--ui-scale, 1)); color: var(--muted); margin-top: 10px; line-height: 1.6; }
 .fever-info code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; user-select: all; }
-.login-error { color: #e5573f; font-size: calc(12px * var(--ui-scale, 1)); min-height: 16px; margin: 4px 0; }
+.login-error { color: var(--danger); font-size: calc(12px * var(--ui-scale, 1)); min-height: 16px; margin: 4px 0; }
 
-.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: calc(12px * var(--ui-scale, 1)); box-shadow: var(--shadow); z-index: 60; pointer-events: none; }
-.toast.err { border-color: #e5573f; color: #e5573f; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: calc(12px * var(--ui-scale, 1)); box-shadow: var(--shadow); z-index: var(--z-toast); pointer-events: none; }
+.toast.err { border-color: var(--danger); color: var(--danger); }
 /* Подсказки о теме — сверху: снизу у телефона системная полоса и кнопки. */
 .toast.top { bottom: auto; top: 14px; }
 
@@ -821,13 +842,13 @@ body.dragging .tree-tail { display: flex; }
   .splitter { display: none; }
 
   .sidebar {
-    position: fixed; top: 0; bottom: 0; left: 0; width: min(86vw, 340px); z-index: 45;
+    position: fixed; top: 0; bottom: 0; left: 0; width: min(86vw, 340px); z-index: var(--z-sidebar);
     transform: translateX(-102%); transition: transform .22s ease; box-shadow: var(--shadow);
     border-right: 1px solid var(--line);
   }
   body.tree-open .sidebar { transform: none; }
   body.tree-open .tree-backdrop {
-    position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 40; display: block;
+    position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: var(--z-backdrop); display: block;
   }
 
   .menu-btn {
@@ -995,7 +1016,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 
 /* Меню «⋯»: аккуратная панель вместо россыпи кнопок в шапке. */
 .head-menu {
-  position: absolute; right: 12px; top: calc(100% + 6px); z-index: 40;
+  position: absolute; right: 12px; top: calc(100% + 6px); z-index: var(--z-menu);
   width: min(280px, calc(100vw - 24px));
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
   box-shadow: 0 12px 30px -12px rgba(0, 0, 0, .55);
@@ -1105,7 +1126,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 }
 
 /* Панель меню «⋯» привязана к шапке на любой ширине экрана. */
-.head-menu { z-index: 60; }
 
 /* Миниатюра всегда занимает своё место, даже пока грузится: иначе при подгрузке
    новых карточек список «прыгает» вниз. */
@@ -1316,8 +1336,8 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .comment-delta { color: var(--accent); font-weight: 700; }
 /* Значки в подвале: прочитано, очередь отправки, состояние ошибок. */
 .foot-ico { opacity: .8; cursor: help; }
-.foot-ico.ok { color: #4a9c62; }
-.foot-ico.warn { color: #e5573f; }
+.foot-ico.ok { color: var(--ok); }
+.foot-ico.warn { color: var(--danger); }
 /* Место под картинку статьи: пока её нет, видно рамку с кнопкой «Загрузить».
    Так в длинных статьях понятно, где будет изображение, и его можно догрузить. */
 .img-slot {
@@ -1333,7 +1353,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   border-radius: 8px; padding: 6px 12px; cursor: pointer;
 }
 .img-slot .img-load:hover { border-color: var(--accent); }
-.img-slot[data-failed] { border-color: #e5573f; }
+.img-slot[data-failed] { border-color: var(--danger); }
 
 /* Строка версии в подвале: на 30% меньше обычного текста, чтобы не отвлекала. */
 #sidebar-version { font-size: 10px; opacity: .8; }
@@ -1360,7 +1380,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
    приложения или статьи при переключении ленты. Раньше на экране был просто
    пустой интерфейс, а в ленте — надпись «Загружаю статьи…» вверху. */
 .app-loader {
-  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+  position: fixed; inset: 0; z-index: var(--z-loader); display: grid; place-items: center;
   background: rgba(8, 12, 18, .55);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
@@ -1384,7 +1404,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
    Повторный клик по картинке или фону закрывает просмотр.
    Ширину колонки подставляет скрипт (openLightbox), здесь — только оформление. */
 .lightbox {
-  position: fixed; inset: 0; z-index: 90;
+  position: fixed; inset: 0; z-index: var(--z-lightbox);
   display: grid; place-items: center;
   background: rgba(4, 8, 12, .92);
   padding: 12px;
