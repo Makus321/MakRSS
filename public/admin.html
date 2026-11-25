@@ -16,7 +16,8 @@
   .wrap { max-width:1080px; margin:0 auto; padding:20px; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:16px; }
   .card h2 { font-size:14px; margin:0 0 12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
-  table { width:100%; border-collapse:collapse; }
+  .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  table { width:100%; border-collapse:collapse; min-width:760px; }
   th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); font-size:13.5px; vertical-align:middle; }
   th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
   tr:last-child td { border-bottom:none; }
@@ -25,7 +26,9 @@
   .badge.admin { color:var(--accent); border-color:var(--accent); }
   .badge.off { color:var(--danger); border-color:var(--danger); }
   input, select { background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; font-size:13.5px; }
-  input:focus, select:focus { outline:none; border-color:var(--accent); }
+  input:focus, select:focus { border-color:var(--accent); }
+  /* Клавиатурный фокус: заметная рамка у кнопок, ссылок и полей. */
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .btn { background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 12px; font:inherit; font-size:13.5px; cursor:pointer; }
   .btn:hover { border-color:var(--accent); color:var(--accent); }
   .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
@@ -34,6 +37,8 @@
   .btn:disabled { opacity:.5; cursor:default; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .grid-form { display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap:10px; align-items:end; }
+  .grid-form.single { grid-template-columns: 1fr; }
+  .remember { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; }
   label.field { display:flex; flex-direction:column; gap:5px; font-size:12.5px; color:var(--muted); }
   code { background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-size:12.5px; overflow-wrap:anywhere; }
   .msg { margin:10px 0 0; font-size:13px; min-height:18px; }
@@ -45,6 +50,14 @@
   .actions .btn { padding:5px 9px; font-size:12.5px; }
   .key-cell { max-width:240px; }
   .stats { white-space:nowrap; }
+  /* Телефон: шапка переносится по строкам, поля и таблица не вылезают за экран. */
+  @media (max-width: 640px) {
+    header { flex-wrap:wrap; gap:8px; padding:10px 12px; }
+    header h1 { font-size:15px; width:100%; }
+    .wrap { padding:12px; }
+    .card { padding:12px 14px; }
+    .login { margin:6vh auto; }
+  }
 </style>
 </head>
 <body>
@@ -62,12 +75,12 @@
   <div class="login" id="login-box" hidden>
     <div class="card">
       <h2>Вход</h2>
-      <div class="grid-form" style="grid-template-columns:1fr">
+      <div class="grid-form single">
         <label class="field">Логин<input id="login-name" autocomplete="username" spellcheck="false"></label>
         <label class="field">Пароль<input id="login-pass" type="password" autocomplete="current-password"></label>
         <div class="row">
           <button class="btn primary" id="login-btn">Войти</button>
-          <label class="muted" style="font-size:12.5px"><input type="checkbox" id="login-remember" checked> запомнить меня</label>
+          <label class="muted remember"><input type="checkbox" id="login-remember" checked> запомнить меня</label>
         </div>
       </div>
       <div class="msg err" id="login-msg"></div>
@@ -94,6 +107,7 @@
 
     <div class="card">
       <h2>Пользователи</h2>
+      <div class="table-wrap">
       <table>
         <thead>
           <tr>
@@ -103,6 +117,7 @@
         </thead>
         <tbody id="users"></tbody>
       </table>
+      </div>
       <div class="msg" id="users-msg"></div>
     </div>
 
