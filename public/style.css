@@ -601,7 +601,18 @@ select:focus-visible { outline: none; }
 
 .a-excerpt { grid-column: 1 / -1; grid-row: 3; }
 .article.compact-thumb .a-thumb { display: block; }
-.a-thumb { display: none; width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1)); max-height: 70vh; object-fit: cover; border-radius: 8px; background: var(--panel-2); }
+/* Превью одинакового размера во всей ленте: фиксированная ширина (её задаёт
+   раскладка) плюс одна пропорция, а картинка заполняет рамку через object-fit:
+   cover. Раньше ширина была «auto + max-width», и узкие фото выглядели мельче
+   остальных — карточки шли разного размера. */
+.a-thumb {
+  display: none;
+  aspect-ratio: 4 / 3;
+  height: auto;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
 /* Заголовок статьи — ссылка, но без подчёркивания; жирный всегда, цвет — как у текста
    статьи (белый в тёмной теме, чёрный в светлой), без оттенка гаммы. */
 /* Заголовок берёт размер из того вида, который выбран у ленты: в кратком виде —
@@ -890,11 +901,10 @@ body.dragging .tree-tail { display: flex; }
   .a-head { display: block; }
   .a-excerpt { grid-column: auto; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
   .a-body { text-align: left; hyphens: none; }
-  .a-thumb { float: left; margin: 2px 8px 6px 0; }
+.a-thumb { float: left; width: 30%; margin: 2px 8px 6px 0; }
   /* Обтекание чистим в конце карточки, а не в конце шапки: иначе текст начинался
      бы ниже картинки. */
   .article::after { content: ""; display: block; clear: both; }
-  .a-thumb { width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1)); max-height: 70vh; object-fit: cover; }
   /* На узком экране картинка обтекается текстом: длинный заголовок идёт под ней,
      а не сжимается в узкую колонку справа от картинки. */
   /* Четвёртая кнопка — переход к следующей статье — только на телефоне, где панель
@@ -1126,10 +1136,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Миниатюра всегда занимает своё место, даже пока грузится: иначе при подгрузке
    новых карточек список «прыгает» вниз. */
 .a-thumb { background: var(--panel-2); }
-@media (max-width: 560px) {
-  .a-thumb { width: auto; max-width: 30%; height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1)); max-height: 70vh; object-fit: cover; flex: none; }
-}
-
 .new-row .note { flex: 1 1 auto; min-width: 0; }
 .new-row #new-show { margin-left: auto; }
 
@@ -1298,10 +1304,16 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* На сенсорных экранах карточка — обычный поток с плавающим превью, поэтому
    строке метаданных нужно очищать обтекание: она начинается от левого края. */
 @media (max-width: 699px) {
-  /* .a-main «растворяется»: заголовок и мета становятся прямыми детьми шапки,
-     поэтому мета может очистить обтекание и встать под превью во всю ширину. */
-  .article.has-thumb .a-main { display: contents; }
-  
+  .article.has-thumb .a-excerpt,
+  .article.has-thumb .a-meta { clear: both; }
+  .article.has-thumb .a-excerpt { display: -webkit-box; }
+  /* Те же пропорции, что и на широком экране: превью не «прыгает» по размеру. */
+  .article.has-thumb .a-thumb {
+    width: 34%;
+    aspect-ratio: 4 / 3;
+    height: auto;
+    object-fit: cover;
+  }
 }
 /* Кнопка-ссылка на месте встроенного плеера: видео открывается в браузере,
    страница не загружает ни одного кадра. */
@@ -1317,37 +1329,20 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
    сжималось до 15% при мобильных отступах. */
 @media (min-width: 901px) and (pointer: fine) {
   .article.has-thumb .a-head { display: flex; align-items: flex-start; gap: 12px; }
-  /* Превью одной ширины: узкая картинка получает поля по бокам, а не сжимает колонку. */
-  /* Высота превью равна высоте текста: карточка не бывает выше своего содержимого. */
+  /* Одинаковая ширина и одна пропорция у всех превью: картинка заполняет рамку,
+     поэтому карточки идут ровно, независимо от исходных пропорций фото. */
   .article.has-thumb .a-thumb {
     flex: 0 0 15%;
     width: 15%;
+    aspect-ratio: 16 / 10;
     height: auto;
-    /* Ограничение по высоте: вертикальная картинка иначе растягивала карточку. */
-    max-height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1));
+    object-fit: cover;
     align-self: flex-start;
-    object-fit: contain;
-    background: var(--panel-2);
     margin: 0;
   }
   .article.has-thumb .a-main { flex: 1 1 auto; min-width: 0; }
   .article.has-thumb .a-excerpt { grid-column: auto; grid-row: auto; clear: none; }
 }
-/* Телефон: краткий текст и мета начинаются от левого края карточки, под превью.
-   Превью не обрезаем: высота по пропорциям图片, ограничение только сверху. */
-@media (max-width: 699px) {
-  .article.has-thumb .a-excerpt,
-  .article.has-thumb .a-meta { clear: both; }
-  .article.has-thumb .a-excerpt { display: -webkit-box; }
-  .article.has-thumb .a-thumb {
-    width: auto;
-    max-width: 34%;
-    height: auto;
-    max-height: calc((var(--excerpt-lines, 4) + 1.8) * var(--font-excerpt) * 1.65 * var(--lh-scale, 1));
-    object-fit: contain;
-  }
-}
-/* Видео из постов: обычный плеер, без предзагрузки. */
 .video-inline { width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }
 
 /* «+3» у счётчика комментариев в карточке: сколько прибавилось после отметки. */
