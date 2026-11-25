@@ -458,10 +458,13 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
 .feed-row.virtual-row .fav-letter { color: var(--accent); }
 .feed-row .row-tag {
   flex: 0 0 auto; white-space: nowrap;
-  margin-left: 6px; padding: 0 5px;
+  margin-left: 6px; padding: 1px 6px;
   font-size: var(--fs-10); font-style: normal; letter-spacing: .04em; text-transform: uppercase;
-  color: var(--muted);
-  border: 1px solid var(--line); border-radius: 6px;
+  /* Заливка и обводка: без них плашка сливалась со строкой дерева. Цвет текста —
+     обычный: акцент на акцентной заливке даёт в светлой теме 3.2 (ниже AA). */
+  color: var(--text);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent); border-radius: 999px;
   vertical-align: 1px;
 }
 .feed-row.virtual-row.active .row-tag { color: var(--accent); border-color: var(--accent); }
