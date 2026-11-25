@@ -1278,7 +1278,9 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .list.comfortable .a-body { padding: 6px 16px 18px; font-size: var(--font-article); }
 .list.comfortable .a-meta { gap: 10px; }
 @media (max-width: 900px) {
-  .list.comfortable { padding: 6px 2px 70vh; }
+  /* Тот же запас снизу, что у обычного списка: иначе последнюю статью нельзя
+  прокрутить выше середины экрана, и отметка «прочитано» при прокрутке не срабатывает. */
+  .list.comfortable { padding: 6px 2px calc(100dvh + 60px); }
   .list.comfortable .article { margin-bottom: 10px; }
   .list.comfortable .a-head { padding: 12px 46px 12px 12px; row-gap: 8px; }
   .list.comfortable .a-excerpt { margin-top: 4px; }
