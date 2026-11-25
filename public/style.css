@@ -396,23 +396,11 @@ a { color: var(--accent); }
 
 /* Режим «невидимые рамки» (⚙ → Вид): у карточек и элементов управления рамок нет,
    остаётся только подсветка активной статьи. */
-body.no-borders .article,
-body.no-borders .card,
-body.no-borders .modal-box,
-body.no-borders .seg,
-body.no-borders .btn,
-body.no-borders .icon-btn,
-body.no-borders .mini-btn,
-body.no-borders input,
-body.no-borders select,
-body.no-borders textarea,
-body.no-borders .flag,
-body.no-borders .badge,
-body.no-borders .a-nav .btn { border-color: transparent; }
-body.no-borders .article:hover { border-color: transparent; }
+/* Обнуляем сам цвет рамок: тогда режим действует на все элементы сразу и не
+   зависит от порядка правил в файле (раньше список селекторов перебивался ниже). */
+body.no-borders { --line: transparent; }
+/* Активная статья и перетаскивание разделителя остаются видимыми. */
 body.no-borders .article.active { border-color: var(--accent); }
-/* Граница между деревом и списком тоже убирается — остаётся только подсветка при перетаскивании. */
-body.no-borders .splitter { background: transparent; }
 body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background: var(--accent); }
 .title-actions { display: flex; gap: 4px; }
 .mini-field { display: flex; align-items: center; gap: 4px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--muted); white-space: nowrap; }
@@ -630,6 +618,7 @@ select:focus-visible { outline: none; }
 .a-title a:hover { color: var(--accent); }
 .a-excerpt { color: var(--article-text); font-size: var(--font-excerpt); margin: 0; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
   /* Тот же интервал, что у раскрытой статьи: иначе краткий и полный вид заметно расходятся. */
+  -webkit-line-clamp: var(--excerpt-lines, 4);
   line-height: calc(1.65 * var(--lh-scale, 1)); text-align: justify; hyphens: auto; }
 .article.expanded .a-excerpt { display: none; }
 .a-meta { font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -1146,15 +1135,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Ширину карточки задаёт масштаб («− % +»): фиксировать её нельзя, иначе
    ползунок перестаёт действовать. */
 
-/* Анонс в кратком виде: жёстко задаём box-модель, иначе ограничение строк
-   (-webkit-line-clamp) игнорируется и видна одна строка. */
-.a-excerpt {
-  display: -webkit-box !important;
-  -webkit-box-orient: vertical !important;
-  -webkit-line-clamp: var(--excerpt-lines, 4) !important;
-  overflow: hidden;
-}
-
 /* Шапка настроек: «Выйти из аккаунта» слева от «Закрыть». */
 /* Кнопки шапки лежат внутри .head-actions, поэтому поднимаем их над sticky-шапкой:
    раньше нижняя часть кнопки «Закрыть» перекрывалась телом окна и не нажималась. */
@@ -1214,11 +1194,13 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 /* Телефон: карточка и текст — во всю ширину экрана. */
 @media (max-width: 900px) {
   .list { padding: 2px 2px calc(100dvh + 60px); }
+  /* Правило идёт ниже базового .article, поэтому !important не нужен: на телефоне
+     ширина карточки не должна зависеть от ползунка «ширина текста». */
   .article {
-    max-width: 100% !important;
-    width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
+    max-width: 100%;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
   }
   /* Плавающие кнопки шириной ~46px: без этого отступа заголовок уходил под них. */
   .a-head { padding-right: 46px; }
