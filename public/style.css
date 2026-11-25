@@ -1311,8 +1311,11 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .embed-alt { font-size: calc(11px * var(--ui-scale, 1)); color: var(--muted); align-self: flex-start; }
 .embed-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; background: #000; }
 /* Карточка с превью на широком экране: картинка слева, справа — заголовок,
-   мета и краткий текст (всё в одной колонке, поэтому текст идёт рядом с картинкой). */
-@media (min-width: 700px) {
+   мета и краткий текст (всё в одной колонке, поэтому текст идёт рядом с картинкой).
+   Применяем только к широким экранам с мышью: на планшетах (pointer: coarse)
+   действует мобильная раскладка 900px, иначе правила смешивались и превью
+   сжималось до 15% при мобильных отступах. */
+@media (min-width: 901px) and (pointer: fine) {
   .article.has-thumb .a-head { display: flex; align-items: flex-start; gap: 12px; }
   /* Превью одной ширины: узкая картинка получает поля по бокам, а не сжимает колонку. */
   /* Высота превью равна высоте текста: карточка не бывает выше своего содержимого. */
