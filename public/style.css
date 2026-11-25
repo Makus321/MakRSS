@@ -402,6 +402,12 @@ body.no-borders { --line: transparent; }
 /* Активная статья и перетаскивание разделителя остаются видимыми. */
 body.no-borders .article.active { border-color: var(--accent); }
 body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background: var(--accent); }
+/* Клавиатурный фокус: одна подсветка для всех интерактивных элементов. Раньше
+   у полей и списков стоял outline: none, то есть фокус не был виден вообще. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .title-actions { display: flex; gap: 4px; }
 .mini-field { display: flex; align-items: center; gap: 4px; font-size: calc(12px * var(--ui-scale, 1)); color: var(--muted); white-space: nowrap; }
 /* Списки в шапке компактнее, но справа оставляем место под свою стрелку. */
@@ -517,13 +523,13 @@ body.dragging .drop-hint.over { border-color: var(--accent); color: var(--accent
 .filter-item .feed-name { color: var(--muted); font-size: calc(11.5px * var(--ui-scale, 1)); display: block; margin: 2px 0 4px; }
 .filter-item .mode { font-weight: 600; margin-right: 4px; }
 .filter-actions { display: flex; gap: 6px; margin-top: 4px; }
-.search { flex: 1; min-width: 90px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; outline: none; font-size: calc(12px * var(--ui-scale, 1)); }
+.search { flex: 1; min-width: 90px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font-size: calc(12px * var(--ui-scale, 1)); }
 .search:focus { border-color: var(--accent); }
 /* Выпадающие списки: рисуем рамку сами (appearance: none), иначе браузер при
    наведении и в фокусе показывал свою непруглённую рамку поверх нашей. */
 select {
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
-  padding: 4px 20px 4px 8px; font-size: calc(12px * var(--ui-scale, 1)); outline: none; cursor: pointer;
+  padding: 4px 20px 4px 8px; font-size: calc(12px * var(--ui-scale, 1)); cursor: pointer;
   /* Без родного оформления список сам не резервирует место под содержимое,
      поэтому задаём минимальную ширину — иначе значение обрезается стрелкой. */
   min-width: 52px; box-sizing: border-box;
@@ -534,7 +540,6 @@ select {
 /* Узкие списки в шапке («Строк», «Порядок») — им нужен запас под текст. */
 .mini-field select { min-width: 58px; text-align: left; }
 select:hover, select:focus, select:active { border-radius: 8px; border-color: var(--accent); }
-select:focus-visible { outline: none; }
 .btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 11px; cursor: pointer; font-size: calc(12px * var(--ui-scale, 1)); white-space: nowrap; user-select: none; touch-action: manipulation; }
 .btn:hover { border-color: var(--accent); color: var(--accent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast, #1b1206); font-weight: 600; }
@@ -726,6 +731,7 @@ body.dragging .tree-tail { display: flex; }
    лёгкий фон и метка. Старые остаются как были — видно, кто кому отвечает. */
 .comment.is-new {
   border-left: 3px solid var(--accent);
+  background: var(--accent-soft);      /* фоллбэк, если color-mix не поддерживается */
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   border-radius: 0 8px 8px 0;
 }
@@ -798,7 +804,7 @@ body.dragging .tree-tail { display: flex; }
 .row-line.check { justify-content: flex-start; }
 .row-line input[type="text"], .row-line input[type="password"] {
   flex: 1; max-width: 320px; background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: 8px; padding: 5px 9px; outline: none; font-size: calc(13px * var(--ui-scale, 1));
+  border-radius: 8px; padding: 5px 9px; font-size: calc(13px * var(--ui-scale, 1));
 }
 .row-line input:focus { border-color: var(--accent); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
@@ -1380,7 +1386,11 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 }
 @keyframes app-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .app-spinner { animation-duration: 2.4s; }
+  /* Индикаторы работы замедляем: по ним видно, что запрос идёт. */
+  .app-spinner, .icon-btn.spin, .btn.spin { animation-duration: 2.4s; }
+  /* Декоративное движение убираем полностью: подсветка, выезд дерева, сдвиг иконки. */
+  .article, .a-actions, .a-actions.floating, .sidebar, .refresh-btn:active svg { transition: none; }
+  .refresh-btn:active svg { transform: none; }
 }
 /* Просмотр картинки: затемнение и изображение шириной с колонку текста статьи.
    Повторный клик по картинке или фону закрывает просмотр.
@@ -1402,7 +1412,8 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   display: block;
   width: 100%; height: auto;
   max-width: min(100vw - 24px, 1600px);
-  max-height: calc(100vh - 24px);
+  max-height: calc(100vh - 24px);      /* фоллбэк: 100dvh есть не везде */
+  max-height: calc(100dvh - 24px);
   object-fit: contain;
   border-radius: 8px;
   background: var(--panel);
@@ -1459,8 +1470,7 @@ body.lightbox-open { overflow: hidden; }
   display: block; box-sizing: border-box;
   width: 100%; max-width: 100%; min-width: 0;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
-  padding: 7px 10px; outline: none;
-  font-size: calc(14px * var(--ui-scale, 1)); color: var(--text);
+  padding: 7px 10px; font-size: calc(14px * var(--ui-scale, 1)); color: var(--text);
 }
 #prompt-modal #prompt-input:focus { border-color: var(--accent); }
 
