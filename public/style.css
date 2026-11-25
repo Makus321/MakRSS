@@ -22,7 +22,7 @@
   --font-ui: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
   --bg-palette: #14161a;          /* цвет темы: лента в режиме «акцент для интерфейса» */
   --bg: #14161a;
-  --panel-palette: #1a1d23;       /* цвет темы: панель и карточки в режиме «акцент для статей» */
+  /* цвет темы: панель и карточки в режиме «акцент для статей» */
   --panel: #1a1d23;
   --panel-2: #21252c;
   --panel-3: #171a1f;
@@ -48,7 +48,7 @@
 :root[data-theme="light"] {
   --bg-palette: #f5f6f8;
   --bg: #f5f6f8;
-  --panel-palette: #ffffff;
+  
   --panel: #ffffff;
   --panel-2: #eef0f4;
   --panel-3: #ffffff;
@@ -70,27 +70,27 @@
 
 /* ------------------------------------------- цветовые гаммы (по 8 на тему) */
 /* Тёмные */
-:root[data-theme="dark"][data-palette="graphite"] { --bg:#14161a; --bg-palette:#14161a; --panel:#1a1d23; --panel-palette:#1a1d23; --panel-2:#21252c; --panel-3:#171a1f; --line:#2b3038; --text:#e6e8ec; --muted:#8b929e; --accent:#f97316; --accent-soft:rgba(249,115,22,.16); --star:#f5c451; }
-:root[data-theme="dark"][data-palette="blue"]     { --bg:#0f1720; --bg-palette:#0f1720; --panel:#141d28; --panel-palette:#141d28; --panel-2:#1b2735; --panel-3:#111a24; --line:#243040; --text:#e3eaf3; --muted:#8a99ab; --accent:#4c9aff; --accent-soft:rgba(76,154,255,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="green"]    { --bg:#101713; --bg-palette:#101713; --panel:#16201a; --panel-palette:#16201a; --panel-2:#1d2a22; --panel-3:#121b16; --line:#27352c; --text:#e4ece6; --muted:#8fa294; --accent:#3fbf7f; --accent-soft:rgba(63,191,127,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="violet"]   { --bg:#141020; --bg-palette:#141020; --panel:#1b1630; --panel-palette:#1b1630; --panel-2:#241d3d; --panel-3:#171328; --line:#322a52; --text:#eae6f7; --muted:#9b94b8; --accent:#a78bfa; --accent-soft:rgba(167,139,250,.18); --star:#fcd34d; }
-:root[data-theme="dark"][data-palette="amber"]    { --bg:#17130d; --bg-palette:#17130d; --panel:#201a11; --panel-palette:#201a11; --panel-2:#2a2216; --panel-3:#1a150e; --line:#3a2f1e; --text:#f0e9df; --muted:#a89a86; --accent:#f0a020; --accent-soft:rgba(240,160,32,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="cyan"]     { --bg:#0d1618; --bg-palette:#0d1618; --panel:#121f22; --panel-palette:#121f22; --panel-2:#18292d; --panel-3:#0f1a1d; --line:#23383d; --text:#e1eef0; --muted:#86a0a5; --accent:#2bc7d4; --accent-soft:rgba(43,199,212,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="rose"]     { --bg:#190f14; --bg-palette:#190f14; --panel:#22151b; --panel-palette:#22151b; --panel-2:#2c1c24; --panel-3:#1c1116; --line:#3d2831; --text:#f4e7ec; --muted:#b193a0; --accent:#f472b6; --accent-soft:rgba(244,114,182,.16); --star:#ffd166; }
-:root[data-theme="dark"][data-palette="forest"]   { --bg:#0e140f; --bg-palette:#0e140f; --panel:#131c15; --panel-palette:#131c15; --panel-2:#1a261c; --panel-3:#101812; --line:#24331f; --text:#e6efe4; --muted:#8fa78b; --accent:#8bc34a; --accent-soft:rgba(139,195,74,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="graphite"] { --bg:#14161a; --bg-palette:#14161a; --panel:#1a1d23; --panel-2:#21252c; --panel-3:#171a1f; --line:#2b3038; --text:#e6e8ec; --muted:#8b929e; --accent:#f97316; --accent-soft:rgba(249,115,22,.16); --star:#f5c451; }
+:root[data-theme="dark"][data-palette="blue"]     { --bg:#0f1720; --bg-palette:#0f1720; --panel:#141d28; --panel-2:#1b2735; --panel-3:#111a24; --line:#243040; --text:#e3eaf3; --muted:#8a99ab; --accent:#4c9aff; --accent-soft:rgba(76,154,255,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="green"]    { --bg:#101713; --bg-palette:#101713; --panel:#16201a; --panel-2:#1d2a22; --panel-3:#121b16; --line:#27352c; --text:#e4ece6; --muted:#8fa294; --accent:#3fbf7f; --accent-soft:rgba(63,191,127,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="violet"]   { --bg:#141020; --bg-palette:#141020; --panel:#1b1630; --panel-2:#241d3d; --panel-3:#171328; --line:#322a52; --text:#eae6f7; --muted:#9b94b8; --accent:#a78bfa; --accent-soft:rgba(167,139,250,.18); --star:#fcd34d; }
+:root[data-theme="dark"][data-palette="amber"]    { --bg:#17130d; --bg-palette:#17130d; --panel:#201a11; --panel-2:#2a2216; --panel-3:#1a150e; --line:#3a2f1e; --text:#f0e9df; --muted:#a89a86; --accent:#f0a020; --accent-soft:rgba(240,160,32,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="cyan"]     { --bg:#0d1618; --bg-palette:#0d1618; --panel:#121f22; --panel-2:#18292d; --panel-3:#0f1a1d; --line:#23383d; --text:#e1eef0; --muted:#86a0a5; --accent:#2bc7d4; --accent-soft:rgba(43,199,212,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="rose"]     { --bg:#190f14; --bg-palette:#190f14; --panel:#22151b; --panel-2:#2c1c24; --panel-3:#1c1116; --line:#3d2831; --text:#f4e7ec; --muted:#b193a0; --accent:#f472b6; --accent-soft:rgba(244,114,182,.16); --star:#ffd166; }
+:root[data-theme="dark"][data-palette="forest"]   { --bg:#0e140f; --bg-palette:#0e140f; --panel:#131c15; --panel-2:#1a261c; --panel-3:#101812; --line:#24331f; --text:#e6efe4; --muted:#8fa78b; --accent:#8bc34a; --accent-soft:rgba(139,195,74,.16); --star:#ffd166; }
 /* Монохром: только серые, без цветного акцента. */
-:root[data-theme="dark"][data-palette="mono"]     { --bg:#0f0f10; --bg-palette:#0f0f10; --panel:#171718; --panel-palette:#171718; --panel-2:#1f1f21; --panel-3:#141415; --line:#2c2c2e; --text:#e9e9ea; --muted:#8f8f92; --accent:#d6d6d9; --accent-soft:rgba(214,214,217,.16); --star:#d6d6d9; --accent-contrast:#111112; }
+:root[data-theme="dark"][data-palette="mono"]     { --bg:#0f0f10; --bg-palette:#0f0f10; --panel:#171718; --panel-2:#1f1f21; --panel-3:#141415; --line:#2c2c2e; --text:#e9e9ea; --muted:#8f8f92; --accent:#d6d6d9; --accent-soft:rgba(214,214,217,.16); --star:#d6d6d9; --accent-contrast:#111112; }
 /* Светлые */
-:root[data-theme="light"][data-palette="day"]     { --bg:#f5f6f8; --bg-palette:#f5f6f8; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#eef0f4; --panel-3:#ffffff; --line:#dcdfe6; --text:#1b1f27; --muted:#6b7280; --accent:#d9600c; --accent-soft:rgba(217,96,12,.12); --star:#c98a00; }
-:root[data-theme="light"][data-palette="sky"]     { --bg:#f2f6fb; --bg-palette:#f2f6fb; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#e8eef7; --panel-3:#ffffff; --line:#d5dfec; --text:#16202e; --muted:#5f6f83; --accent:#2563eb; --accent-soft:rgba(37,99,235,.12); --star:#d08700; --accent-contrast:#ffffff; }
-:root[data-theme="light"][data-palette="mint"]    { --bg:#f1f7f3; --bg-palette:#f1f7f3; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#e6f1ea; --panel-3:#ffffff; --line:#d2e3d8; --text:#14201a; --muted:#5b7266; --accent:#15803d; --accent-soft:rgba(21,128,61,.12); --star:#d08700; --accent-contrast:#ffffff; }
-:root[data-theme="light"][data-palette="lavender"]{ --bg:#f6f4fb; --bg-palette:#f6f4fb; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#ece8f8; --panel-3:#ffffff; --line:#dcd5ee; --text:#1d1830; --muted:#6c6588; --accent:#7c3aed; --accent-soft:rgba(124,58,237,.12); --star:#d08700; --accent-contrast:#ffffff; }
-:root[data-theme="light"][data-palette="sand"]    { --bg:#faf6ef; --bg-palette:#faf6ef; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#f3ebdd; --panel-3:#ffffff; --line:#e6d9c3; --text:#241d12; --muted:#7a6c56; --accent:#b45309; --accent-soft:rgba(180,83,9,.12); --star:#b45309; --accent-contrast:#ffffff; }
-:root[data-theme="light"][data-palette="ice"]     { --bg:#f0f7f9; --bg-palette:#f0f7f9; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#e4f1f4; --panel-3:#ffffff; --line:#cfe3e8; --text:#12222a; --muted:#5c7a83; --accent:#0e7490; --accent-soft:rgba(14,116,144,.12); --star:#d08700; --accent-contrast:#ffffff; }
-:root[data-theme="light"][data-palette="blush"]   { --bg:#fdf3f7; --bg-palette:#fdf3f7; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#f8e6ee; --panel-3:#ffffff; --line:#ecd3de; --text:#2a1620; --muted:#86606f; --accent:#db2777; --accent-soft:rgba(219,39,119,.12); --star:#d08700; --accent-contrast:#ffffff; }
-:root[data-theme="light"][data-palette="sepia"]   { --bg:#f7f4ec; --bg-palette:#f7f4ec; --panel:#fffdf7; --panel-palette:#fffdf7; --panel-2:#efe9da; --panel-3:#fffdf7; --line:#ded5c0; --text:#241f14; --muted:#7c7460; --accent:#5b6a27; --accent-soft:rgba(91,106,39,.14); --star:#b45309; --accent-contrast:#ffffff; }
+:root[data-theme="light"][data-palette="day"]     { --bg:#f5f6f8; --bg-palette:#f5f6f8; --panel:#ffffff; --panel-2:#eef0f4; --panel-3:#ffffff; --line:#dcdfe6; --text:#1b1f27; --muted:#6b7280; --accent:#d9600c; --accent-soft:rgba(217,96,12,.12); --star:#c98a00; }
+:root[data-theme="light"][data-palette="sky"]     { --bg:#f2f6fb; --bg-palette:#f2f6fb; --panel:#ffffff; --panel-2:#e8eef7; --panel-3:#ffffff; --line:#d5dfec; --text:#16202e; --muted:#5f6f83; --accent:#2563eb; --accent-soft:rgba(37,99,235,.12); --star:#d08700; --accent-contrast:#ffffff; }
+:root[data-theme="light"][data-palette="mint"]    { --bg:#f1f7f3; --bg-palette:#f1f7f3; --panel:#ffffff; --panel-2:#e6f1ea; --panel-3:#ffffff; --line:#d2e3d8; --text:#14201a; --muted:#5b7266; --accent:#15803d; --accent-soft:rgba(21,128,61,.12); --star:#d08700; --accent-contrast:#ffffff; }
+:root[data-theme="light"][data-palette="lavender"]{ --bg:#f6f4fb; --bg-palette:#f6f4fb; --panel:#ffffff; --panel-2:#ece8f8; --panel-3:#ffffff; --line:#dcd5ee; --text:#1d1830; --muted:#6c6588; --accent:#7c3aed; --accent-soft:rgba(124,58,237,.12); --star:#d08700; --accent-contrast:#ffffff; }
+:root[data-theme="light"][data-palette="sand"]    { --bg:#faf6ef; --bg-palette:#faf6ef; --panel:#ffffff; --panel-2:#f3ebdd; --panel-3:#ffffff; --line:#e6d9c3; --text:#241d12; --muted:#7a6c56; --accent:#b45309; --accent-soft:rgba(180,83,9,.12); --star:#b45309; --accent-contrast:#ffffff; }
+:root[data-theme="light"][data-palette="ice"]     { --bg:#f0f7f9; --bg-palette:#f0f7f9; --panel:#ffffff; --panel-2:#e4f1f4; --panel-3:#ffffff; --line:#cfe3e8; --text:#12222a; --muted:#5c7a83; --accent:#0e7490; --accent-soft:rgba(14,116,144,.12); --star:#d08700; --accent-contrast:#ffffff; }
+:root[data-theme="light"][data-palette="blush"]   { --bg:#fdf3f7; --bg-palette:#fdf3f7; --panel:#ffffff; --panel-2:#f8e6ee; --panel-3:#ffffff; --line:#ecd3de; --text:#2a1620; --muted:#86606f; --accent:#db2777; --accent-soft:rgba(219,39,119,.12); --star:#d08700; --accent-contrast:#ffffff; }
+:root[data-theme="light"][data-palette="sepia"]   { --bg:#f7f4ec; --bg-palette:#f7f4ec; --panel:#fffdf7; --panel-2:#efe9da; --panel-3:#fffdf7; --line:#ded5c0; --text:#241f14; --muted:#7c7460; --accent:#5b6a27; --accent-soft:rgba(91,106,39,.14); --star:#b45309; --accent-contrast:#ffffff; }
 /* Монохром: чёрно-белая, акцент — графитовый. */
-:root[data-theme="light"][data-palette="mono"]    { --bg:#f4f4f5; --bg-palette:#f4f4f5; --panel:#ffffff; --panel-palette:#ffffff; --panel-2:#ebebed; --panel-3:#ffffff; --line:#dcdcdf; --text:#111112; --muted:#6d6d70; --accent:#2f2f31; --accent-soft:rgba(47,47,49,.10); --star:#3a3a3c; --accent-contrast:#ffffff; }
+:root[data-theme="light"][data-palette="mono"]    { --bg:#f4f4f5; --bg-palette:#f4f4f5; --panel:#ffffff; --panel-2:#ebebed; --panel-3:#ffffff; --line:#dcdcdf; --text:#111112; --muted:#6d6d70; --accent:#2f2f31; --accent-soft:rgba(47,47,49,.10); --star:#3a3a3c; --accent-contrast:#ffffff; }
 
 /* Фон читалки: «фон темы» — чистый белый или чёрный, «фон с гаммой» — цвет выбранной гаммы.
    Идут после палитр: при одинаковой специфичности побеждает последнее правило. */
@@ -409,17 +409,6 @@ body.no-borders .splitter:hover, body.no-borders .splitter.dragging { background
 
 /* Список найденных подписок в окне добавления */
 .add-candidates { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
-.add-candidates label {
-  display: flex; gap: 8px; align-items: flex-start; font-size: calc(13px * var(--ui-scale, 1));
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer;
-}
-.add-candidates label:hover { border-color: var(--accent); }
-.add-candidates label.subscribed { opacity: .55; cursor: default; }
-.add-candidates label.subscribed:hover { border-color: var(--line); }
-.add-candidates input { margin-top: 2px; accent-color: var(--accent); }
-.add-candidates .cand-title { font-weight: 600; }
-.add-candidates .cand-sub { color: var(--muted); font-size: calc(11.5px * var(--ui-scale, 1)); }
-.add-candidates .cand-url { color: var(--muted); font-size: calc(11px * var(--ui-scale, 1)); overflow-wrap: anywhere; }
 
 /* ------------------------------------------------------------------- дерево */
 /* Снизу оставляем место, чтобы последнюю подписку можно было схватить мышью. */
@@ -551,9 +540,6 @@ select:focus-visible { outline: none; }
 /* Запас снизу в целый экран: любая статья может уйти выше середины и стать прочитанной. */
 /* Минимальные поля списка: карточка занимает почти всю ширину панели. */
 .list { flex: 1; overflow-y: auto; min-height: 0; padding: 6px 2px calc(100vh + 60px); }
-/* Текст статьи всегда следует настройке размера текста: раньше в «свободном»
-   режиме он был жёстко 15px и не реагировал на изменение. */
-.list.comfortable .a-body { font-size: calc(var(--font-article) * 1.03); }
 
 .article {
   position: relative;
@@ -657,8 +643,6 @@ select:focus-visible { outline: none; }
 .a-actions.floating:hover, .a-actions.floating:focus-within { opacity: 1; }
 /* На сенсорном экране наведения нет: там кнопки проявляются, когда прокрутка
    остановилась, и снова тускнеют при следующем движении списка. */
-@media (hover: none) {
-}
 
 .a-actions button, .a-actions a.icon-btn {
   width: 26px; height: 22px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
@@ -909,7 +893,6 @@ body.dragging .tree-tail { display: flex; }
      а не сжимается в узкую колонку справа от картинки. */
   /* Четвёртая кнопка — переход к следующей статье — только на телефоне, где панель
      со стрелками свёрнута, и только у плавающих кнопок открытой статьи. */
-  .article.expanded.selected .a-actions .a-next { display: inline-flex; }
   /* Зазор между краем экрана и карточкой — 2 пикселя (это правило идёт
      последним, поэтому перекрывает более раннее). */
   .list { padding: 2px 2px calc(100dvh + 60px); touch-action: pan-y; }
@@ -984,14 +967,8 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .add-candidates .cand-hints { color: var(--muted); font-size: calc(11px * var(--ui-scale, 1)); margin-top: 2px; }
 .add-candidates .cand-url { color: var(--muted); font-size: calc(11px * var(--ui-scale, 1)); margin-top: 2px; word-break: break-all; }
 
-/* Подряд идущие картинки: столько колонок, сколько помещается по ширине.
+/* Подряд идущие картинки: ряд переносится по ширине, картинки одной высоты.
    На телефоне обычно одна, на широком экране — две-три. */
-.a-body .img-row, .comment-body .img-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  gap: 6px;
-  margin: 10px 0;
-}
 .a-body .img-row, .comment-body .img-row { align-items: center; }
 /* Высота ряда — по самой высокой картинке: остальные под неё подрезаются,
    поэтому ряд получается ровным, а не «лесенкой». */
@@ -1024,7 +1001,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   box-shadow: 0 12px 30px -12px rgba(0, 0, 0, .55);
   padding: 10px 12px 12px;
 }
-.head-menu[hidden] { display: none; }
 .head-menu-sec {
   font-size: calc(10.5px * var(--ui-scale, 1)); text-transform: uppercase;
   letter-spacing: .07em; color: var(--muted); margin: 8px 0 6px;
@@ -1039,7 +1015,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   font-size: calc(13px * var(--ui-scale, 1));
 }
 @media (max-width: 560px) {
-  .head-row { position: relative; }
   /* Тема переехала в меню «⋯» — в строке она больше не нужна. */
   #theme-toggle { display: none; }
   /* Кнопки действий в статье крупнее: пальцем в мелкие не попасть. */
@@ -1073,6 +1048,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .a-body .img-row.ready, .comment-body .img-row.ready { min-height: 0; background: none; }
 .a-body .img-row, .comment-body .img-row {
   display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; justify-content: center;
+  margin: 10px 0;
 }
 .a-body .img-row > *, .comment-body .img-row > * {
   flex: 1 1 min(100%, 220px); min-width: 0; margin: 0;
@@ -1118,7 +1094,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 #settings-version { color: var(--muted); font-size: calc(11.5px * var(--ui-scale, 1)); }
 
 /* Версия приложения в подвале дерева подписок, рядом с импортом/экспортом. */
-.version-row { justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
 .version-row .link-btn { min-height: 0; padding: 0; }
 
 /* Сенсорные экраны: кнопка «⋯» показывается всегда, в том числе на широком
@@ -1130,7 +1105,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 }
 
 /* Панель меню «⋯» привязана к шапке на любой ширине экрана. */
-.head-row { position: relative; }
 .head-menu { z-index: 60; }
 
 /* Миниатюра всегда занимает своё место, даже пока грузится: иначе при подгрузке
@@ -1187,7 +1161,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 .pass-row #save-credentials { flex: none; margin: 0 0 1px; align-self: flex-end; }
 
 /* Кнопка «Обновить приложение» — обычная кнопка с пиктограммой. */
-.version-row { display: flex; align-items: center; gap: 8px; }
+.version-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
 .refresh-btn { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; }
 .refresh-btn svg { display: block; }
 .refresh-btn:active svg { transform: translateY(1px); transition: transform .15s ease; }
@@ -1235,15 +1209,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
 }
 
 /* Встроенное видео в статье: до нажатия — только кнопка, после — плеер. */
-.embed-box { margin: 12px 0; }
-.embed-box .embed-play { width: 100%; justify-content: center; min-height: 44px; }
-.embed-frame {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border: 0;
-  border-radius: 10px;
-  background: #000;
-}
 
 /* Группы настроек: видно, что действует на устройстве, а что на аккаунте. */
 .group-head {
@@ -1400,7 +1365,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
 }
-.app-loader[hidden] { display: none; }
 .app-loader-inner {
   display: flex; align-items: center; gap: 12px;
   padding: 16px 22px; border-radius: 14px;
@@ -1426,7 +1390,6 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   padding: 12px;
   cursor: zoom-out;
 }
-.lightbox[hidden] { display: none; }
 /* Рамка по размеру картинки: кнопка «поделиться» стоит в её правом верхнем углу. */
 .lightbox-frame {
   position: relative;
