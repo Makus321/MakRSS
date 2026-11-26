@@ -1244,7 +1244,9 @@ function commentsHtml(item) {
   // Новые комментарии: сервер уже сравнил их с вашей отметкой «дочитано до id N».
   const newSet = new Set((loaded.newIds ?? []).map(String));
   const render = (nodes) => nodes.map((node) => {
-    const isNew = newSet.has(String(node.id));
+    // Удержанные подсветки продолжают светиться и после перерисовки списка.
+    const isNew = newSet.has(String(node.id))
+      || commentHighlightHold.has(commentHoldKey(item.id, String(node.id)));
     return `
     <div class="comment${isNew ? ' is-new' : ''}" data-comment-id="${esc(String(node.id))}" style="margin-left:${Math.min(node.depth, 6) * 14}px"${isNew ? ` data-comment-new="${esc(String(node.id))}"` : ''}>
       <div class="comment-head">
@@ -1401,9 +1403,46 @@ function maxCommentId(nodes) {
   return max;
 }
 
+// Сколько держать подсветку «нового» после того, как комментарий попал на экран.
+// Раньше она снималась мгновенно (трекер прокрутки сразу отмечал прочитанным),
+// и было непонятно, что именно нового в статье.
+const COMMENT_HIGHLIGHT_HOLD_MS = 5000;
+const commentHighlightHold = new Map(); // `${articleId}:${commentId}` → до какого момента держим
+
+const commentHoldKey = (articleId, commentId) => `${articleId}:${commentId}`;
+
+/** Снимает подсветку с уже отрисованного комментария и убирает его из «удержания». */
+function dropCommentHighlight(articleId, commentId) {
+  commentHighlightHold.delete(commentHoldKey(articleId, commentId));
+  const block = document.querySelector(`.a-comments[data-comments-block="${cssId(articleId)}"]`);
+  const node = block?.querySelector(`.comment[data-comment-id="${cssId(String(commentId))}"]`);
+  if (!node) return;
+  node.classList.remove('is-new');
+  node.removeAttribute('data-comment-new');
+  node.querySelector(':scope > .comment-head .comment-new-chip')?.remove();
+}
+
+/** Держит подсветку 5 секунд, потом плавно снимает. Повторный вызов не плодит таймеры. */
+function holdCommentHighlight(articleId, commentId) {
+  const key = commentHoldKey(articleId, commentId);
+  if (commentHighlightHold.has(key)) return;
+  commentHighlightHold.set(key, Date.now() + COMMENT_HIGHLIGHT_HOLD_MS);
+  setTimeout(() => dropCommentHighlight(articleId, commentId), COMMENT_HIGHLIGHT_HOLD_MS);
+}
+
+/** Явная отметка «прочитано» снимает подсветку сразу — ждать пять секунд незачем. */
+function clearCommentHolds(articleId) {
+  for (const key of [...commentHighlightHold.keys()]) {
+    if (key.startsWith(`${articleId}:`)) {
+      dropCommentHighlight(articleId, key.slice(String(articleId).length + 1));
+    }
+  }
+}
+
 /**
- * Отмечает комментарии прочитанными до maxId и снимает подсветку.
- * silent — без перерисовки списка (используется при прокрутке до конца).
+ * Отмечает комментарии прочитанными до maxId.
+ * silent — без перерисовки списка (используется при прокрутке): подсветка снимается
+ * не сразу, а через COMMENT_HIGHLIGHT_HOLD_MS, чтобы успеть увидеть, что было новым.
  */
 async function markCommentsSeen(id, maxId, options = {}) {
   const loaded = state.comments.get(id);
@@ -1436,10 +1475,9 @@ async function markCommentsSeen(id, maxId, options = {}) {
       for (const node of block.querySelectorAll('.comment.is-new')) {
         const num = Number(node.dataset.commentId);
         if (!Number.isFinite(num) || num > max) continue;
-        node.classList.remove('is-new');
-        node.removeAttribute('data-comment-new');
-        const chip = node.querySelector(':scope > .comment-head .comment-new-chip');
-        if (chip) chip.remove();
+        // Подсветку не снимаем сразу: держим COMMENT_HIGHLIGHT_HOLD_MS, чтобы было
+        // видно, какие комментарии новые. Отметка при этом уже сохранена.
+        holdCommentHighlight(id, num);
       }
       const counter = block.querySelector('.comments-new-count');
       if (left && counter) counter.textContent = `новых: ${left}`;
@@ -1449,6 +1487,7 @@ async function markCommentsSeen(id, maxId, options = {}) {
       }
     }
   } else {
+    clearCommentHolds(id);
     renderList();
     if (before) toast('Отмечено прочитанным');
   }
@@ -4999,7 +5038,7 @@ async function start() {
   hideLoader();                           // данные пришли — снимаем затемнение
 }
 
-if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, renderSidebar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, rememberData, render, viewKey };
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, renderSidebar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, rememberData, render, viewKey, markCommentsSeen, commentHighlightHold };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)

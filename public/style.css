@@ -743,7 +743,9 @@ body.dragging .tree-tail { display: flex; }
 .a-comments-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .a-comments .note { color: var(--muted); font-size: var(--fs-12); }
 .a-comments-list { margin-top: 10px; }
-.comment { border-left: 2px solid var(--line); padding: 6px 0 6px 10px; margin: 8px 0; }
+.comment { border-left: 2px solid var(--line); padding: 6px 0 6px 10px; margin: 8px 0;
+  /* Плавное снятие подсветки «нового»: она гаснет за 0.6 с, а не рывком. */
+  transition: background-color .6s ease, border-left-color .6s ease; }
 .comment:hover { border-left-color: var(--accent); }
 /* Новый комментарий (пришёл после отметки «дочитано»): цветная полоса слева,
    лёгкий фон и метка. Старые остаются как были — видно, кто кому отвечает. */
@@ -1407,7 +1409,7 @@ body.logged-out #login-modal .modal-box { margin: 8vh auto 0; }
   /* Индикаторы работы замедляем: по ним видно, что запрос идёт. */
   .app-spinner, .icon-btn.spin, .btn.spin { animation-duration: 2.4s; }
   /* Декоративное движение убираем полностью: подсветка, выезд дерева, сдвиг иконки. */
-  .article, .a-actions, .a-actions.floating, .sidebar, .refresh-btn:active svg { transition: none; }
+  .article, .comment, .a-actions, .a-actions.floating, .sidebar, .refresh-btn:active svg { transition: none; }
   .refresh-btn:active svg { transform: none; }
 }
 /* Просмотр картинки: затемнение и изображение шириной с колонку текста статьи.
