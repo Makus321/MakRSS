@@ -1156,8 +1156,15 @@ function bodyHtml(item) {
   const imagesOnlyFeed = Boolean(feedById(item.feedId)?.imagesOnly);
   let html = sanitize(bodySource, item.link, { slot: !imagesOnlyFeed });
   if (sameAsExcerpt && !body.fullHtml) {
-    const media = html.match(/<(?:img|video)\b[^>]*>/gi) ?? [];
-    html = media.length ? media.map((tag) => '<p>' + tag + '</p>').join('\n') : '';
+    // Текст совпал с анонсом — сам текст в полной статье не дублируем, но медиа
+    // оставляем. Раньше здесь выдёргивались только теги <img>, а к этому моменту
+    // картинки уже «ленивые»: вместо тега стоит .img-slot с data-src, внутри —
+    // скрытый <img> без src. В итоге в теле оставался невидимый слот, и карточка
+    // открывалась пустой (посты LiveJournal «картинка + подпись»).
+    const media = html.match(/<div class="img-slot"[\s\S]*?<\/div>|<div class="embed-box"[\s\S]*?<\/div>|<figure[\s\S]*?<\/figure>|<(?:img|video)\b[^>]*>/gi) ?? [];
+    // Медиа нет — оставляем текст: пустое тело хуже, чем повтор анонса,
+    // который в раскрытой карточке всё равно скрыт.
+    if (media.length) html = media.join('\n');
   }
   // Бывает, что от сайта пришёл только текст без разметки (или одна разметка без
   // текста). Тогда карточка выглядела пустой — подставляем текст как абзац.
@@ -5038,7 +5045,7 @@ async function start() {
   hideLoader();                           // данные пришли — снимаем затемнение
 }
 
-if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, renderSidebar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, rememberData, render, viewKey, markCommentsSeen, commentHighlightHold };
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, renderSidebar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, rememberData, render, viewKey, markCommentsSeen, commentHighlightHold, bodyHtml, sanitize, imageSrc };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)

@@ -978,7 +978,11 @@ function needsFullText(feed, item) {
   if (db.read[item.id]) return false;
   if (item.hasFull) return false;
   const tried = item.fullTriedAt ? Date.parse(item.fullTriedAt) : 0;
-  if (tried && Date.now() - tried < FULLTEXT_RETRY_DAYS * 86400000) return false;
+  // Посты «картинка + подпись» раньше считались «текст не найден» и откладывались
+  // на FULLTEXT_RETRY_DAYS. Разбор теперь их понимает, поэтому такие статьи
+  // пробуем ещё раз, не дожидаясь недели: это карточки с картинкой и малым текстом.
+  const imagePost = Boolean(item.image) && (item.contentLength ?? 0) < 400;
+  if (tried && !imagePost && Date.now() - tried < FULLTEXT_RETRY_DAYS * 86400000) return false;
   // Лента уже отдаёт полный текст — страницу не трогаем.
   return (item.contentLength ?? 0) < FULLTEXT_MIN_FEED_CHARS;
 }
@@ -1101,7 +1105,14 @@ async function fetchFullText(feedId, itemId) {
     // это уже защита от меню вместо статьи.
     const knownLen = htmlToText(knownBefore).length;
     const minChars = Math.min(FULLTEXT_MIN_ARTICLE_CHARS, Math.max(120, Math.floor(knownLen * 0.8)));
-    if (article.textLength < minChars || looksLikePageChrome(article.html)) {
+    // Посты «картинка + подпись»: текста на странице меньше порога, но это точно
+    // та же статья, если её текст повторяет начало ленты и в разборе есть картинка.
+    // Без этого «Докачать текст» навсегда отвечал «основной текст не найден»,
+    // а карточка оставалась пустой.
+    const feedHead = knownLen >= 10 ? htmlToText(knownBefore).trim().slice(0, 40) : '';
+    const pageText = htmlToText(article.html ?? '');
+    const sameArticleAsFeed = Boolean(feedHead) && pageText.includes(feedHead) && /<img\b/i.test(article.html ?? '');
+    if ((article.textLength < minChars && !sameArticleAsFeed) || looksLikePageChrome(article.html)) {
       // Либо текста нет, либо это шапка/меню сайта — тогда остаётся текст из ленты.
       target.fullTriedAt = new Date().toISOString();
       store.saveStateSoon(400, { bump: false });
