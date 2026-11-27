@@ -539,7 +539,17 @@ async function onRequest(req, res) {
     // --- снаружи по http — только на https (локальные проверки не трогаем) ---
     const host = String(req.headers.host ?? '');
     if (HTTPS_ENABLED && !req.socket.encrypted && !LOCAL_HOSTS.test(host)) {
-      const hostname = host.split(':')[0];
+      // Host приходит от клиента: из него нельзя слепо строить адрес редиректа
+      // (open redirect). Берём домен из PUBLIC_HOST, если он задан, иначе разбираем
+      // Host как URL — так IPv6-адреса вроде [::1]:8787 не ломаются.
+      let hostname;
+      try {
+        const configured = String(process.env.PUBLIC_HOST ?? '').trim();
+        hostname = new URL(`https://${configured || host}`).hostname;
+      } catch {
+        res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('bad host');
+        return;
+      }
       const port = HTTPS_PUBLIC_PORT === 443 ? '' : `:${HTTPS_PUBLIC_PORT}`;
       res.writeHead(301, { location: `https://${hostname}${port}${url.pathname}${url.search}` });
       res.end();

@@ -158,6 +158,8 @@ HTTPS_PORT=$HTTPS_PORT
 # Порт, который видит посетитель снаружи (за HAProxy это 443) — нужен для
 # перенаправления с http на https.
 HTTPS_PUBLIC_PORT=${HTTPS_PUBLIC_PORT:-443}
+# Домен для редиректа http → https: не берём из заголовка Host (это open redirect).
+PUBLIC_HOST=$DOMAIN
 TLS_CERT=$TLS_DIR/fullchain.pem
 TLS_KEY=$TLS_DIR/privkey.pem
 # Каталог, из которого отдаётся проверка владения доменом для Let's Encrypt.

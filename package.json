@@ -11,7 +11,7 @@
     "start": "node server.mjs",
     "dev": "node server.mjs --refresh 5 --data ./data",
     "test": "node --test",
-    "check": "node --check server.mjs && node --check reader-core.mjs",
+    "check": "node tools/check-syntax.mjs",
     "bump": "node tools/bump-version.mjs",
     "bump:check": "node tools/bump-version.mjs --check"
   },

@@ -2858,7 +2858,11 @@ async function serveMedia(req, res, url) {
       // Пробуем дважды: Telegram иногда отдаёт файл не с первого раза.
       let response = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        response = await safeFetch(remote, { headers: { 'user-agent': UA, accept: '*/*' } }).catch(() => null);
+        // Таймаут обязателен: без него зависший CDN держал запрос бесконечно.
+        response = await safeFetch(remote, {
+          headers: { 'user-agent': UA, accept: '*/*' },
+          signal: AbortSignal.timeout(15000),
+        }).catch(() => null);
         if (response?.ok) break;
         await sleep(400);
       }
@@ -3598,6 +3602,8 @@ async function api(req, res, url) {
     const body = await readJson(req);
     const read = body.read !== false;
     let ids = Array.isArray(body.ids) ? body.ids : [];
+    // Ограничиваем пачку: клиент шлёт десятки id, но запрос может быть подделан.
+    if (ids.length > 5000) ids = ids.slice(0, 5000);
     if (body.feedId || body.folderId || body.all) {
       for (const feed of db.feeds) {
         if (body.feedId && feed.id !== body.feedId) continue;
@@ -3622,8 +3628,12 @@ async function api(req, res, url) {
     // своей очереди только их. Иначе при сбое отметка терялась навсегда.
     const applied = [];
     const missing = [];
+    const appliedSet = new Set();
     for (const id of ids) {
-      if (findItem(id)) applied.push(id); else missing.push(id);
+      // Отметку ставим только существующей статье: иначе произвольные id из
+      // запроса попадали в state.json и вытесняли реальные отметки.
+      if (!findItem(id)) { missing.push(id); continue; }
+      if (!appliedSet.has(id)) { applied.push(id); appliedSet.add(id); }
       if (read) db.read[id] = stamp;
       else delete db.read[id];
     }
@@ -3638,7 +3648,7 @@ async function api(req, res, url) {
       const mirrored = itemsWithLinks([...db.feeds.map((feed) => db.items[feed.id] ?? []), db.items[HABR_NOW_ID] ?? []], linkKeys);
       for (const item of mirrored) {
         if (read) db.read[item.id] = stamp; else delete db.read[item.id];
-        if (!ids.includes(item.id) && !applied.includes(item.id)) applied.push(item.id);
+        if (!appliedSet.has(item.id)) { applied.push(item.id); appliedSet.add(item.id); }
       }
     }
     pruneState();
