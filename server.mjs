@@ -5,6 +5,7 @@
 // свои подписки, статьи, медиа и таймеры обновления, а здесь остаётся только то,
 // что общее: HTTP-порт, вход, список пользователей и админка /admin.
 
+import { isCrossSiteRequest } from './lib/csrf.mjs';
 import { createServer } from 'node:http';
 import { trackTraffic } from './lib/traffic.mjs';
 import { createServer as createHttpsServer } from 'node:https';
@@ -190,7 +191,12 @@ async function stopCore(userId) {
 
 const json = (res, status, body) => {
   const text = JSON.stringify(body);
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(text) });
+  // no-store: в ответах бывают apiKey и список пользователей, кэшировать их нельзя.
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(text),
+    'cache-control': 'no-store',
+  });
   res.end(text);
 };
 
@@ -248,7 +254,10 @@ function currentUser(req, url) {
   const session = readSession(users.state.secret, cookies[SESSION_COOKIE]);
   if (session) {
     const user = users.byLogin(session.user);
-    if (user && !user.disabled) return user;
+    // Версия в токене должна совпадать с версией пользователя: смена пароля и
+    // блокировка увеличивают её и тем самым отзывают старые cookie.
+    const sameVersion = Number(user?.sessionVersion ?? 0) === Number(session.version ?? 0);
+    if (user && !user.disabled && sameVersion) return user;
   }
   // Логин и пароль может разделять не только первый «:» — пароль бывает с двоеточием.
   const basic = parseBasicAuth(req.headers.authorization);
@@ -494,6 +503,11 @@ async function onRequest(req, res) {
   // Считаем отданные байты по маршрутам (см. lib/traffic.mjs).
   trackTraffic(req, res, path.join(DATA_DIR, 'traffic.json'));
   try {
+    // CSRF: браузерный POST/PUT/DELETE с чужого сайта отбиваем до маршрутов.
+    // Скрипты и клиенты Fever не присылают Origin — их это не затрагивает.
+    if (isCrossSiteRequest(req)) {
+      return json(res, 403, { ok: false, error: 'запрос с чужого сайта отклонён' });
+    }
     // --- проверка владения доменом для Let's Encrypt ---
     if (url.pathname.startsWith('/.well-known/acme-challenge/')) {
       const name = path.basename(url.pathname);
@@ -609,7 +623,7 @@ pre{white-space:pre-wrap;font-size:13px;color:#9a9a9a}</style></head><body>
       }
       loginSucceeded(ip);
       const ttl = body.remember ? SESSION_TTL : SHORT_SESSION_TTL;
-      res.setHeader('set-cookie', cookieHeader(SESSION_COOKIE, issueSession(users.state.secret, user.login, ttl), { maxAge: ttl, secure: requestIsHttps(req) }));
+      res.setHeader('set-cookie', cookieHeader(SESSION_COOKIE, issueSession(users.state.secret, user.login, ttl, user.sessionVersion ?? 0), { maxAge: ttl, secure: requestIsHttps(req) }));
       users.touch(user).catch(() => {});
       log(`вход: ${user.login}`);
       return json(res, 200, sessionPayload(user));
@@ -668,7 +682,7 @@ pre{white-space:pre-wrap;font-size:13px;color:#9a9a9a}</style></head><body>
       // Клиент мог постучаться в корень — ядро разбирает протокол по адресу /fever/.
       if (!isFeverPath) req.url = `/fever/${url.search}`;
       const feverCore = await coreFor(feverUser);
-      return feverCore.handleRequest(req, res);
+      return feverCore.handleRequest(req, res, { authenticated: true });
     }
     // Похоже на Fever-клиент, но ключа нет (например, адрес указан без /fever/):
     // отвечаем так же, как настоящий Fever, — клиент покажет ошибку входа.
@@ -690,7 +704,10 @@ pre{white-space:pre-wrap;font-size:13px;color:#9a9a9a}</style></head><body>
       return core.handleRequest(req, res);
     }
     const core = await coreFor(user);
-    return core.handleRequest(req, res);
+    // Ядро раньше проверяло пароль по своим настройкам: при включённой старой
+    // авторизации запросы с Basic из users.json получали 401. Контроллер уже
+    // опознал пользователя — сообщаем это ядру явно.
+    return core.handleRequest(req, res, { authenticated: true });
   } catch (err) {
     // Ошибки клиента (битый JSON, слишком большое тело) — короткая строка, без стека.
     const status = Number(err.statusCode) || 500;
@@ -772,8 +789,17 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
  * Запрос пришёл по HTTPS (напрямую или через прокси с x-forwarded-proto).
  * Нужно, чтобы cookie сессии получала флаг Secure.
  */
+/** Локальный прокси: только ему верим в X-Forwarded-Proto. */
+function isLocalRequest(req) {
+  const address = String(req.socket?.remoteAddress ?? '');
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
 function requestIsHttps(req) {
-  return Boolean(req.socket?.encrypted) || String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim() === 'https';
+  if (req.socket?.encrypted) return true;
+  // Снаружи X-Forwarded-Proto подделает кто угодно — верим только своему прокси.
+  if (!isLocalRequest(req)) return false;
+  return String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim() === 'https';
 }
 
 // ---- Лимит попыток входа (объявления на верхнем уровне: ниже по файлу

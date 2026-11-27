@@ -4051,7 +4051,7 @@ export function updateAuth(options = {}) {
 const OPEN_API = new Set(['/api/session', '/api/login', '/api/logout']);
 
 /** Обрабатывает запрос уже опознанного пользователя. */
-export async function handleRequest(req, res) {
+export async function handleRequest(req, res, opts = {}) {
   // Адрес разбираем так же, как в контроллере: невалидный request-target не должен
   // бросать ERR_INVALID_URL вне try (иначе падает процесс ядра).
   let url;
@@ -4067,7 +4067,10 @@ export async function handleRequest(req, res) {
       await handleFever(req, res, url, feverContext);
       return;
     }
-    if (url.pathname.startsWith('/api/') && !OPEN_API.has(url.pathname) && !isAuthenticated(req, url)) {
+    // Контроллер мог уже опознать пользователя (cookie, Basic или ключ users.json):
+    // тогда второй раз проверять пароль по локальным настройкам ядра нельзя.
+    const authed = opts.authenticated === true || isAuthenticated(req, url);
+    if (url.pathname.startsWith('/api/') && !OPEN_API.has(url.pathname) && !authed) {
       json(res, 401, { ok: false, error: 'нужен вход', authRequired: true });
       return;
     }

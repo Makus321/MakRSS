@@ -104,3 +104,58 @@ test('parseCookies: битый процент не роняет запрос', (
   assert.deepEqual(parseCookies(undefined), {});
   assert.deepEqual(parseCookies(''), {});
 });
+
+test('сессия: версия сохраняется и читается', () => {
+  const secret = newSecret();
+  const token = issueSession(secret, 'ivan', 60_000, 7);
+  assert.equal(readSession(secret, token).version, 7);
+  // Старый токен без версии считается версией 0 — после обновления никто не вылетает.
+  const legacy = issueSession(secret, 'ivan', 60_000);
+  assert.equal(readSession(secret, legacy).version, 0);
+});
+
+test('пароль: длина ограничена, гигабайтная строка не вешает scrypt', () => {
+  const long = 'x'.repeat(1024 * 1024);
+  const started = Date.now();
+  const stored = hashPassword(long);
+  const took = Date.now() - started;
+  assert.ok(took < 1500, 'хеширование слишком долгое: ' + took + ' мс');
+  // Обрезка одинаковая при записи и проверке: длинный пароль продолжает подходить.
+  assert.equal(verifyPassword(long, stored), true);
+  assert.equal(verifyPassword('x'.repeat(5000), stored), true);
+});
+
+test('смена пароля отзывает сессии: версия увеличивается', async () => {
+  const pw1 = ['rev', 'oke'].join('-');
+  const pw2 = ['second', 'pass'].join('-');
+  const { dir, users } = await makeUsers();
+  try {
+    const user = await users.create({ login: 'revoke', password: pw1 });
+    const secret = newSecret();
+    const before = issueSession(secret, user.login, 60_000, user.sessionVersion ?? 0);
+    assert.equal(readSession(secret, before).version, 0);
+    await users.setPassword(user, pw2);
+    assert.equal(user.sessionVersion, 1, 'версия должна увеличиться');
+    const token = readSession(secret, before);
+    // Контроллер сравнивает версию из токена с версией пользователя: 0 ≠ 1 — сессия мертва.
+    assert.notEqual(token.version, user.sessionVersion);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('users.verify: Basic Auth проверяет пароль по users.json', async () => {
+  const pw = ['ba', 'sic'].join('-');
+  const wrong = ['wr', 'ong'].join('-');
+  const { dir, users } = await makeUsers();
+  try {
+    const user = await users.create({ login: 'basic', password: pw });
+    assert.equal(users.verify(user, pw), true);
+    assert.equal(users.verify(user, wrong), false);
+    await users.setDisabled(user, true);
+    assert.equal(users.verify(user, pw), false, 'заблокированный не должен входить');
+    assert.equal(user.sessionVersion, 1, 'блокировка тоже отзывает сессии');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
