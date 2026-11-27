@@ -21,6 +21,24 @@ server {
     # auth_basic "RSS reader";
     # auth_basic_user_file /etc/nginx/.htpasswd;
 
+    # Живые события (SSE): буферизация их ломает, а обычный таймаут чтения
+    # обрывает поток каждые 60 секунд — клиент переподключается и «мигает».
+    location = /api/events {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        add_header X-Accel-Buffering no;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8787;
         proxy_http_version 1.1;
@@ -31,8 +49,8 @@ server {
 
         # Долгие запросы: сервер сам ходит в интернет за лентами и статьями.
         proxy_connect_timeout 30s;
-        proxy_read_timeout 120s;
-        proxy_send_timeout 120s;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
         proxy_buffering off;
     }
 }

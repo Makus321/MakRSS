@@ -39,7 +39,10 @@ HTTPS_PORT="${HTTPS_PORT:-8788}"
 ACME_DIR="${ACME_DIR:-/var/www/acme}"
 NODE_VERSION="${NODE_VERSION:-22.11.0}"
 ADMIN_USER="${ADMIN_USER:-admin}"
-ADMIN_PASS="${ADMIN_PASS:-admin}"
+# Пустой ADMIN_PASS = сгенерировать случайный при установке (пароль в открытом
+# виде в скрипте не хранится и в историю не попадает).
+ADMIN_PASS="${ADMIN_PASS:-}"
+ADMIN_PASS_GENERATED=no
 WITH_HAPROXY="${WITH_HAPROXY:-auto}"
 SKIP_NODE="${SKIP_NODE:-no}"
 SKIP_CERT="${SKIP_CERT:-no}"
@@ -57,15 +60,27 @@ die() { printf '\n\033[1;31mОшибка: %s\033[0m\n' "$*" >&2; exit 1; }
 [[ -f "$SRC_DIR/server.mjs" ]] || die "не нахожу server.mjs — запускайте скрипт из каталога rss-reader"
 command -v systemctl >/dev/null || die "нужен systemd"
 command -v curl >/dev/null || { say "ставлю curl"; apt-get update -qq && apt-get install -y -qq curl; }
+# Таймауты: без них установка могла висеть на недоступном адресе.
+CURL="curl --connect-timeout 10 --max-time 60"
 
 # --------------------------------------------------------------- 1. Node.js
+# Путь к node запоминаем один раз: служба не должна зависеть от того, что
+# бинарник лежит именно в /usr/local/bin (в Debian/Ubuntu это /usr/bin/node).
+NODE_BIN=""
 install_node() {
+  if [[ "$SKIP_NODE" == yes ]]; then
+    command -v node >/dev/null 2>&1 || die "SKIP_NODE=yes, но node не найден в PATH"
+    NODE_BIN="$(command -v node)"
+    note "Node.js: $("$NODE_BIN" -v) — установку пропускаю (SKIP_NODE=yes)"
+    return
+  fi
   local major=0
   if command -v node >/dev/null 2>&1; then
     major="$(node -e 'console.log(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
   fi
-  if [[ "$major" -ge 18 && "$SKIP_NODE" != yes ]]; then
-    note "Node.js уже есть: $(node -v) — оставляю как есть"
+  if [[ "$major" -ge 18 ]]; then
+    NODE_BIN="$(command -v node)"
+    note "Node.js уже есть: $("$NODE_BIN" -v) — оставляю как есть"
     return
   fi
   say "ставлю Node.js ${NODE_VERSION} (официальная сборка)"
@@ -83,8 +98,9 @@ install_node() {
   curl -fsSL "$url" -o "/tmp/${tarball}" || die "не удалось скачать Node.js"
   tar -xJf "/tmp/${tarball}" -C /opt
   rm -f "/tmp/${tarball}"
-  ln -sfn "/opt/node-v${NODE_VERSION}-linux-${node_arch}/bin/node" /usr/local/bin/node
-  note "готово: $(/usr/local/bin/node -v)"
+  NODE_BIN="/opt/node-v${NODE_VERSION}-linux-${node_arch}/bin/node"
+  ln -sfn "$NODE_BIN" /usr/local/bin/node
+  note "готово: $("$NODE_BIN" -v), ссылка /usr/local/bin/node"
 }
 
 # ----------------------------------------------------- 2. пользователь и каталоги
@@ -104,13 +120,24 @@ create_user() {
 install_app() {
   say "копирую читалку в $APP_DIR"
   install -d -m 755 "$APP_DIR"
-  for item in server.mjs reader-core.mjs lib public deploy README.md; do
+  # Каталоги заменяем целиком: cp -a поверх оставлял файлы, которых в новой
+  # версии уже нет (например, старые модули), и служба грузила их снова.
+  for dir in lib public deploy; do
+    [[ -e "$SRC_DIR/$dir" ]] || continue
+    rm -rf "${APP_DIR:?}/$dir"
+  done
+  for item in server.mjs reader-core.mjs package.json lib public deploy README.md; do
     [[ -e "$SRC_DIR/$item" ]] || continue
     cp -a "$SRC_DIR/$item" "$APP_DIR/"
   done
   chown -R root:root "$APP_DIR"
   chmod -R go-w "$APP_DIR"
-  note "файлов: $(find "$APP_DIR" -type f | wc -l)"
+  # Синтаксис проверяем ДО перезапуска: иначе служба падала бы на старте.
+  local f
+  for f in "$APP_DIR/server.mjs" "$APP_DIR/reader-core.mjs" $(find "$APP_DIR/lib" -name '*.mjs' 2>/dev/null); do
+    "$NODE_BIN" --check "$f" || die "синтаксическая ошибка: $f"
+  done
+  note "файлов: $(find "$APP_DIR" -type f | wc -l), синтаксис проверен"
 }
 
 # ----------------------------------------------------------- 4. настройки и служба
@@ -142,7 +169,9 @@ ADMIN_PASS=$ADMIN_PASS
 
 REFRESH_MINUTES=5
 FETCH_FULL=1
-MAX_UNREAD_PER_FEED=1500
+# Непрочитанное не удаляется, поэтому лимит = потолок памяти. 3000 — как в коде;
+# на слабой машине можно снизить до 1500.
+MAX_UNREAD_PER_FEED=3000
 KEEP_READ_DAYS=30
 EOF
   chmod 600 "$ENV_FILE"
@@ -153,7 +182,7 @@ write_unit() {
   sed -e "s|__APP_DIR__|$APP_DIR|g" \
       -e "s|__DATA_DIR__|$DATA_DIR|g" \
       -e "s|__APP_USER__|$APP_USER|g" \
-      -e "s|__NODE__|/usr/local/bin/node|g" \
+      -e "s|__NODE__|$NODE_BIN|g" \
       "$SRC_DIR/deploy/rss-reader.service" > "$UNIT_FILE"
   chmod 644 "$UNIT_FILE"
   systemctl daemon-reload
@@ -261,7 +290,7 @@ start_service() {
   systemctl restart rss-reader
   local i
   for i in $(seq 1 20); do
-    if curl -fsS -o /dev/null "http://127.0.0.1:$HTTP_PORT/api/session"; then
+    if $CURL -fsS -o /dev/null "http://127.0.0.1:$HTTP_PORT/api/session"; then
       note "служба отвечает на 127.0.0.1:$HTTP_PORT"
       return
     fi
@@ -274,15 +303,23 @@ start_service() {
 verify() {
   say "проверяю доступ снаружи"
   local code_http code_https
-  code_http="$(curl -s -o /dev/null -w '%{http_code}' "http://$DOMAIN/" || echo 000)"
+  code_http="$($CURL -s -o /dev/null -w '%{http_code}' "http://$DOMAIN/" || echo 000)"
   note "http://$DOMAIN/ → $code_http (ожидается 301)"
   if [[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]]; then
-    code_https="$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/" || echo 000)"
+    code_https="$($CURL -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/" || echo 000)"
     note "https://$DOMAIN/ → $code_https (ожидается 200)"
   else
     note "https пока без сертификата"
   fi
 }
+
+# Пароль администратора: если не задан — случайный. Пароль пишется в ENV_FILE
+# (права 600) и в консоль не выводится, чтобы не осесть в истории и логах.
+if [[ -z "$ADMIN_PASS" ]]; then
+  ADMIN_PASS="$(head -c 18 /dev/urandom | base64 | tr -d '/+=' | cut -c1-20)"
+  ADMIN_PASS_GENERATED=yes
+  note "администратор $ADMIN_USER: пароль сгенерирован и будет записан в $ENV_FILE"
+fi
 
 install_node
 create_user
@@ -302,7 +339,8 @@ cat <<EOF
 
   Читалка:   https://$DOMAIN/
   Админка:   https://$DOMAIN/admin
-  Логин:     $ADMIN_USER   (пароль по умолчанию $ADMIN_PASS — смените в админке)
+  Логин:     $ADMIN_USER
+  Пароль:    в $ENV_FILE (строка ADMIN_PASS, права 600) — смените в /admin
   Служба:    systemctl status rss-reader
   Логи:      journalctl -u rss-reader -f
   Данные:    $DATA_DIR

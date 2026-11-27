@@ -8,8 +8,9 @@
 //  3) картинки и видео — тоже в кэш, чтобы прочитанное открывалось без сети;
 //  4) всё остальное (вход, админка, Fever, действия) — только через сеть.
 
-const CACHE = 'rss-shell-v403';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
-const DATA_CACHE = 'rss-data-v180';
+const CACHE = 'rss-shell-v404';   // 195: оболочка перезабирается — иначе старый app.js живёт в кэше
+// Кэш данных убран: «прогрев» статей никто не запрашивал, а кэш с
+// авторизованными данными оставался на диске после выхода.
 const MEDIA_CACHE = 'rss-media-v151';
 
 const SHELL = [
@@ -37,7 +38,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    const keep = new Set([CACHE, DATA_CACHE, MEDIA_CACHE]);
+    const keep = new Set([CACHE, MEDIA_CACHE]);
     const names = await caches.keys();
     await Promise.all(names.filter((name) => !keep.has(name)).map((name) => caches.delete(name)));
     await self.clients.claim();
@@ -162,7 +163,13 @@ self.addEventListener('fetch', (event) => {
       // старую оболочку (страница берётся из кэша, а свежая кладётся «на потом»).
       try {
         const fresh = await fetch(request);
-        if (fresh && fresh.ok) {
+        // В /index.html кладём только саму оболочку: раньше сюда попадал любой
+        // ответ (в том числе чужая страница после редиректа), и приложение
+        // открывалось с чужого адреса.
+        const isShellPage = !fresh?.redirected
+          && (url.pathname === '/' || url.pathname === '/index.html')
+          && String(fresh?.headers.get('content-type') ?? '').includes('text/html');
+        if (fresh && fresh.ok && isShellPage) {
           const cache = await caches.open(CACHE);
           cache.put('/index.html', fresh.clone()).catch(() => {});
           cache.put(request, fresh.clone()).catch(() => {});
@@ -187,17 +194,6 @@ self.addEventListener('fetch', (event) => {
   })());
 });
 
-// Клиент может попросить «прогреть» статьи на будущее (раз в час).
-self.addEventListener('message', (event) => {
-  const data = event.data ?? {};
-  if (data.type !== 'warm' || !Array.isArray(data.urls)) return;
-  event.waitUntil((async () => {
-    const cache = await caches.open(DATA_CACHE);
-    for (const url of data.urls.slice(0, 30)) {
-      try {
-        const res = await fetch(url, { credentials: 'same-origin' });
-        if (res.ok) await cache.put(url, res.clone());
-      } catch { /* нет сети — попробуем в следующий раз */ }
-    }
-  })());
-});
+// «Прогрев» статей убран: клиент его никогда не запрашивал, а кэш данных
+// оставался единственным местом, куда попадали авторизованные ответы.
+

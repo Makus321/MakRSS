@@ -82,8 +82,14 @@ if [[ -f "$ENV_FILE" ]]; then
   ADMIN_USER="$(grep -E '^ADMIN_USER=' "$ENV_FILE" | cut -d= -f2- || echo "$ADMIN_USER")"
   ADMIN_PASS="$(grep -E '^ADMIN_PASS=' "$ENV_FILE" | cut -d= -f2- || true)"
 else
-  ADMIN_PASS="${ADMIN_PASS:-admin}"
-  say "пишу $ENV_FILE (администратор $ADMIN_USER, пароль по умолчанию — смените в /admin)"
+  # Пароль по умолчанию «admin» — готовые ворота в админку. Если не задан,
+  # генерируем случайный и не печатаем его в консоль (только в ENV_FILE).
+  ADMIN_PASS="${ADMIN_PASS:-}"
+  if [[ -z "$ADMIN_PASS" ]]; then
+    ADMIN_PASS="$(head -c 18 /dev/urandom | base64 | tr -d '/+=' | cut -c1-20)"
+    ADMIN_GENERATED=yes
+  fi
+  say "пишу $ENV_FILE (администратор $ADMIN_USER)"
   cat > "$ENV_FILE" <<EOF
 # Настройки MAK RSS Reader (используются systemd-юнитом rss-reader).
 # Порт и адрес: наружу отдавайте через nginx, оставив 127.0.0.1.
@@ -98,7 +104,8 @@ ADMIN_PASS=$ADMIN_PASS
 # Докачка полного текста статей со страниц: 1 — включена, 0 — выключена.
 FETCH_FULL=1
 # Сколько непрочитанных статей хранить на ленту (непрочитанное не удаляется).
-MAX_UNREAD_PER_FEED=1500
+# Непрочитанное не удаляется, поэтому лимит = потолок памяти.
+MAX_UNREAD_PER_FEED=3000
 KEEP_READ_DAYS=30
 EOF
   chmod 600 "$ENV_FILE"
@@ -136,7 +143,7 @@ cat <<EOF
   Адрес:      http://127.0.0.1:$PORT   (слушает только localhost)
   Админка:    http://127.0.0.1:$PORT/admin
   Логин:      $ADMIN_USER    (первый администратор)
-  Пароль:     ${ADMIN_PASS:-<как в $ENV_FILE>}
+  Пароль:     в $ENV_FILE (строка ADMIN_PASS, права 600) — смените в /admin
   Данные:     $DATA_DIR   (users.json + u/<пользователь>/state.json и content/)
   Логи:       journalctl -u rss-reader -f
   Обновление: sudo $SRC_DIR/deploy/install.sh

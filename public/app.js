@@ -4447,6 +4447,13 @@ $('#save-credentials').addEventListener('click', async () => {
 $('#logout-btn').addEventListener('click', async () => {
   if (!(await askConfirm('Выход', 'Выйти из аккаунта?'))) return;
   await api('/api/logout', {}).catch(() => {});
+  // После выхода на диске не должно оставаться ни статей, ни картинок, ни
+  // отложенных отметок: иначе следующий вход показывал бы чужой кэш.
+  try {
+    for (const name of await caches.keys()) await caches.delete(name);
+    for (const key of Object.keys(localStorage)) if (key.startsWith('rss.')) localStorage.removeItem(key);
+    sessionStorage.clear();
+  } catch { /* приватный режим — кэшей может не быть */ }
   location.reload();
 });
 $('#queue-start').addEventListener('click', async () => {

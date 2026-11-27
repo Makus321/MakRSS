@@ -373,6 +373,7 @@ function decodeBody(buffer, contentType) {
 }
 
 const hostHits = new Map();   // хост -> время последнего запроса (вежливость при докачке)
+const HOST_HITS_LIMIT = 500;  // больше не держим: карта росла вместе с числом сайтов
 
 async function politeWait(url) {
   const host = (() => { try { return new URL(url).host; } catch { return ''; } })();
@@ -380,6 +381,7 @@ async function politeWait(url) {
   const last = hostHits.get(host) ?? 0;
   const wait = FULLTEXT_DELAY_MS - (Date.now() - last);
   if (wait > 0) await sleep(wait);
+  if (hostHits.size >= HOST_HITS_LIMIT && !hostHits.has(host)) hostHits.delete(hostHits.keys().next().value);
   hostHits.set(host, Date.now());
 }
 
@@ -1909,6 +1911,14 @@ function discoverIconLinks(html, pageUrl) {
 }
 
 const iconCache = new Map();   // feedId -> { status, file, type, at }
+const ICON_CACHE_LIMIT = 500;  // значки удалённых лент тоже вытесняются
+/** Кладёт значок в кэш, вытесняя самый старый: иначе карта росла бы вечно. */
+const cacheIcon = (feedId, value) => {
+  if (iconCache.size >= ICON_CACHE_LIMIT && !iconCache.has(feedId)) {
+    iconCache.delete(iconCache.keys().next().value);
+  }
+  iconCache.set(feedId, value);
+};
 
 /** Иконка подписки: из ленты, из /favicon.ico либо объявленная на сайте. */
 async function faviconFor(feed) {
@@ -1933,7 +1943,7 @@ async function faviconFor(feed) {
         const file = path.join(MEDIA_DIR, `fav-${feed.id}.${ext}`);
         await writeFile(file, res.buffer);
         const state = { status: 'ok', file, type, at: Date.now() };
-        iconCache.set(feed.id, state);
+        cacheIcon(feed.id, state);
         return state;
       }
     } catch { /* пробуем следующий вариант */ }
@@ -1959,7 +1969,7 @@ async function faviconFor(feed) {
   }
 
   const miss = { status: 'none', at: Date.now() };
-  iconCache.set(feed.id, miss);
+  cacheIcon(feed.id, miss);
   return miss;
 }
 
