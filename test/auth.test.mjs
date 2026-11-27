@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   hashPassword, verifyPassword, parseBasicAuth, safeEqual, feverApiKey,
-  issueSession, readSession, newSecret,
+  issueSession, readSession, newSecret, parseCookies,
 } from '../lib/auth.mjs';
 import { Users } from '../lib/users.mjs';
 
@@ -92,4 +92,15 @@ test('users.json: удаление пользователя сохраняетс
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('parseCookies: битый процент не роняет запрос', () => {
+  // Регрессия: decodeURIComponent('%zz') бросал URIError, и обработчик запроса
+  // падал целиком из-за одной испорченной cookie.
+  const parsed = parseCookies('a=1; bad=%zz; good=%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82');
+  assert.equal(parsed.a, '1');
+  assert.equal(parsed.bad, '%zz');            // оставляем как пришло
+  assert.equal(parsed.good, 'привет');
+  assert.deepEqual(parseCookies(undefined), {});
+  assert.deepEqual(parseCookies(''), {});
 });

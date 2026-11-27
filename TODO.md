@@ -1,322 +1,415 @@
-# Аудит кода и план рефакторинга MAK RSS Reader
+# Полный аудит и TODO по исправлению ошибок — `rss-reader`
 
-Документ составлен по результатам полного аудита серверной части (`server.mjs`, `reader-core.mjs`, `lib/*`), клиентской части (`public/*`), Service Worker (`public/sw.js`), стилей (`public/style.css`) и скриптов развёртывания (`deploy/*`, `tools/*`).
-
----
-
-## P0. Критические ошибки (падения, потеря данных, сломанные функции)
-
-- [ ] **P0.1. Исправить `ReferenceError: feed is not defined` в `GET /api/item`**
-  - **Где:** `reader-core.mjs:3039, 3045`
-  - **Проблема:** Обращается к несуществующей переменной `feed` вместо `found.feed`. Любой запрос к `GET /api/item?id=...` завершается HTTP 500.
-  - **Решение:** Заменить `feed?.kind` на `found.feed?.kind`.
-
-- [ ] **P0.2. Исправить `ReferenceError: __dirname is not defined` в `loadVersion()`**
-  - **Где:** `reader-core.mjs:122-128`
-  - **Проблема:** В ES-модуле (`.mjs`) переменная `__dirname` не существует; исключение глотается блоком `catch`, из-за чего `GET /api/version` всегда возвращает `'1.0.0'`.
-  - **Решение:** Заменить `path.join(__dirname, 'public', 'index.html')` на `path.join(PUBLIC_DIR, 'index.html')` и кэшировать версию по `mtimeMs` файла `index.html`, а не читать файл с диска на каждый запрос.
-
-- [ ] **P0.3. Восстановить потерю метаданных статей при перезапуске сервера**
-  - **Где:** `lib/store.mjs:19-29, 138` (`META_FIELDS` и `stripMeta`)
-  - **Проблема:** При старте `Store.normalize()` пропускает все статьи через `stripMeta()`, который вырезает все поля вне `META_FIELDS`. В `META_FIELDS` отсутствуют активно используемые поля: `addedAt`, `video`, `commentsSeenMaxId`, `commentsSeenCount`, `commentsSeenAt`, `coverTriedAt`. После каждого перезапуска сервера сбрасываются отметки прочитанных комментариев, пропадают ссылки на видео Telegram и время добавления статей.
-  - **Решение:** Добавить все актуальные мета-поля в `META_FIELDS` (или ввести единую схему метаданных статьи, используемую и в `Store`, и в `reader-core.mjs`).
-
-- [ ] **P0.4. Устранить потерю несохранённых тел статей при остановке процесса (конфликт `SIGINT`/`SIGTERM`)**
-  - **Где:** `lib/store.mjs:35-49` и `server.mjs:656-667`
-  - **Проблема:** `lib/store.mjs` вешает собственные обработчики `process.once('SIGTERM'/'SIGINT')`, которые вызывают `flushAllStores()` (сохраняющий только `state.json`, но НЕ `dirtyFeeds` из `content/`) и немедленно завершают процесс через `process.exit(0)`, прерывая `mod.shutdown()` (`store.flush()`) в `server.mjs`.
-  - **Решение:** Удалить обработчики `SIGINT`/`SIGTERM` и `process.exit(0)` из `lib/store.mjs`. Централизованно выполнять graceful shutdown в `server.mjs`: закрыть HTTP/HTTPS серверы, остановить таймеры и бот-циклы, дождаться `await Promise.allSettled(...)` для `store.flush()` всех ядер, после чего завершить процесс.
-
-- [ ] **P0.5. Исправить порчу HTML при обрезке длинных статей в `Store.setBody()`**
-  - **Где:** `lib/store.mjs:248-253`
-  - **Проблема:** Вычисляется `safe = Math.max(cut.lastIndexOf('</p>'), cut.lastIndexOf('</figure>'), cut.lastIndexOf('</div>'))`, а затем всегда берётся `cut.slice(0, safe + 6)`. Для `</p>` (длина 4) захватываются 2 лишних символа следующего тега, для `</figure>` (длина 9) тег режется посередине (`</figu`).
-  - **Решение:** Определять длину конкретного найденного закрывающего тега: искать пары `[tag, cut.lastIndexOf(tag)]` и резать по `index + tag.length`.
-
-- [ ] **P0.6. Починить гонку атомарной записи файлов и двойной инкремент `revision`**
-  - **Где:** `lib/store.mjs:153-191`, `lib/users.mjs:41-59`
-  - **Проблема:**
-    1. В `Store.#writeAtomic()` и `Users.save()` используется фиксированное имя временного файла `${file}.tmp`. При параллельных записях одного файла второй вызов перезаписывает или переименовывает `.tmp` первого, вызывая `ENOENT` и потерю записи.
-    2. В `Store.saveStateSoon()` `revision` увеличивается на 1 сразу (`line 154`) и ещё раз внутри `saveStateNow()` (`line 160`) по таймеру — ревизия прыгает через 2; к тому же `saveStateSoon(400, { bump: false })` теряет семантику, если таймер уже поставлен.
-  - **Решение:** Ввести сериализованную очередь записи (`Promise`-цепочку на файл) и уникальные имена временных файлов (`${file}.${process.pid}.${++seq}.tmp`). Инкрементировать `revision` строго в одном месте (при мутации в `saveStateSoon` или при `saveStateNow` без двойного вызова).
-
-- [ ] **P0.7. Исправить сломанную установку в `deploy/install.sh`**
-  - **Где:** `deploy/install.sh:55-60`
-  - **Проблема:** Не копируется `reader-core.mjs` (без него `server.mjs` падает при старте), а `install -m 0644 "$SRC_DIR"/public/* "$APP_DIR/public/"` завершается с ошибкой на подкаталоге `public/fonts/`.
-  - **Решение:** Копировать `reader-core.mjs`, а `lib/` и `public/` копировать рекурсивно (`cp -a`), выставляя права на файлы и каталоги.
-
-- [ ] **P0.8. Починить загрузку комментариев для `ixbt.games`**
-  - **Где:** `lib/comments.mjs:267`
-  - **Проблема:** Проверка `/ixbt\.games$/i.test(link)` матчит конец полного URL (включая путь статьи `/news/...`), поэтому всегда возвращает `false` и шлёт запросы комментариев `ixbt.games` на `www.ixbt.com`.
-  - **Решение:** Проверять домен через `new URL(link).hostname`: `/(^|\.)ixbt\.games$/i.test(new URL(link).hostname)`.
-
-- [ ] **P0.9. Починить битый HTML в форме настроек (`#set-density`)**
-  - **Где:** `public/index.html:271-276`
-  - **Проблема:** Пропущен открывающий тег `<label class="row-line">Плотность списка` перед `<select id="set-density">`, при этом закрывающий `</label>` присутствует. Настройка отображается без подписи, нарушена структура DOM.
-  - **Решение:** Восстановить открывающий тег `<label class="row-line">Плотность списка`.
-
-- [ ] **P0.10. Починить окно добавления подписок (конфликт `searchSubscriptions` и `checkAddress`)**
-  - **Где:** `public/app.js:3545-3674`
-  - **Проблема:** Живой поиск (`searchSubscriptions`) рендерит `.cand`-элементы, а нажатие кнопки «Добавить» (`#add-check`) или `Enter` вызывает `checkAddress()`, который рендерит `<label><input type="checkbox">`, но кнопки подписки для чекбоксов нет, а `subscribeSelected()` ищет только `.cand.active`. В результате нажатие «Добавить» или `Enter` делает подписку невозможной.
-  - **Решение:** Удалить устаревшую `checkAddress()`, унифицировать UX на базе одного механизма: по вводу — живой поиск (`searchSubscriptions`), по кнопке «Добавить» / `Enter` — если есть выбранный кандидат `.cand.active`, подписываться (`subscribeSelected()`), иначе запускать поиск.
-
-- [ ] **P0.11. Починить немедленное применение настроек ленты (сортировка, строки, «только картинки»)**
-  - **Где:** `public/app.js:3365-3386, 3676-3686, 4569-4579`
-  - **Проблема:** `POST /api/feeds/view` возвращает только `{ ok: true, revision }` без `data`, но обработчики `#sort-select`, `#lines-select`, `#menu-lines` и `#images-only` вызывают `applyPayload(...)`, не обновляя поля объекта `feed` в `state.data.feeds`. Изменения не применяются в UI до перезагрузки страницы.
-  - **Решение:** Оптимистично обновлять локальный объект `feed` (`feed.sort`, `feed.lines`, `feed.imagesOnly`) и синхронизировать `state.revision = payload.revision`, по аналогии с `setViewMode()`.
-
-- [ ] **P0.12. Починить запуск SSE и лайтбокса после ручного входа в систему**
-  - **Где:** `public/app.js:4126-4158, 4451-4473, 4717-4738`
-  - **Проблема:** При открытии страницы без сессии `start()` завершается на `showLogin(); return;` до вызова `restoreView()` и `startEvents()`. В `submitLogin()` они не вызываются — после входа живые события `/api/events` и закрытие лайтбокса не инициализированы до ручного F5.
-  - **Решение:** Вынести навешивание слушателей лайтбокса в `start()` (единожды при загрузке DOM), а `restoreView()` и `startEvents()` вызывать в общей функции `afterAuthInit()`, используемой и в `start()`, и в `submitLogin()`.
-
-- [ ] **P0.13. Исправить формулу подсчёта `counts.unread` в `POST /api/state`**
-  - **Где:** `reader-core.mjs:2871`
-  - **Проблема:** `unread: allItems - Object.keys(db.read ?? {}).length` некорректна при наличии в `db.read` записей от удалённых статей (даёт заниженное или отрицательное число).
-  - **Решение:** Считать `unread` как сумму значений `feedUnread` по реально существующим статьям в `db.items`.
-
-- [ ] **P0.14. Исправить баги UI и логики в `public/app.js`**
-  - **Где и что:**
-    1. `public/app.js:2976` (клавиша `m`): тост читает `item.read` уже ПОСЛЕ мутации в `markRead()`, показывая противоположный статус. Сохранять целевое значение `const nextRead = !item.read;` до вызова.
-    2. `public/app.js:908-921` (`renderFilterRow`): обновление счётчика `#filters-btn` (`Фильтры (N)`) стоит после `if (!query) return;`, поэтому при пустом поиске число фильтров никогда не отображается. Вынести обновление `#filters-btn` выше `if (!query) return;`.
-    3. `public/app.js:1534-1538` (`articleHtml`): `onerror` на `.a-thumb` пытается подставить тот же самый URL `imageSrc(item)`, делая лишний провальный запрос. Удалить бессмысленный fallback и просто скрывать/удалять сломанную миниатюру.
-    4. `public/app.js:4745-4752`: интервал опроса `feverMode() ? 60_000 : 20_000` фиксируется при старте скрипта до загрузки настроек с сервера. Заменить на адаптивный `setTimeout`-цикл, перечитывающий `feverMode()` на каждой итерации.
-    5. `public/app.js:3107-3112`: при раскрытии статьи из режима `commentsOnly` вызывать `expandItem(id)`, чтобы срабатывали `readOnExpand` и докачка текста.
-    6. `public/app.js:2580-2604`: добавить защиту от параллельного выполнения `flushPendingReads()` (флаг `flushingReads` + повторный запуск при новых записях), чтобы быстрая прокрутка не отправляла дублирующие `POST /api/read`.
-
-- [ ] **P0.15. Исправить неработающий кэш данных и версионирование в Service Worker (`public/sw.js`)**
-  - **Где:** `public/sw.js:15-26, 52, 61-100, 104, 117-138`
-  - **Проблема:**
-    1. `isData` проверяет `/api/bodies`, но это `POST`-запрос, который отсекается строкой 104 (`if (request.method !== 'GET') return;`) — ветка кэширования тел статей никогда не выполняется.
-    2. В `SHELL` кэшируются `/app.js` и `/style.css`, а `index.html` запрашивает `/app.js?v=330` и `/style.css?v=190` — при `cache.match(request)` без `{ ignoreSearch: true }` кэш не находится.
-    3. Функции `negativeCache` и `staleWhileRevalidate` объявлены, но не используются (неудачные `/api/favicon` не кэшируются).
-  - **Решение:** Подключить `negativeCache` для `/api/favicon`, использовать `{ ignoreSearch: true }` (или единый способ версионирования) для оболочки, убрать мёртвую ветку `isData` для `POST /api/bodies` (либо реализовать оффлайн-кэш тел в IndexedDB на клиенте).
+**Дата аудита:** 2026-11-27  
+**Объём проверки:** весь проект — `server.mjs`, `reader-core.mjs`, `lib/*.mjs` (14 модулей), `public/*` (7 файлов), `deploy/*`, `tools/*`, `test/*`, `package.json`, `.gitignore`, существующие `TODO*.md` и `*AUDIT*.md`.  
+**Текущее состояние автотестов:** 44 / 44 проходят (`node --test --test-isolation=none test/*.test.mjs`), `node --check` по всем `.js`/`.mjs` без ошибок.
 
 ---
 
-## P1. Безопасность (Security)
+## Сводка по приоритетам
 
-- [ ] **P1.1. Устранить SSRF в прокси медиа, видео и парсере лент**
-  - **Где:** `reader-core.mjs:312-358, 1564-1578, 1975-2015, 2057-2109, 2128-2135, 2280-2327`
-  - **Проблема:**
-    1. `isPublicUrl()` проверяет только строку `hostname` регулярками (пропускает IPv6 `::ffff:127.0.0.1`, `fc00::/7`, `fe80::/10`, числовые IP `http://2130706433/`, DNS-имена на приватные IP).
-    2. `fetch(..., { redirect: 'follow' })` позволяет обойти `isPublicUrl()` через HTTP 302 редирект с внешнего хоста на `127.0.0.1` или метаданные облака `169.254.169.254`.
-    3. `httpGet()`, `httpGetBinary()`, `serveThumb()` и `serveMedia()` вообще не проверяют URL на публичность.
-  - **Решение:** Создать единую функцию `safeFetch(url, opts)`: резолвить IP через `dns.lookup()`, проверять все IPv4/IPv6 адреса на приватные/loopback/link-local/unspecified диапазоны, обрабатывать редиректы вручную (`redirect: 'manual'`, максимум 5 шагов с повторной проверкой каждого `Location`). Применить во всех исходящих запросах к пользовательским/внешним URL.
+| Приоритет | Кол-во | Фокус |
+|---|---:|---|
+| **P0 — Критические** | 12 | Утечка root-пароля в git, удалённый DoS, SSRF и обход IPv6-фильтра, Stored/Reflected XSS, отзыв сессий, поломка деплоя/публикации |
+| **P1 — Высокие** | 25 | Поломка Basic Auth, потеря данных при гонках `Store`/`Users`, OOM DoS, Fever API, UI/SW гонки и утечки, нулевое покрытие тестами |
+| **P2 — Средние** | 24 | Ошибки парсинга RSS/Atom/LJ/Telegram, кэши и ETag, валидация ввода, мобильная вёрстка, админка, конфиги |
+| **P3 — Низкие** | 10 | Доступность (a11y), мёртвый код, мелкие баги `imagesize`/`habr-now`/`xml`, архивация старых TODO, техдолг |
 
-- [ ] **P1.2. Закрыть Path Traversal в `serveMedia()`**
-  - **Где:** `reader-core.mjs:2330-2332, 2433-2446`
-  - **Проблема:** `postMediaFile(feedId, postId, index)` конкатенирует `url.searchParams.get('f')` и `get('k')` напрямую в имя файла без валидации и без проверки границ каталога `MEDIA_DIR`.
-  - **Решение:** Валидировать `feedId` и `postId` строгим шаблоном `/^[A-Za-z0-9_-]{1,64}$/` и проверять `path.resolve(target).startsWith(path.resolve(MEDIA_DIR) + path.sep)`.
+---
 
-- [ ] **P1.3. Обязательная проверка текущего пароля при смене пароля**
-  - **Где:** `server.mjs:543-545`
-  - **Проблема:** `if (current && !users.verify(me, current))` позволяет обойти проверку, передав пустой `current`.
-  - **Решение:** Изменить на `if (!current || !users.verify(me, current)) return json(res, 403, { ok: false, error: 'текущий пароль неверен' });`.
+## P0 — Критические (исправлять в первую очередь)
 
-- [ ] **P1.4. Устранить XSS-векторы и инъекции в HTML/JS/CSS**
+### Безопасность, утечки и удалённый DoS
+
+- [ ] **P0.1. Утечка реальных root-доступов VPS в индексе git**
+  - **Где:** `rus-host.txt:1-3`, `.gitignore:5`
+  - **Проблема:** Файл содержит IP, логин `root` и пароль в открытом виде. Несмотря на запись в `.gitignore`, файл уже отслеживается git (`git ls-files` его возвращает).
+  - **Исправление:** Немедленно сменить root-пароль на VPS (перевести вход на SSH-ключи), удалить файл из индекса (`git rm --cached rss-reader/rus-host.txt`) и при необходимости вычистить историю git.
+
+- [ ] **P0.2. Удалённый DoS (краш Node.js одним HTTP-запросом без авторизации)**
+  - **Где:** `server.mjs:470-475`, `reader-core.mjs:3983-3985`, `lib/traffic.mjs:36`
+  - **Проблема:** `new URL(req.url, `http://${req.headers.host ?? 'localhost'}`)` вызывается **до** `try/catch` внутри `async function onRequest`. Невалидный заголовок `Host` (например `Host: bad host`) бросает `TypeError [ERR_INVALID_URL]` → `UnhandledPromiseRejection` → падение процесса.
+  - **Исправление:** Перенести разбор URL и `trackTraffic` внутрь `try/catch`, парсить `req.url` с фиксированной базой `'http://localhost'`, при ошибке возвращать `400 Bad Request`. В `lib/traffic.mjs:36` также обернуть `new URL(...)` в `try/catch`.
+
+- [ ] **P0.3. SSRF в `httpGetOnce` и `httpGetBinary` (обход `net-guard.mjs`)**
+  - **Где:** `reader-core.mjs:394`, `reader-core.mjs:1845`
+  - **Проблема:** Обе функции вызывают `fetch(url, { redirect: 'follow' })` напрямую вместо `safeFetch`. Через `/api/discover`, `/api/feeds`, `/api/opml`, `fetchFullText` (`reader-core.mjs:1090`) и `/api/favicon` (`reader-core.mjs:1889, 1913`) можно обращаться к `127.0.0.1`, LAN и `169.254.169.254` (включая 302-редирект).
+  - **Исправление:** Заменить `fetch` в `httpGetOnce` и `httpGetBinary` на `safeFetch` (с возвратом `finalUrl` из последнего редиректа).
+
+- [ ] **P0.4. Полный обход SSRF-защиты `net-guard.mjs` через IPv4-mapped IPv6**
+  - **Где:** `lib/net-guard.mjs:60-70, 87-92`
+  - **Проблема:** `new URL('http://[::ffff:127.0.0.1]/')` в Node.js нормализует адрес в `::ffff:7f00:1`. Регулярка `/^::ffff:(\d+\.\d+\.\d+\.\d+)$/` его не ловит — `assertPublicUrl` пропускает loopback и cloud metadata (`::ffff:a9fe:a9fe`). Также не блокируются неканонический loopback (`0:0:0:0:0:0:0:1`), IPv4-compatible (`::7f00:1`), NAT64 (`64:ff9b::/96`), 6to4 (`2002::/16`), Teredo (`2001::/32`), multicast (`ff00::/8`).
+  - **Исправление:** Парсить IPv6 в 128-битный `BigInt` и проверять диапазоны битовыми масками (для `::ffff:0:0/96` и `::/96` извлекать младшие 32 бита и прогонять через IPv4-блоклист). Добавить юнит-тесты в `test/net-guard.test.mjs`.
+
+- [ ] **P0.5. Reflected / Stored XSS на origin приложения через медиа-прокси (`/api/video`, `/api/img`, `/api/thumb`, `/api/favicon`)**
+  - **Где:** `reader-core.mjs:2279-2290` (`serveVideo`), `2609-2623` (`serveImage`), `2365-2385` (`serveThumb`), `1819-1839, 1949-1950` (`serveFavicon`)
+  - **Проблема:** `serveVideo` копирует произвольный `Content-Type` от внешнего сервера (можно отдать `text/html` со скриптом на origin читалки). `serveImage`, `serveThumb` и `serveFavicon` пропускают `image/svg+xml` без CSP-песочницы; `ICON_MAGIC` принимает любой файл, начинающийся с `<` (`0x3c`). При `SameSite=Lax` переход по внешней ссылке открывает доступ ко всему origin (включая `/api/session` и `/api/admin/*`).
+  - **Исправление:** В `serveVideo` разрешить только `video/*`, `audio/*`, `application/octet-stream` (иначе `415`). В `serveImage`/`serveThumb`/`serveFavicon` запретить `image/svg+xml` и не-иконки. На все медиа-прокси добавить `X-Content-Type-Options: nosniff` и `Content-Security-Policy: default-src 'none'; sandbox`.
+
+- [ ] **P0.6. Stored XSS в серверном HTML-санитайзере статей (`lib/readability.mjs`)**
+  - **Где:** `lib/readability.mjs:52-77`
+  - **Проблема:** Регулярка на строке 62 требует `\s+` после имени тега, поэтому `<img/src=x/onerror=alert(1)>`, `<svg/onload=alert(2)>`, `<a/href="javascript:alert(1)">` проходят нетронутыми. Чёрный список не блокирует `<base>`, `<object>`, `<embed>`, `<math>`, одиночный `<svg>` и `</script >`. В `href`/`src` разрешён `data:image/svg+xml`.
+  - **Исправление:** Переписать `cleanBlock` на полноценный HTML-санитайзер по **белому списку** тегов и атрибутов, декодировать сущности перед проверкой схем URL, запретить `data:image/svg+xml`.
+
+- [ ] **P0.7. Stored XSS в комментариях Tolstoy и отсутствие санитизации в остальных провайдерах**
+  - **Где:** `lib/comments.mjs:29-35, 71, 122, 190, 299, 402`
+  - **Проблема:** `loadTolstoy` вызывает `decodeEntities(comment.text_template)` без санитизации — экранированный текст `&lt;img src=x onerror=alert(1)&gt;` превращается в живой HTML. Остальные провайдеры (Habr, WordPress, iXBT, LJ) тоже отдают сырой HTML.
+  - **Исправление:** В `loadTolstoy` не декодировать `&lt;`/`&gt;` в живые теги (экранировать текст, оставляя только `<br>`), а выход всех провайдеров прогонять через единый allowlist-санитайзер.
+
+- [ ] **P0.8. Stored XSS на клиенте через `sanitize()` + `setupEmbeds()` (атрибут `data-embed` и тег `BUTTON`)**
+  - **Где:** `public/app.js:5352-5356, 5474-5507, 1173-1190`
+  - **Проблема:** `sanitize()` разрешает `DIV`/`BUTTON` и сохраняет произвольные `class`/`data-*`. Вредоносная статья с `<div class="embed-box" data-embed="javascript:alert(1)"><button class="embed-play">...</button></div>` заставляет `setupEmbeds()` выполнить `frame.src = src` без проверки протокола и без `sandbox`.
+  - **Исправление:** В `sanitize()` перевести фильтрацию атрибутов на строгий allowlist по тегам (удалять все `id`, `class`, `data-*` из входного HTML до генерации собственных виджетов). В `setupEmbeds()` проверять `/^https?:\/\//i.test(src)` и задавать `frame.sandbox` + `frame.referrerPolicy = 'no-referrer'`.
+
+- [ ] **P0.9. Stored XSS через невалидированный протокол `item.link` и `data:image/svg+xml` / `/api/` на клиенте**
+  - **Где:** `public/app.js:1819-1820, 3050, 3329-3330, 5481-5483`
+  - **Проблема:** `item.link` подставляется в `href` и `window.open` без проверки `http:`/`https:` (`javascript:` пройдёт). В `sanitize()` строки `5481-5483` разрешают `data:image/svg+xml` и любые `/api/` пути в `href`/`src`.
+  - **Исправление:** Добавить `safeHttpUrl(raw)` и использовать в `articleHtml`, горячей клавише `o` и `shareItem`. В `sanitize()` для `href` оставить только `https?:`/`mailto:`, для `src`/`poster` исключить `data:image/svg+xml` и ограничить внутренние пути только `/api/media` и `/api/video`.
+
+- [ ] **P0.10. Смена пароля не отзывает активные сессии (вопреки сообщению API)**
+  - **Где:** `server.mjs:238-243, 322-326, 616-620`, `lib/auth.mjs:37-58`, `lib/users.mjs:148-155`
+  - **Проблема:** Сессионный токен `user|expires` подписан единым секретом; при `setPassword` версия токена не меняется, поэтому украденная cookie живёт до 30 дней.
+  - **Исправление:** Добавить пользователю `sessionVersion` (инкрементировать в `setPassword` и `setDisabled`), включить её в payload токена `user|ver|expires` и проверять в `currentUser`.
+
+### Деплой и публикация
+
+- [ ] **P0.11. Сломанный деплой в `deploy/install-vps.sh` (инвертированный `SKIP_NODE` и жёсткий путь `/usr/local/bin/node`)**
+  - **Где:** `deploy/install-vps.sh:67, 156`
+  - **Проблема:** Строка 67: `[[ "$major" -ge 18 && "$SKIP_NODE" != yes ]]` — `SKIP_NODE=yes` наоборот запускает установку Node.js. Строка 156: захардкожен `/usr/local/bin/node`, хотя системный Node часто стоит в `/usr/bin/node` — systemd-юнит падает.
+  - **Исправление:** Поменять условие на `[[ "$SKIP_NODE" == yes || "$major" -ge 18 ]]` и определять путь через `NODE_BIN="$(command -v node)"` (как в `deploy/install.sh:29, 111`).
+
+- [ ] **P0.12. Ошибки скрипта публикации `tools/publish.ps1`**
+  - **Где:** `tools/publish.ps1:22, 48-50, 74, 91-95, 109`
+  - **Проблемы:**
+    1. `$AuthorEmail = '<EMAIL_8>'` (попал токен анонимизации).
+    2. Строки 91–95 делают `git checkout -- <file>` для всех отсутствующих в `$Stage` файлов — невозможно удалять устаревшие файлы из публичного репо.
+    3. `$excludeFiles` не исключает `tools/publish-leaks.txt` и внутренние `TODO*.md` / `*AUDIT*.md` (где есть личный домен).
+    4. `bump-version.mjs` вызывается до проверки `-DryRun`, мутируя `index.html` и `sw.js`.
+    5. Проверка утечек пропускает `*.ps1`, `*.txt`, `*.json`, `*.service`, `*.example`.
+  - **Исправление:** Указать корректный noreply-email; убрать авто-восстановление удалённых файлов (оставить whitelist только для нужных вроде `README`/`LICENSE` если требуется); исключить `publish-leaks.txt` и внутренние аудит-файлы; перенести `bump-version` после `-DryRun`; расширить список расширений в проверке утечек.
+
+---
+
+## P1 — Высокий приоритет (надёжность, гонки, потеря данных, безопасность)
+
+### Сервер и ядро (`server.mjs`, `reader-core.mjs`)
+
+- [ ] **P1.1. Сломана авторизация по HTTP Basic Auth на всех `/api/*` маршрутах ядра**
+  - **Где:** `server.mjs:245-249`, `reader-core.mjs:275, 297-298, 3854-3860, 3969-3974, 3990`
+  - **Проблема:** `init()` и `updateAuth()` не передают `passHash` в `userSettings.auth`. В результате `server.mjs` пропускает Basic Auth, а `reader-core.mjs:3990` всегда возвращает `401`.
+  - **Исправление:** Передавать флаг `{ authenticated: true }` в `core.handleRequest(req, res, opts)` либо прокидывать `passHash`.
+
+- [ ] **P1.2. После `disable` → `enable` пользователя навсегда ломается автообновление лент + утечка `Store`**
+  - **Где:** `server.mjs:120, 141-152`, `reader-core.mjs:3812, 3952-3960, 4182`, `lib/store.mjs:43`
+  - **Проблема:** `import('./reader-core.mjs?u=<id>')` возвращает кэшированный ESM-модуль со `stopped = true`. `init()` не сбрасывает `stopped`, `refreshScheduledOnce`, `backfillDone`, очереди и кэши; `stop()` не удаляет `Store` из `liveStores`.
+  - **Исправление:** В `init()` сбрасывать все модульные флаги/кэши; добавить `store.close()` для удаления из `liveStores`; сериализовать `stopCore`/`coreFor` по `userId`.
+
+- [ ] **P1.3. Новые статьи массово помечаются прочитанными из-за `newestKnown` вместо `oldestKnown`**
+  - **Где:** `reader-core.mjs:599-609`
+  - **Проблема:** Вычисляется максимальная дата `newestKnown` и для всех лент помечается прочитанной любая новая статья с `t < newestKnown` (разные часовые пояса, отложенная публикация и т.п. молча пропадают из непрочитанных).
+  - **Исправление:** Применять правило только при догрузке истории Telegram и сравнивать с `oldestKnown = min(date)`.
+
+- [ ] **P1.4. `cleanStoredBodies()` ошибочно ставит `hasFull = true` для всех обычных статей с анонсом**
+  - **Где:** `reader-core.mjs:4074`
+  - **Проблема:** Условие `(next.content || next.fullHtml)` срабатывает на обычный RSS-анонс `next.content`, блокируя `needsFullText` и вызывая лишнюю перезапись `content/*.json`.
+  - **Исправление:** Проверять только `if (!item.hasFull && next.fullHtml)` и помечать файл контента `dirty` только при реальном изменении тела.
+
+- [ ] **P1.5. Sibling-directory Path Traversal в `staticFile` без авторизации**
+  - **Где:** `reader-core.mjs:3764-3767`, `server.mjs:665-669`
+  - **Проблема:** `!file.startsWith(PUBLIC_DIR)` не содержит `path.sep`; неавторизованный запрос, не попавший в `serveStaticFromPublic`, пробрасывается в `core.handleRequest` → `staticFile`.
+  - **Исправление:** Проверять `file.startsWith(PUBLIC_DIR + path.sep)` и возвращать `404` в `server.mjs` без проброса в `coreFor(fallback)`.
+
+- [ ] **P1.6. Open Redirect через `Host` и поломка редиректа на IPv6**
+  - **Где:** `server.mjs:495-502`
+  - **Проблема:** `301` строится из сырого `req.headers.host.split(':')[0]` — позволяет Open Redirect на чужой домен и ломает IPv6 `[::1]:8787`.
+  - **Исправление:** Использовать настраиваемый `PUBLIC_HOST` или валидировать `URL.hostname` по белому списку.
+
+- [ ] **P1.7. Отсутствует `Cache-Control: no-store` в `json()` в `server.mjs`**
+  - **Где:** `server.mjs:184-188, 299-304, 569`
+  - **Проблема:** `GET /api/session` и `GET /api/admin/users` (содержат `apiKey`) могут кэшироваться браузером/прокси.
+  - **Исправление:** Добавить `'cache-control': 'no-store'` в `json()` в `server.mjs:186`.
+
+- [ ] **P1.8. Отсутствие backpressure, таймаута и проверки `response.body` в `serveVideo`**
+  - **Где:** `reader-core.mjs:2266-2296`
+  - **Проблема:** `for await (...) res.write(chunk)` не ждёт `'drain'` (риск OOM), переданный `controller.signal` отключает дефолтный таймаут `safeFetch`, а `response.body === null` кидает `TypeError` после `writeHead`.
+  - **Исправление:** Перейти на `pipeline(Readable.fromWeb(response.body), res)`, комбинировать `AbortSignal.any([controller.signal, AbortSignal.timeout(20000)])`, проверять `if (!response.body)`.
+
+- [ ] **P1.9. Неограниченный `spawn('cwebp')` без таймаута и гонка временного файла `.webp.tmp`**
+  - **Где:** `reader-core.mjs:2437-2483`
+  - **Проблема:** Десятки параллельных картинок порождают десятки процессов `cwebp` без таймаута; `tmp` на строке 2456 использует `Date.now()` вместо `webpSeq`, что даёт коллизию при параллельных запросах.
+  - **Исправление:** Добавить семафор (2–4 слота), таймаут с `kill('SIGKILL')` (15 с) и использовать один `webpSeq` для `source` и `tmp`.
+
+- [ ] **P1.10. Утечка мёртвых SSE-подписчиков и отсутствие закрытия SSE при отключении пользователя**
+  - **Где:** `server.mjs:141-152, 416-449, 505-527`
+  - **Проблема:** Разрыв соединения во время `await coreFor(watcher)` оставляет мёртвый `res` в `subscribers` навсегда; `stopCore` не закрывает SSE; `setInterval(pushRevisions, 1000)` может накладываться сам на себя.
+  - **Исправление:** Проверять `res.destroyed || res.writableEnded` после `await`; закрывать и чистить `subscribers` в `stopCore`; удалять `res` при ошибке `res.write`; защитить `pushRevisions` флагом `pushing`.
+
+- [ ] **P1.11. Неполный graceful shutdown в `server.mjs`**
+  - **Где:** `server.mjs:731-748`
+  - **Проблема:** При `SIGINT`/`SIGTERM` не закрываются `server`/`httpsServer`, не вызывается `mod.stop?.()`, нет защиты от повторного сигнала.
+  - **Исправление:** Добавить флаг `shuttingDown`, вызывать `server.close()`, `httpsServer?.close()`, `mod.stop?.()`, `mod.shutdown?.()` и `flushAllStores()`.
+
+### Библиотеки (`lib/*.mjs`)
+
+- [ ] **P1.12. SSRF через DNS Rebinding (TOCTOU) в `safeFetch`**
+  - **Где:** `lib/net-guard.mjs:79-125`
+  - **Проблема:** `assertPublicUrl` делает `dns.lookup`, но `fetch()` затем резолвит домен повторно — при `TTL=0` возможен DNS Rebinding на `127.0.0.1`/`169.254.169.254`.
+  - **Исправление:** Передавать в `fetch` кастомный `undici.Agent` с pinning проверенного IP в `connect: { lookup }`.
+
+- [ ] **P1.13. Потеря данных в `Store` при гонках `#saveFeed`/`setBody`, ошибке в `#makeRoom` и `pruneContent`**
+  - **Где:** `lib/store.mjs:263-306, 327-349, 360-374`
+  - **Проблемы:**
+    1. `setBody` во время `await #writeAtomic` перезаписывает данные в памяти, но завершившийся `#saveFeed` сбрасывает `dirtyFeeds` и вытесняет ленту — новые тела теряются.
+    2. В `#makeRoom` при ошибке записи (`#writeAtomic` → `false`) строка 305 всё равно удаляет ленту из `openFeeds`, безвозвратно теряя несохранённые данные.
+    3. `pruneContent` читает файл напрямую, минуя `feedLoads`, и перезаписывает свежий кэш устаревшей копией.
+  - **Исправление:** Ввести счётчик поколений `feedDirtyGen` на каждый `feedId`; не вытеснять `openFeeds` при неуспешной записи; в `pruneContent` использовать `await this.#loadFeed(feedId)`.
+
+- [ ] **P1.14. Уничтожение `users.json` и `state.json` при временной ошибке чтения на старте**
+  - **Где:** `lib/users.mjs:29-40`, `lib/store.mjs:81-89`
+  - **Проблема:** Любая ошибка чтения кроме `ENOENT` (например `EBUSY`/`EPERM` от антивируса/ownCloud) сбрасывает состояние в пустое и перезаписывает файл на диске (в `users.mjs` ещё и создаёт дефолтного `admin`).
+  - **Исправление:** При ошибке не-`ENOENT` делать ретраи и падать с исключением (или бэкапить повреждённый файл `*.corrupt.<ts>`), никогда не перезаписывая существующий файл пустым состоянием.
+
+- [ ] **P1.15. Несовместимость Fever API с составными запросами (`?api=1&...`)**
+  - **Где:** `lib/fever.mjs:41, 83, 90, 120, 125, 130, 136`
+  - **Проблема:** При `?api=1&groups&feeds&items` или `?api=1&unread_item_ids&mark=item&...` truthy-значение `api` вызывает ранний `return` на первой секции, отбрасывая остальные секции и операции `mark`/`save`.
+  - **Исправление:** Считать одиночным режимом только конкретные имена команд из `Set`; выполнять блок записи (`isWrite`) **до** формирования `unread_item_ids`/`saved_item_ids`.
+
+- [ ] **P1.16. Экспоненциальный OOM DoS в `stripJunkBlocks`**
+  - **Где:** `lib/readability.mjs:127-134, 152`
+  - **Проблема:** При совпадении `JUNK_BLOCK` до первого `<` (`start === -1`) строка 133 выполняет `result = result.slice(0, -1) + result.slice(0)`, удваивая строку до 40 раз (`2^40` байт → OOM-краш).
+  - **Исправление:** Проверять `if (start < 0) break;` (или сдвигать `lastIndex` вперёд), а при `end - start > JUNK_MAX_BYTES` продолжать поиск вместо `break`.
+
+- [ ] **P1.17. Необработанный `URIError` в `parseCookies`**
+  - **Где:** `lib/auth.mjs:67`
+  - **Проблема:** `Cookie: a=%E0%A4%A` бросает необработанный `URIError`.
+  - **Исправление:** Обернуть `decodeURIComponent` в `try/catch`.
+
+- [ ] **P1.18. Расхождение памяти и диска при ошибке `save()` в `Users`**
+  - **Где:** `lib/users.mjs:143-191`
+  - **Проблема:** Мутирующие методы меняют `this.state.users` до `await this.save()` и не откатывают изменения при ошибке записи.
+  - **Исправление:** Сохранять снимок и откатывать состояние в `catch` при сбое `this.save()`.
+
+### Фронтенд и PWA (`public/*`)
+
+- [ ] **P1.19. Фоновый `schedulePoll()` каждые 20 с стирает поля формы входа и ошибку**
+  - **Где:** `public/app.js:373-376, 4552-4568, 5279-5304, 5337`
+  - **Проблема:** Опрос запускается до авторизации; каждые 20 с приходит 401 → `showLogin()` очищает `#login-user`, `#login-pass`, `#login-error`.
+  - **Исправление:** Не запускать `loadData` из таймеров при `!state.session?.authenticated` или открытом `#login-modal`; в `showLogin()` выходить, если модалка уже открыта.
+
+- [ ] **P1.20. `api()` проглатывает HTTP 4xx/5xx при `payload.ok === false`**
+  - **Где:** `public/app.js:377, 427, 4233, 4411-4416`
+  - **Проблема:** Неверный текущий пароль при смене пароля показывает зелёный тост «Пароль изменён»; `flushSettings` теряет ошибку; `startSettingsRefresh` кладёт `undefined` в `state.settings`.
+  - **Исправление:** Выбрасывать ошибку в `api()` при `!res.ok || payload.ok === false` (добавить опцию `{ raw: true }` только для вызовов вроде `/api/star` и `/api/login`, которым нужен разбор ответа).
+
+- [ ] **P1.21. Гонки запросов в `switchView()`, `loadHistoryPage()` и `searchSubscriptions()`**
+  - **Где:** `public/app.js:514-567, 1659-1749, 3926-3965`
+  - **Проблема:** Нет монотонных токенов/`AbortController`: устаревшие ответы при быстром переключении лент сбрасывают скролл, снимают лоадер чужой ленты, портят `historyOffset`/`historyDone`, удаляют `addedByFeed` у новой ленты и перезаписывают `#add-candidates`.
+  - **Исправление:** Добавить `viewToken` + `AbortController` в `switchView`/`loadHistoryPage` и `discoverSeq` + `AbortController` в `searchSubscriptions`.
+
+- [ ] **P1.22. Потеря настроек в `flushSettings()` и бесконечный цикл ретраев в `ensureBodiesNeeded()`**
+  - **Где:** `public/app.js:418-436, 2699-2728`
+  - **Проблемы:**
+    1. `Object.assign(pendingSettings.patch, patch)` перетирает свежие правки старым неудавшимся патчем, а изменения во время `busy` зависают без повторного запуска в `finally`.
+    2. `state.bodyRetryCount = 0` стоит **до** `await api('/api/bodies')`, поэтому лимит `<= 3` никогда не достигается (бесконечный опрос каждые 3 с при ошибке).
+  - **Исправление:** Делать `pendingSettings.patch = { ...patch, ...pendingSettings.patch }` и дозапускать `flushSettings()` в `finally`; перенести сброс `bodyRetryCount = 0` **после** успешного ответа.
+
+- [ ] **P1.23. `patchCard()` и `patchComments()` не инициализируют слоты картинок и embed-плееры; горячие клавиши и утечки `EventSource`**
+  - **Где:** `public/app.js:2127-2168, 3299-3353, 4552-4568, 4951-4965`
+  - **Проблемы:**
+    1. После `replaceWith(fresh)` в `patchCard`/`patchComments` не вызываются `holdImageSpace`, `setupImageSlots`, `markBrokenImages`, `layoutArticleImages`, `setupEmbeds`.
+    2. Глобальный `keydown` не проверяет `ctrlKey/metaKey/altKey` и открытые модалки/лайтбокс (`Ctrl+R`/`Ctrl+S` перехватываются).
+    3. `startEvents()` дублирует `document.addEventListener('error', ...)` при перелогине, а `showLogin()` не закрывает `EventSource`.
+  - **Исправление:** Вызывать инициализаторы DOM в `patchCard`/`patchComments`; добавить проверку модификаторов и `.modal:not([hidden]), .lightbox:not([hidden])` в `keydown`; вынести `error`-слушатель из `startEvents` и закрывать `events` в `showLogin`.
+
+- [ ] **P1.24. Проблемы Service Worker (`DATA_CACHE`, logout-очистка, перезапись `/index.html`)**
+  - **Где:** `public/sw.js:150, 160-170, 191-203`, `public/app.js:4418-4422`
+  - **Проблемы:**
+    1. `DATA_CACHE` наполняется авторизованными данными через `warm`, но нигде не читается; при logout не чистятся `DATA_CACHE`/`MEDIA_CACHE` и `localStorage['rss.pendingRead']`.
+    2. Навигационный обработчик кэширует в `/index.html` любой `fresh.ok` без проверки `pathname`, `!fresh.redirected` и `text/html`.
+  - **Исправление:** При logout очищать `DATA_CACHE`/`MEDIA_CACHE` и `rss.pendingRead`; удалить мёртвый `DATA_CACHE`/`warm` (или реально подключить с allowlist); обновлять `/index.html` только для `/` и `/index.html` с `content-type: text/html` и `!fresh.redirected`.
+
+### Инфраструктура, личные данные и тесты
+
+- [ ] **P1.25. Личные данные в репозитории/коде, слабый дефолтный пароль деплоя и нулевое покрытие тестами ключевых модулей**
   - **Где:**
-    1. `lib/telegram.mjs:277`: `<a href="${entity.url}">` — валидировать протокол (`/^https?:|^tg:/i`) и экранировать кавычки.
-    2. `lib/telegram.mjs:184`: экранировать `quoteAuthor` через `escapeHtml`.
-    3. `public/app.js:4819-4838`: в `embedLink()` валидировать схему URL (`/^https?:\/\//i`) перед вставкой в `data-embed` и `href`.
-    4. `public/app.js:1973-1984`: экранировать `title` через `esc()` в `updateFooterStats()`.
-    5. `public/app.js:693, 1538`: убрать инлайн `onerror="..."` из HTML-строк, заменить на делегированные слушатели `error` в фазе перехвата (`capture: true`) на `#tree` и `#list`.
-    6. `public/app.js` (15+ мест): экранировать `id` через `CSS.escape(id)` при подстановке в `querySelector(\`[data-item="${CSS.escape(id)}"]\`)`.
-
-- [ ] **P1.5. Усилить аутентификацию и работу с секретами**
-  - **Где:** `lib/auth.mjs:72-77`, `lib/users.mjs:72-76, 193`, `server.mjs:513-528`
-  - **Проблема:**
-    1. `users.byApiKey()` сравнивает ключи через `===` вместо `safeEqual()`.
-    2. `cookieHeader()` не выставляет флаг `Secure` при работе по HTTPS (`req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https'`).
-    3. `ensureDefaultAdmin()` выводит реальный пароль в логи в открытом виде.
-    4. На `/api/login` нет rate-limiting по IP (параллельные запросы обходят `setTimeout(350)`).
-  - **Решение:** Использовать `safeEqual` в `byApiKey()`, передавать `secure` в `cookieHeader()`, не логировать пароль (логировать только факт создания дефолтного админа, если пароль равен `'admin'`), добавить простой in-memory rate limiter по IP на `/api/login`.
-
-- [ ] **P1.6. Убрать личные данные из скриптов репозитория**
-  - **Где:** `deploy/install-vps.sh:24`, `tools/publish.ps1:105`, `tools/cdp-traffic.mjs:9, 23`
-  - **Проблема:** В скриптах захардкожены личный домен и префиксы IP-адресов VPS.
-  - **Решение:** Заменить домен по умолчанию на `rss.example.com` (требовать явную передачу `DOMAIN`), а список запрещённых паттернов для проверки утечек в `publish.ps1` вынести во внешний локальный файл из `.gitignore`.
+    - Отслеживаются git вопреки `.gitignore`: `bazqux-reader-subscriptions.xml`, `preview/article.png` → убрать через `git rm --cached`.
+    - Личный домен/логин в коде: `lib/habr-now.mjs:21` (`rss.letsplay.today`), `public/admin.html:95` (`makushin`).
+    - Дефолтный `ADMIN_PASS=admin` и печать пароля в stdout: `deploy/install.sh:85, 139`, `deploy/install-vps.sh:42, 141, 305` → генерировать случайный через `openssl rand -base64 16` при первой установке.
+    - `deploy/install-vps.sh:107-110`: `cp -a` поверх без `rm -rf` оставляет удалённые файлы, не копирует `package.json` и не делает `node --check`.
+    - **0% покрытия тестами:** `server.mjs`, `reader-core.mjs`, `lib/comments.mjs`, `lib/readability.mjs`, `lib/telegram.mjs`, `lib/fever.mjs`, `lib/xml.mjs`, `lib/traffic.mjs`, `lib/imagesize.mjs`. Написать приоритетные юнит-тесты (в первую очередь на `net-guard` IPv6, `readability` XSS/OOM, `comments` XSS, `fever` `?api=1`, `feed` RSS/Atom, `auth` cookies/sessionVersion, `store` гонки).
 
 ---
 
-## P2. Производительность, утечки памяти и надёжность
+## P2 — Средний приоритет (логика, парсинг, производительность, UI/админка)
 
-- [ ] **P2.1. Заменить динамический `import('./reader-core.mjs?u=...')` на класс `UserReader`**
-  - **Где:** `server.mjs:86-125`, `reader-core.mjs`
-  - **Проблема:** Загрузка отдельного ES-модуля с query-параметром на каждого пользователя навсегда утекает в кэш модулей V8 при удалении/отключении пользователя и дублирует код и память.
-  - **Решение:** Оформить ядро пользователя как класс `UserReader` (`new UserReader(options)`), хранить экземпляры в `Map` в `server.mjs` и корректно освобождать при `stopCore()`.
+### Сервер и ядро
 
-- [ ] **P2.2. Исправить бесконечный цикл Telegram-бота при остановке ядра**
-  - **Где:** `reader-core.mjs:1893-1926, 3573-3578`
-  - **Проблема:** `stop()` сбрасывает `refreshTimer` и `pumpTimer`, но не останавливает `while (true)` в `startTelegramBot()`. Удалённый/отключённый пользователь продолжает бесконечно опрашивать Telegram API.
-  - **Решение:** Добавить `AbortController` / флаг `stopped` в экземпляр читалки, прокинуть `signal` в `telegramGetUpdates()` и выходить из цикла при `stopped === true`.
+- [ ] **P2.1. `POST /api/read` принимает произвольные `ids`, вытесняя реальные отметки прочитанного (и `O(N²)`)**
+  - **Где:** `reader-core.mjs:3514-3558`
+  - **Исправление:** Принимать только существующие `id` (`findItem(id)`), ограничить размер массива `body.ids`, заменить `includes` на `Set`.
 
-- [ ] **P2.3. Удалить временное логирование на диск (`api-log.txt`) и отладочные `console.log`**
-  - **Где:** `reader-core.mjs:2437, 2443, 2469, 2472, 2513-2524, 2636-2639, 2904`
-  - **Проблема:** `apiLog()` без ротации пишет каждый запрос к `/api/*` в `data/api-log.txt` (причём в общий `DATA_DIR_DEFAULT`, а не в папку пользователя), рискуя заполнить диск на VPS. Прямые `console.log` в `serveMedia()` спамят в `journalctl`.
-  - **Решение:** Удалить `apiLog()`, `API_LOG_FILE`, неиспользуемые переменные в `POST /api/bodies` и шумные `console.log` в `serveMedia()`. При необходимости диагностики включать логирование флагом окружения `DEBUG=1`.
+- [ ] **P2.2. `db.parserVersion` сбрасывает переразбор после первой же обновлённой ленты**
+  - **Где:** `reader-core.mjs:886, 923`
+  - **Исправление:** Хранить `feed.parserVersion` индивидуально на каждой ленте.
 
-- [ ] **P2.4. Устранить неограниченный рост кэша медиа, ошибки `compressToWebp` и мусорные файлы**
-  - **Где:** `reader-core.mjs:662-668, 2156-2217, 2314-2320, 2444, 2464, 2493, 2503`
-  - **Проблема:**
-    1. `pruneMediaCache()` вызывается только в `serveThumb()`, но не в `serveImage()`, `serveMedia()` и `cachePostMedia()`.
-    2. `pruneFeed()` не удаляет `.webp`-копии миниатюр и файлы `tg-<feedId>-<itemId>-*.img` / `.json`.
-    3. `compressToWebp()` пишет во временный `${baseFile}.src` и сразу в финальный `${baseFile}.webp` без атомарности; если сжатый файл больше оригинала, он остаётся на диске и отдаётся при следующем запросе!
-    4. `serveMedia()` всегда отдаёт заголовок `content-type: image/jpeg` из кэша вне зависимости от реального формата.
-  - **Решение:** Вызывать `pruneMediaCache()` во всех точках записи медиа; в `compressToWebp()` писать в уникальный временный `.webp.tmp`, удалять его, если он не меньше оригинала, и атомарно переименовывать при успехе; в `pruneFeed()` удалять связанные `.webp` и `tg-*` файлы; определять `Content-Type` по magic bytes (`ICON_TYPE`).
+- [ ] **P2.3. Гонка `ETag` и кэша `/api/data` в `payloadBody` / `sendPayload`**
+  - **Где:** `reader-core.mjs:3707-3759`
+  - **Исправление:** Отдавать `ETag` из `body.revision`, а не текущего `db.revision`; пересобирать кэш при росте ревизии во время сжатия или смене `refreshing`.
 
-- [ ] **P2.5. Добавить таймауты на все `fetch()` и ограничение размера ответа**
-  - **Где:** `reader-core.mjs:2343, 2365, 2457, 2498, 2501`
-  - **Проблема:** Вызовы `fetch()` при кэшировании медиа и работе с Telegram Bot API не имеют `signal` с таймаутом и лимита на объём тела — зависший или огромный ответ блокирует обработчик и расходует память.
-  - **Решение:** Пропускать все внешние загрузки через единый HTTP-клиент с `AbortSignal.timeout(...)` и проверкой `content-length` / потоковым лимитом байт.
+- [ ] **P2.4. Виртуальная лента `habr-now` игнорируется в `POST /api/read`, `GET /api/items` и `GET /api/data?view=...`**
+  - **Где:** `reader-core.mjs:3221, 3276, 3516`
+  - **Исправление:** Включать `habrNowFeedView()` в список источников в этих трёх обработчиках.
 
-- [ ] **P2.6. Заменить $O(N \cdot M)$ поиск на `Map`-индексы на сервере и клиенте**
-  - **Где:** `reader-core.mjs:402-408, 1716, 2763, 3191-3204`, `public/app.js` (многочисленные `.find()`)
-  - **Проблема:** `findItem(id)` линейно обходит все ленты и статьи внутри циклов по `ids` (в `POST /api/read` — дважды на каждый `id`). На клиенте `state.data.items.find()` и `state.data.feeds.find()` вызываются внутри циклов рендеринга и прокрутки.
-  - **Решение:** Поддерживать индекс `itemIndex = new Map()` (`itemId -> { feed, item }`) в `UserReader` и `itemsById` / `feedsById` в `public/app.js`, перестраивая при обновлении данных.
+- [ ] **P2.5. `serveMedia` (Telegram Bot): `fetch` без таймаута и неверный `Content-Type` для не-картинок**
+  - **Где:** `reader-core.mjs:2827-2837`
+  - **Исправление:** Добавить `AbortSignal.timeout(15000)`, проверять `r.ok`, использовать вычисленный `type` вместо `sniffImageType` для видео/документов.
 
-- [ ] **P2.7. Перевести SSE (`pushRevisions`) с 1-секундного поллинга на события**
-  - **Где:** `server.mjs:366-393`
-  - **Проблема:** `setInterval(..., 1000)` опрашивает ядра всех подключённых пользователей каждую секунду.
-  - **Решение:** Передавать в `UserReader` колбэк `onRevisionChange(userId, rev)` (вызываемый из `Store` при росте ревизии) и пушить SSE-сообщения мгновенно без таймера опроса (оставив только 15-секундный `keep-alive`).
+- [ ] **P2.6. Гонки в `startTelegramBot` / `applyTelegramToken`**
+  - **Где:** `reader-core.mjs:2172-2225`
+  - **Исправление:** Проверять `botStopped` после каждого `await`, сбрасывать `botLoopRunning` в `finally`, прерывать `telegramGetUpdates` через `AbortController` в `stop()`, делать `await store.saveStateNow()` и сбрасывать `lastUpdateId` при смене токена.
 
-- [ ] **P2.8. Защитить `lib/traffic.mjs` от утечки памяти и убрать BOM**
-  - **Где:** `lib/traffic.mjs:1, 45-50`, `.gitignore:1`, `tools/publish.ps1:1`
-  - **Проблема:** Любой произвольный URL от сканеров (404) создаёт новый ключ в `stats.routes`, бесконечно раздувая объект в памяти и `traffic.json`. Файлы содержат UTF-8 BOM в нарушение правила проекта.
-  - **Решение:** Нормализовать неизвестные маршруты в `OTHER` (или учитывать только известные префиксы `/api/*`, `/fever/`, `/admin`, `static`) и ограничить максимум ключей в `stats.routes`. Пересохранить файлы в UTF-8 без BOM.
+- [ ] **P2.7. `500` вместо `400`/`413` на битый ввод и утечка `chunks` в `readRawBody`**
+  - **Где:** `server.mjs:84, 195-206`, `reader-core.mjs:1800-1810, 2259`
+  - **Исправление:** Обернуть `decodeURIComponent` в `try/catch`; в `reader-core.mjs` выставлять `statusCode = 400/413` и проверять, что распарсенный JSON — не-null объект; при превышении лимита в `readRawBody` очищать `chunks` и снимать `data`-слушатель.
 
-- [ ] **P2.9. Оптимизировать старт сервера и горячие пути рендеринга**
-  - **Где:** `reader-core.mjs:3496, 3668-3724, 3157`, `public/app.js:1381-1382, 1447-1472, 2022-2035, 2280, 3118`
-  - **Проблема:**
-    1. `cleanupStoredBodies()` читает все `content/*.json` всех лент при КАЖДОМ старте сервера — нет флага `db.cleanupVersion`.
-    2. `periodicRefresh()` не проверяет `if (refreshing) return;`, а `POST /api/refresh` вызывает `refreshCommentCounts()` дважды.
-    3. На клиенте `switchView()` вызывает `render()` 3 раза подряд; на `#list` навешано 3 отдельных `scroll`-слушателя + `document` capture-слушатель (вызывая `trackCommentsProgress` дважды); в `updateActiveArticle()` вызывается `contentTopY(list)` внутри цикла (forced reflow).
-    4. `server.mjs:594-597` при анонимном запросе статики поднимает ядро администратора вместо прямой отдачи файлов из `public/`.
-  - **Решение:** Добавить `db.cleanupVersion` для однократного запуска миграции; добавить guard в `periodicRefresh()` и убрать повторный `refreshCommentCounts()`; отдавать статику напрямую из `server.mjs`; объединить обработчики `scroll` на `#list` и убрать лишние вызовы `render()` и `contentTopY()`.
+- [ ] **P2.8. `X-Forwarded-Proto` без проверки `isTrustedProxy` и отсутствие CSRF-проверки `Origin`/`Content-Type`**
+  - **Где:** `server.mjs:754-756, 217-234`, `reader-core.mjs:1810`
+  - **Исправление:** В `requestIsHttps` проверять `isTrustedProxy`; на браузерных `POST /api/*` проверять `Origin` или требовать `Content-Type: application/json`.
 
-- [ ] **P2.10. Починить утечку `MutationObserver` и решить судьбу `scroll-diag.*`**
-  - **Где:** `public/scroll-diag.js:62-64`, `public/scroll-diag.css`
-  - **Проблема:** Файлы нигде не подключены, а в `scroll-diag.js` созданный `MutationObserver` никогда не отключается в `stop()`.
-  - **Решение:** Либо удалить неиспользуемые файлы `scroll-diag.js`/`scroll-diag.css`, либо перенести в `tools/` и добавить `observer.disconnect()` в `stop()`.
+- [ ] **P2.9. Неограниченный рост `hostHits`/`iconCache`, лишнее чтение диска в `/api/admin/users`, мутация `db.folders`**
+  - **Где:** `reader-core.mjs:372, 1462, 1873, 3183-3185`, `server.mjs:259-275`
+  - **Исправление:** Ограничить `hostHits`, чистить `iconCache` и `fav-<id>.*` при удалении ленты; в `userStats` брать данные из уже поднятого ядра; в `toOpml` не сортировать `db.folders` на месте; в `POST /api/state` использовать `itemIndex()`.
 
----
+### Библиотеки (`lib/*.mjs`)
 
-## P3. Архитектурный рефакторинг и декомпозиция
+- [ ] **P2.10. Баги парсинга RSS/Atom в `lib/feed.mjs`**
+  - **Где:** `lib/feed.mjs:26-34, 86-94, 194, 207, 213`
+  - **Проблемы:**
+    1. `htmlToText` сначала декодирует сущности, затем режет `<...>`, уничтожая `std::vector&lt;int&gt;`.
+    2. `child(node, 'link')` берёт `<atom:link>` вместо `<link>` → пустые `siteUrl` и `item.link`.
+    3. `child(item, 'comments')` берёт URL `<comments>` вместо числа `<slash:comments>` → `commentsCount: null`.
+    4. Atom `<content type="text">` с `<tag>` трактуется как сырой HTML без экранирования.
+  - **Исправление:** Удалять теги до `decodeHtmlEntities`; для RSS `<link>` и `<slash:comments>` учитывать точное имя тега/namespace; экранировать `type="text"`.
 
-### Целевая архитектура модулей
+- [ ] **P2.11. Мутация счётчика ID в `lib/fever.mjs` при `mark=group` для лент без папки**
+  - **Где:** `lib/fever.mjs:183`
+  - **Исправление:** Не вызывать `ctx.folderNum({})` для отсутствующей папки — проверять `folder` заранее.
 
-```mermaid
-flowchart TB
-  subgraph Server[Серверная часть Node.js]
-    SRV[server.mjs: HTTP/HTTPS, ACME, статика, SSE, роутинг]
-    AUTH[lib/auth.mjs + lib/users.mjs: сессии, scrypt, роли, Fever-ключи]
-    CORE[lib/reader.mjs: класс UserReader на пользователя]
-    HTTP[lib/http.mjs: safeFetch, анти-SSRF, декодирование кодировок, politeWait]
-    SYNC[lib/sync.mjs: обновление RSS/Atom/TG, mergeItems, pruneFeed, discover]
-    FULL[lib/fulltext.mjs: очередь докачки, readability]
-    MEDIA[lib/media.mjs: прокси img/thumb/video/favicon, cwebp, кэш]
-    API[lib/api.mjs: маршруты /api/*, сжатие payloadCache]
-    STORE[lib/store.mjs: атомарное хранилище с очередью записи]
-    SRV --> AUTH
-    SRV --> CORE
-    CORE --> SYNC
-    CORE --> FULL
-    CORE --> MEDIA
-    CORE --> API
-    CORE --> STORE
-    SYNC --> HTTP
-    FULL --> HTTP
-    MEDIA --> HTTP
-  end
+- [ ] **P2.12. Баги HTML-парсинга в `lib/readability.mjs`**
+  - **Где:** `lib/readability.mjs:216-225, 400-404`
+  - **Исправление:** В `matchingDivEnd` сравнивать `m[0].toLowerCase() === '</div>'`; в fallback `entry-content` использовать `matchingDivEnd`; выделить `<img\b[^>]*>` в отдельную ветку регулярки.
 
-  subgraph Client[Клиентская часть ES-модули public/js/]
-    MAIN[app.js: инициализация, сборка модулей]
-    STATE[state.js: состояние, prefs, индексы Map]
-    NET[api.js: fetch-обёртка, офлайн-очередь, SSE]
-    SAN[sanitize.js: очистка HTML, эмбеды, слоты картинок]
-    UI[render-*.js: дерево, шапка, список, комментарии, модалки]
-    READ[reading.js: прокрутка, активная статья, автопрочтение]
-    MAIN --> STATE
-    MAIN --> NET
-    MAIN --> UI
-    MAIN --> READ
-    UI --> SAN
-  end
-```
+- [ ] **P2.13. Ослабленная проверка домена в `comments.mjs`/`telegram.mjs` и баги парсинга LJ/Telegram**
+  - **Где:** `lib/comments.mjs:351-354, 441, 454, 465, 488`, `lib/telegram.mjs:15, 66-79, 151-156, 190-195, 286`
+  - **Исправление:** Проверять `new URL(link).hostname` вместо regex по всей строке (`not-t.me` не должен матчиться); в `ljCommentsJson` искать `"comments"\s*:\s*\[` и определять `hasMore` по реальной следующей странице; в `telegram.mjs` чистить HTML через allowlist, экранировать `src`/`poster`, не дублировать текст цитаты при `mainIndex < 0` и сортировать закрывающие entities в LIFO-порядке.
 
-- [ ] **P3.1. Декомпозировать `reader-core.mjs` (3776 строк) на модули с классом `UserReader`**
-  - Выделить `lib/http.mjs` (единый `safeFetch`, `decodeBody`, `politeWait`, `httpGet`, `httpGetBinary`, `readBody`, `readJson` с корректным HTTP 400 на битый JSON).
-  - Выделить `lib/media.mjs` (фавиконы, миниатюры, прокси картинок и видео, `firstGifFrame`, `compressToWebp`, `pruneMediaCache`).
-  - Выделить `lib/sync.mjs` (обновление лент, `discoverCandidates`, `addFeed`, `mergeItems`, `pruneFeed`, фильтры, OPML).
-  - Выделить `lib/fulltext.mjs` (очередь докачки `fullTextQueue`, `fetchFullText`, `pumpQueue`).
-  - Выделить `lib/api.mjs` (обработчики `/api/*` + сжатие `payloadCache`).
-  - В `lib/reader.mjs` оставить класс `UserReader`, связывающий подсистемы и управляющий жизненным циклом (`init`, `handleRequest`, `updateAuth`, `stop`, `shutdown`).
+- [ ] **P2.14. Защита от Path Traversal в `Store`/`userDir`, утечка `liveStores`, гонка `removeFeed`**
+  - **Где:** `lib/store.mjs:43, 74, 121, 241, 291, 299, 365, 381-387`, `lib/users.mjs:217`
+  - **Исправление:** Валидировать `feedId`/`userId` по `/^[A-Za-z0-9_-]{1,64}$/`; добавить `Store.close()`; ставить `unlink` в `removeFeed` в `this.writeQueues`.
 
-- [ ] **P3.2. Убрать дублирование авторизации и статики между `server.mjs` и `reader-core.mjs`**
-  - **Где:** `reader-core.mjs:89-90, 224-272, 2527-2624, 3400-3439`, `server.mjs:157-206, 397-405`
-  - **Проблема:** Авторизация, сессии, `POST /api/login`, `POST /api/logout`, `POST /api/settings/credentials`, `MIME`, `readBody` продублированы в обоих файлах, причём версия в `reader-core.mjs` фактически недостижима и расходится по поведению.
-  - **Решение:** Оставить всю аутентификацию, выдачу статики (с кэшированием сжатых ответов) и общие HTTP-утилиты в `server.mjs` + `lib/http.mjs`, передавая в `UserReader.handleRequest(req, res, url, user)` уже авторизованного пользователя.
+- [ ] **P2.15. Блокирующий `scryptSync` без лимита длины пароля и сломанный Fever-ключ при `Users.rename`**
+  - **Где:** `lib/auth.mjs:11, 20`, `lib/users.mjs:12, 121-124, 176-185`
+  - **Исправление:** Перейти на асинхронный `scrypt`, ограничить длину пароля (8–128 символов); при `rename` обновлять/сбрасывать `apiKey`.
 
-- [ ] **P3.3. Устранить дублирование функций парсинга и сериализации в `lib/*`**
-  - **Где:** `lib/xml.mjs`, `lib/feed.mjs`, `lib/readability.mjs`, `lib/comments.mjs`, `lib/telegram.mjs`, `reader-core.mjs`
-  - **Проблема:**
-    - `decodeEntities` / `decodeHtmlEntities` реализованы в 3 разных файлах (`xml.mjs`, `feed.mjs`, `comments.mjs`).
-    - `htmlToText` и `absolutize` продублированы в `feed.mjs` и `readability.mjs`.
-    - `toMeta`, `payloadItem` и тело `buildPayload` дублируют маппинг полей статьи (уже есть расхождение по `commentsCount: null` vs `undefined`).
-    - `pickVideoUrl` дублирует `pickVideoUrls` в `lib/telegram.mjs`.
-    - `resolveFeed` дублирует `discoverCandidates` в `reader-core.mjs`.
-    - В `lib/readability.mjs:155` `stripJunkBlocks` прерывает цикл `break` при встрече крупной обёртки вместо того, чтобы пропустить её и продолжить поиск следующих рекламных блоков (нужно сдвигать позицию поиска, а не выходить из цикла).
-  - **Решение:** Вынести общие строковые/HTML-утилиты в `lib/html.mjs`, унифицировать `payloadItem` (использовать его внутри `buildPayload`), удалить дубли.
+- [ ] **P2.16. Переполнение стека в `lib/xml.mjs` и падение `trackTraffic` на `res.end(cb)`**
+  - **Где:** `lib/xml.mjs:54-117, 140-165`, `lib/traffic.mjs:49-56`
+  - **Исправление:** Ограничить глубину вложенности в `parseXml` (`MAX_DEPTH = 128`); в `trackTraffic` проверять `typeof chunk !== 'function'` и учитывать `encoding`.
 
-- [ ] **P3.4. Декомпозировать `public/app.js` (5103 строки) на нативные ES-модули (`public/js/*.js`)**
-  - **Обоснование:** `index.html` уже подключает скрипт с `type="module"` — сборщик не требуется, браузеры нативно поддерживают ES-модули, а разделение упростит поддержку и отладку.
-  - **Предлагаемая структура:**
-    - `public/js/state.js` — состояние, настройки `prefs`, `localStorage`, индексы `itemsById`/`feedsById`.
-    - `public/js/api.js` — `api()`, офлайн-очередь `pendingReads`, `pushSettings()`, SSE `/api/events`.
-    - `public/js/sanitize.js` — `sanitize()`, `slotifyImages()`, `setupImageSlots()`, `trimPromoTail()`, `setupEmbeds()`.
-    - `public/js/comments.js` — рендер, загрузка, догрузка и отслеживание прочитанных комментариев.
-    - `public/js/reading.js` — `updateActiveArticle()`, `positionArticleActions()`, `setupReadObservers()`, автопрочтение, переходы `goRelative()`.
-    - `public/js/render.js` — рендер дерева, шапки, карточек (`renderSidebar`, `renderToolbar`, `renderList`, `patchCard`).
-    - `public/js/modals.js` — настройки, фильтры, добавление подписки, вход, кастомные `askConfirm()`/`askPrompt()`, лайтбокс.
-    - `public/js/mobile.js` — выдвижная панель, меню `⋯`, свайпы, PWA.
-    - `public/app.js` — точка входа и привязка событий.
+### Фронтенд (`public/app.js`, `style.css`, `index.html`, `admin.*`)
 
-- [ ] **P3.5. Заменить нативные `window.confirm()` и `window.prompt()` на кастомные модальные окна**
-  - **Где:** `public/app.js:2916, 2925, 3181, 3191, 3320, 3514, 3518, 4020`, `public/admin.js:106, 110, 116, 117`
-  - **Проблема:** В установленном PWA на мобильных устройствах системные `confirm()`/`prompt()` работают нестабильно или подавляются (в проекте уже создана `askConfirm()` для одной кнопки, но остальные 12 мест используют нативные диалоги).
-  - **Решение:** Добавить универсальный `askPrompt(title, label, initialValue)` рядом с `askConfirm()` и перевести все подтверждения и ввод названий на кастомные модалки.
+- [ ] **P2.17. `refreshFeeds()` обрывает ожидание через 2 с; `toggleStar()` не откатывается при сетевой ошибке**
+  - **Где:** `public/app.js:3120-3184, 3196-3201`
+  - **Исправление:** Убрать `|| !check.started` из условия выхода; вынести откат звезды в `rollback()` и вызывать его в `catch`.
 
-- [ ] **P3.6. Очистить и реструктурировать `public/style.css` (1421 строка)**
-  - **Где:** `public/style.css`
-  - **Проблема:** Многократные переопределения одних и тех же классов в конце файла, конфликтующие медиа-запросы (`@media (max-width: 900px)` на строке 1189 сбивает `padding-right: 50px` у `.a-head` на `8px`, из-за чего плавающие кнопки перекрывают текст заголовка; `.img-row` объявлен сначала как `grid`, потом как `flex`; `.a-thumb` переопределён 6 раз; дублируется `[hidden]`).
-  - **Решение:** Сгруппировать правила по логическим секциям (токены/темы → шрифты → каркас → дерево → шапка → карточка → статья/медиа → комментарии → модалки → медиа-запросы в одном блоке в конце), удалить дубли и мёртвые классы (`.add-form`, `.dot`, `.embed-open`, `.a-body img.pending`, `body.actions-hidden`, `body.tools-open`, `.a-actions.floating.settled`).
+- [ ] **P2.18. Краши DOM/рендера: неэкранированный `id` в `markCommentsSeen`, `decodeURIComponent` в `bodyHtml`, отсутствующие проверки на `null` и `localStorage`**
+  - **Где:** `public/app.js:340-341, 1288-1291, 1575, 3262, 3271, 3540, 3550, 3797-3798, 4067-4071, 4401-4405, 4904, 5196-5197`, `public/admin.js:175, 180`
+  - **Исправление:** Использовать `cssId(id)` на строке 1575; обернуть `decodeURIComponent` и все обращения к `localStorage`/`sessionStorage` в `try/catch`; добавить проверки `if (!item/feed/folder) return`, `try/catch` в `#set-fetch-full` и проверку `res.ok` в `#opml-file`.
+
+- [ ] **P2.19. Баги UI-состояния: пустое дерево в `renderSidebar`, потерянный класс `.floating`, скрытие медленных картинок через 3 с, утечка `dragScrollTimer` и гонки `askConfirm`/`askPrompt`**
+  - **Где:** `public/app.js:34-95, 965-968, 1987-2011, 2476-2500, 3659-3668`
+  - **Исправление:** Проверять пустоту дерева до добавления `.tree-tail`; добавлять `.floating` при `position = 'fixed'`; не ставить `.broken` по 3-секундному таймауту (только по `error`) и вешать `{ once: true }`; вызывать `stopDragScroll()` на `#drop-hint`; добавить `Escape` в `askConfirm` и отмену предыдущего промиса при повторном открытии модалки.
+
+- [ ] **P2.20. Мобильная вёрстка и жесты**
+  - **Где:** `public/app.js:5113-5139`, `public/style.css:891-893, 966-971, 1064, 1080, 1234, 1491-1496`, `public/index.html:5, 15`
+  - **Проблемы:**
+    1. Свайпы срабатывают поверх модалок/лайтбокса и горизонтальных `<pre>`/`<table>`.
+    2. `#prompt-modal #prompt-input` перебивает `font-size: 16px` на iOS (авто-зум).
+    3. `.head-tools` скрыт на `<= 900px` без способа открыть поиск/фильтры/сортировку.
+    4. Нет `viewport-fit=cover` и `env(safe-area-inset-top)` при `black-translucent` статус-баре.
+    5. `.a-head { padding-right: 46px }` на `<= 900px` перебивает `50px` для `<= 560px`/`coarse`.
+  - **Исправление:** Игнорировать свайпы при открытых модалках и внутри прокручиваемых элементов; поднять `font-size` у `#prompt-input` на `pointer: coarse`; вернуть доступ к поиску/фильтрам на мобильном; добавить `viewport-fit=cover` и safe-area отступ; выровнять порядок медиа-запросов `.a-head`.
+
+- [ ] **P2.21. Дефекты админки (`admin.html` / `admin.js`)**
+  - **Где:** `public/admin.js:88-126, 151-166`, `public/admin.html:78-105, 121`
+  - **Проблемы:** Ошибка загрузки при скрытой `#panel` пишется в скрытый `#users-msg`; на 403 стирается класс `err` у `#login-msg`; нет `disabled` на кнопках при запросах (двойной клик); нет `<form>` и Enter на полях логина; остались 4 нативных `prompt()`/`confirm()` (`admin.js:106, 110, 116, 117`).
+  - **Исправление:** Показывать ошибки старта в видимом контейнере; передавать `'err'` на 403; блокировать кнопки на время `fetch`; обернуть логин и создание пользователя в `<form>`; заменить `prompt`/`confirm` на встроенные модалки.
+
+### Инфраструктура и конфиги
+
+- [ ] **P2.22. Расхождение дефолтов хранения между `README.md` и скриптами деплоя**
+  - **Где:** `deploy/install.sh:101-102`, `deploy/install-vps.sh:145-146` (`1500` / `30` дн.) vs `README.md:329, 337-338` (`3000` / `14` дн.)
+  - **Исправление:** Привести значения к единому источнику правды.
+
+- [ ] **P2.23. Фиктивный тест `test/habr-now-meta.test.mjs` и узкий `npm run check`**
+  - **Где:** `test/habr-now-meta.test.mjs:5-17`, `package.json:14`
+  - **Исправление:** Импортировать реальную логику из рабочего модуля вместо копипасты функции в тест; расширить `npm run check` на все `lib/*.mjs` и `tools/*.mjs`.
+
+- [ ] **P2.24. `deploy/nginx.conf.example` и `deploy/install-vps.sh` (SSE timeout и `curl`)**
+  - **Где:** `deploy/nginx.conf.example:24-37`, `deploy/install-vps.sh:277, 280`
+  - **Исправление:** Выделить `location /api/events` с `proxy_read_timeout 3600s; proxy_buffering off;`; добавить `--max-time 15` в `curl` внутри `verify()`.
 
 ---
 
-## P4. Очистка мёртвого кода, документация и тестирование
+## P3 — Низкий приоритет (a11y, граничные случаи, мёртвый код, техдолг)
 
-- [ ] **P4.1. Удалить мёртвый и одноразовый код**
-  - **`reader-core.mjs`:** неиспользуемые `createServer`, `PORT`, `HOST`, `AUTH_USER`, `AUTH_PASS`, мёртвые ветки авторизации.
-  - **`lib/comments.mjs`:** недостижимая ветка `wordpress` (`loadWpComments`, `wpSlugOf`, `WP_API`) и опечатка в имени `tolstoayFetch` → `tolstoyFetch`.
-  - **`lib/readability.mjs`:** неиспользуемые `JUNK_HEADING` и `seen` в `addMissedMedia`.
-  - **`public/app.js`:** отключённый `PAGED_DATA` и связанные `fetchView`/`fetchViewInner`/`viewParam` (либо довести постраничную загрузку до рабочего состояния и включить), неиспользуемые `pendingNewForFeed`, `pendingNewCountLegacy`, `layoutCardThumbs`, `rememberManualUnread`, `keepManualUnread`, `freezeListForReading`, `unfreezeList`, `inReadingList`, отладочную `showMediaCounters()` (выводить только при `?debug=1`), лишние переменные в `setupPwa()`, `applyVisualPrefs()`, `bodyHtml()`.
-  - **`tools/patch/*`:** удалить или вынести из проекта 14 одноразовых патч-скриптов (сейчас они попадают в публичный репозиторий при `publish.ps1`).
+- [ ] **P3.1. `lib/imagesize.mjs`: выход за границы буфера в WebP `VP8X` и ошибки JPEG-маркеров**
+  - **Где:** `lib/imagesize.mjs:7, 11, 17-32, 39-43`
+  - **Исправление:** Проверять `buf.length >= 30` для `VP8X`/`VP8 ` и `>= 25` для `VP8L`; в JPEG обрабатывать `0xFF 0xFF`, `0xDA`/`0xD9` и standalone-маркеры; в PNG проверять `width > 0 && height > 0`.
 
-- [ ] **P4.2. Автоматизировать версионирование ресурсов**
-  - **Где:** `public/index.html`, `public/sw.js`, `reader-core.mjs`
-  - **Проблема:** Номера версий `?v=330`, `?v=190`, `rss-shell-v294` приходится править вручную и они рассинхронизируются.
-  - **Решение:** Вынести единый номер версии (или вычислять хеш статических файлов при старте сервера) и подставлять его автоматически при отдаче `index.html` и `sw.js`.
+- [ ] **P3.2. `lib/habr-now.mjs`: неверный порядок очистки устаревшего кэша и fallback**
+  - **Где:** `lib/habr-now.mjs:160-175`
+  - **Исправление:** Сбрасывать устаревший кэш (`KEEP_STALE_MS`) **до** ветки fallback `if (!state.items.length)`.
 
-- [ ] **P4.3. Актуализировать `README.md` под реальное поведение кода**
-  - **Где:** `README.md`
-  - **Проблема:** Расхождения по значениям по умолчанию (`MAX_UNREAD_PER_FEED` 1500 vs 3000, `KEEP_READ_DAYS` 30 vs 14, `REFRESH_MINUTES` 10 vs 5), описанию прогрева кэша в SW (удалён), работе фильтров («скрытые статьи возвращаются, если фильтр удалить» в начале vs «снятие фильтра не возвращает удалённое» в конце), опечатка «иначе картинки иначе картинки» (строка 592).
-  - **Решение:** Привести `README.md` в соответствие с фактической реализацией и удалить противоречивые устаревшие абзацы.
+- [ ] **P3.3. `lib/xml.mjs`: потеря пробельных узлов, закрытие void-тегов (`<br></br>`) и `DOCTYPE` с `[...]`**
+  - **Где:** `lib/xml.mjs:64, 69, 89-93, 159-162`
+  - **Исправление:** Сохранять пробельные узлы между элементами; не закрывать HTML void-элементы; экранировать `&` в атрибутах.
 
-- [ ] **P4.4. Добавить `package.json` (без внешних зависимостей) и базовые автотесты на `node:test`**
-  - **Зачем:** Проект не использует сторонние пакеты, но встроенный раннер `node --test` (Node.js 18+) позволяет тестировать критическую логику без `npm install`.
-  - **Покрыть тестами в первую очередь:**
-    - `lib/xml.mjs` и `lib/feed.mjs` — разбор RSS 2.0, RSS 1.0 (RDF), Atom, CDATA, сущностей, битых дат.
-    - `lib/readability.mjs` — очистка рекламных/навигационных блоков, сохранение картинок и видео, `looksLikePageChrome`.
-    - `lib/store.mjs` — атомарная запись при параллельных вызовах, сохранение всех `META_FIELDS`, обрезка `fullHtml` без поломки тегов.
-    - `lib/auth.mjs` и `lib/users.mjs` — scrypt, `issueSession`/`readSession`, `safeEqual`.
-    - `lib/http.mjs` — блокировка SSRF (приватные IPv4/IPv6, редиректы).
-    - `lib/comments.mjs` — определение провайдеров (Habr, iXBT, ixbt.games, Tolstoy, LiveJournal).
-    - `lib/fever.mjs` — пагинация (`since_id`/`max_id`/`with_ids`), `mark`.
+- [ ] **P3.4. Мелкие утечки ресурсов и недочёты в `lib/*`**
+  - **Где:** `lib/traffic.mjs:21-24` (удалять `.tmp` в `catch`), `lib/net-guard.mjs:117-122` и `lib/habr-now.mjs:117-118` (вызывать `response.body?.cancel()` и чистить `Authorization`/`Cookie` при смене origin), `lib/telegram.mjs:227-255, 321` (валидировать токен, не светить его в ошибках, брать `post.text` без HTML-сущностей), `lib/auth.mjs:45` (проверять `parts.length === 2`), `lib/comments.mjs:480-497` (мёртвая ветка `mobile-review.com`), `lib/readability.mjs:175` (квадратичный regex).
+
+- [ ] **P3.5. Доступность (a11y) в `public/index.html` и `public/admin.html`**
+  - **Где:** `public/index.html:26-27, 76, 105, 114-212, 524-589`, `public/admin.html:69, 86, 105, 121`, `public/app.js:1828-1831`
+  - **Исправление:** Добавить `role="dialog"`, `aria-modal="true"`, `aria-labelledby` и возврат фокуса для модалок; `aria-label` на кнопки-иконки и `<select>`; `role="status"`/`role="alert"` на `#toast`, `#login-error`, `.msg`.
+
+- [ ] **P3.6. Мёртвый код и рассинхрон селекторов во фронтенде и SW**
+  - **Где:** `public/style.css:1132`, `public/app.js:1632-1633, 2309, 2319, 5064, 5171, 5195-5200`, `public/sw.js:15-27, 67-70, 118-134, 152`
+  - **Исправление:** Удалить мёртвые `#settings-version` и `#menu-update`; убрать двойное экранирование `trafficTitle` (строка 2319); оставить один `scroll`-слушатель `trackCommentsProgress` (на `#list`); удалить `staleWhileRevalidate` и недостижимый `isVideo` в `sw.js`; добавить `/icon-maskable-512.png` в `SHELL`; ограничить размер `MEDIA_CACHE`; сбрасывать `rss.reloaded` и не перезагружать страницу при самой первой установке SW.
+
+- [ ] **P3.7. Мёртвый код и мелкие недочёты в `server.mjs` и `reader-core.mjs`**
+  - **Где:** `server.mjs:37-38, 111, 479`, `reader-core.mjs:70-75, 1932, 2849-2876, 2917-2946, 2958-2961`
+  - **Исправление:** Удалить дублирующие маршруты авторизации в `reader-core.mjs`, неиспользуемые переменные (`FIELD_PASS`, `FIELD_KEY`, `coreErrors`, `startedAt`/`values`/`filled`); поменять `public` на `private` в `serveFavicon:1932`; запретить `.`/`..` в ACME-имени.
+
+- [ ] **P3.8. Утилиты `tools/*` и кодировка `start.cmd`**
+  - **Где:** `tools/fix-encoding.mjs:26-28`, `tools/measure-article.mjs:6-8, 68`, `tools/cdp-traffic.mjs:5, 17-20`, `tools/bump-version.mjs`, `start.cmd`
+  - **Исправление:** Добавить проверку аргументов в `fix-encoding.mjs` и `measure-article.mjs`, исправить `height: none` → `height: auto`; почистить ad-hoc пробы в `cdp-traffic.mjs`; перевести `start.cmd` в CRLF (или убрать кириллицу из `rem`).
+
+- [ ] **P3.9. Гигиена репозитория: архивация 7 устаревших TODO/AUDIT-файлов в корне**
+  - **Где:** `TODO_231126.md`, `TODO-verified-2026-11-23.md`, `TODO_2026-11-24.md`, `TODO-plan-2026-11-24.md`, `TODO-css-2026-11-25.md`, `CSS_AUDIT_REPORT.md`, `RENDER-AUDIT-2026-11-27.md`
+  - **Статус:** `CSS_AUDIT_REPORT.md`, `TODO-css-2026-11-25.md` и `RENDER-AUDIT-2026-11-27.md` полностью закрыты; `TODO_231126.md`, `TODO-verified-2026-11-23.md`, `TODO_2026-11-24.md` и `TODO-plan-2026-11-24.md` устарели или перекрыты этим документом.
+  - **Исправление:** Перенести исторические отчёты в `docs/archive/` (и исключить `docs/archive/` из `tools/publish.ps1`), оставив этот `TODO.md` единственным актуальным трекером.
+
+- [ ] **P3.10. Архитектурный техдолг (из прошлых планов, остаётся открытым)**
+  - Заменить опрос SSE `setInterval(..., 1000)` (`server.mjs:442`) на event-driven подписку от `Store`.
+  - Перевести `reader-core.mjs` (4 203 строки) с динамического `import('./reader-core.mjs?u=...')` на класс `UserReader` и разбить на модули.
+  - Разбить `public/app.js` (5 666 строк) на ES-модули.
+
+---
+
+## Рекомендуемый порядок исправления (итерации)
+
+1. **Итерация 1 — Экстренная безопасность и утечки (P0.1–P0.5, P0.10):** сменить пароль VPS и убрать `rus-host.txt`/`bazqux-*.xml`/`preview/` из git; закрыть краш на `new URL`; перевести `httpGetOnce`/`httpGetBinary` на `safeFetch`; исправить IPv6 в `net-guard.mjs`; закрыть XSS в медиа-прокси; добавить `sessionVersion`.
+2. **Итерация 2 — XSS-санитайзеры на сервере и клиенте (P0.6–P0.9):** allowlist-санитайзер в `readability.mjs`, `comments.mjs`, `telegram.mjs` и `public/app.js`; проверка протоколов в `setupEmbeds` и `item.link`.
+3. **Итерация 3 — Целостность данных и надёжность бэкенда (P1.1–P1.18):** починить `Store` гонки и защиту от перезаписи `users.json`/`state.json`, Basic Auth, `disable→enable`, `newestKnown`, `cleanStoredBodies`, `serveVideo` pipeline, лимит `cwebp`, SSE-утечки, `graceful shutdown`, `fever.mjs`, `stripJunkBlocks` OOM, `parseCookies`.
+4. **Итерация 4 — Стабильность фронтенда и PWA (P1.19–P1.24, P2.17–P2.21):** остановить сброс формы входа, починить `api()` ошибки, токены отмены в `switchView`/`loadHistoryPage`/`searchSubscriptions`, `flushSettings`, `ensureBodiesNeeded`, `patchCard`/`patchComments`, горячие клавиши, `sw.js`, мобильную вёрстку и админку.
+5. **Итерация 5 — Парсинг, деплой и автотесты (P0.11–P0.12, P1.25, P2.1–P2.16, P2.22–P2.24):** починить `install-vps.sh` и `publish.ps1`, баги `feed.mjs`/`readability.mjs`/`comments.mjs`/`telegram.mjs`/`xml.mjs`, дописать тесты на все критичные модули и расширить `npm run check`.
+6. **Итерация 6 — Полировка и гигиена (P3.1–P3.10):** a11y, мёртвый код, `imagesize`/`habr-now`, архивация старых TODO, архитектурный рефакторинг.

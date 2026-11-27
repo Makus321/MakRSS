@@ -19,7 +19,7 @@ param(
     [string]$Remote = 'https://github.com/Makus321/MakRSS.git',
     [string]$Branch = 'main',
     [string]$AuthorName = 'Makus321',
-    [string]$AuthorEmail = '<EMAIL_8>',
+    [string]$AuthorEmail = '',
     [switch]$DryRun
 )
 
@@ -32,6 +32,16 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path (Join-Path $root 'server.mjs'))) {
     throw 'Не найден server.mjs — скрипт должен лежать в <проект>\tools\publish.ps1'
 }
+
+# Email автора коммита: из параметра, иначе из настроек git. Заглушку в историю
+# не пишем — с ней коммиты в GitHub выглядят как от неизвестного автора.
+if (-not $AuthorEmail) {
+    $AuthorEmail = (& git config --get user.email 2>$null | Select-Object -First 1)
+}
+if (-not $AuthorEmail -or $AuthorEmail -notmatch '@') {
+    throw 'Не задан email автора коммита: передайте -AuthorEmail или настройте git config user.email'
+}
+Write-Note "автор коммита: $AuthorName <$AuthorEmail>"
 
 function Write-Step($text) { Write-Host "== $text" -ForegroundColor Cyan }
 function Write-Note($text) { Write-Host "   $text" -ForegroundColor DarkGray }

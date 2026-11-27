@@ -468,7 +468,19 @@ const httpsServer = HTTPS_ENABLED ? createHttpsServer({ key: readFileSync(TLS_KE
  * Let's Encrypt (без входа) и уводим внешних посетителей на https.
  */
 async function onRequest(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
+  // Разбор адреса — до остальной логики, но уже с защитой: невалидный req.url
+  // или заголовок Host бросали ERR_INVALID_URL прямо в промисе обработчика,
+  // и процесс падал (unhandled rejection).
+  let url;
+  try {
+    // База фиксированная: Host приходит от клиента и не должен влиять на разбор
+    // пути. Он нужен только для редиректа на https ниже, где проверяется отдельно.
+    url = new URL(req.url ?? '/', 'http://localhost');
+  } catch {
+    res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+    res.end('bad request');
+    return;
+  }
   const route = `${req.method} ${url.pathname}`;
   // Считаем отданные байты по маршрутам (см. lib/traffic.mjs).
   trackTraffic(req, res, path.join(DATA_DIR, 'traffic.json'));
