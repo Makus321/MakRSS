@@ -33,6 +33,15 @@ if (-not (Test-Path (Join-Path $root 'server.mjs'))) {
     throw 'Не найден server.mjs — скрипт должен лежать в <проект>\tools\publish.ps1'
 }
 
+function Write-Step($text) { Write-Host "== $text" -ForegroundColor Cyan }
+function Write-Note($text) { Write-Host "   $text" -ForegroundColor DarkGray }
+function Invoke-Git {
+    param([string[]]$GitArgs)
+    # HTTP/2 на этом канале зависает на git push — всегда ходим по HTTP/1.1.
+    & git -c http.version=HTTP/1.1 @GitArgs 2>&1 | ForEach-Object { Write-Host "   $_" -ForegroundColor DarkGray }
+    return $LASTEXITCODE
+}
+
 # Email автора коммита: из параметра, иначе из настроек git. Заглушку в историю
 # не пишем — с ней коммиты в GitHub выглядят как от неизвестного автора.
 if (-not $AuthorEmail) {
@@ -43,21 +52,16 @@ if (-not $AuthorEmail -or $AuthorEmail -notmatch '@') {
 }
 Write-Note "автор коммита: $AuthorName <$AuthorEmail>"
 
-function Write-Step($text) { Write-Host "== $text" -ForegroundColor Cyan }
-function Write-Note($text) { Write-Host "   $text" -ForegroundColor DarkGray }
-function Invoke-Git {
-    param([string[]]$GitArgs)
-    # HTTP/2 на этом канале зависает на git push — всегда ходим по HTTP/1.1.
-    & git -c http.version=HTTP/1.1 @GitArgs 2>&1 | ForEach-Object { Write-Host "   $_" -ForegroundColor DarkGray }
-    return $LASTEXITCODE
-}
-
 # --- 1. зеркало: git-репозиторий рядом с проектом ------------------------------
 # Номер сборки поднимаем сами: иначе версия в подвале и имя кэша оболочки
 # остаются прежними, и браузер продолжает работать на старых файлах.
-Write-Step "Поднимаю номер сборки"
-node (Join-Path $PSScriptRoot "bump-version.mjs")
-if ($LASTEXITCODE -ne 0) { throw "не удалось поднять версию (bump-version.mjs)" }
+if ($DryRun) {
+    Write-Note 'DryRun: номер сборки не поднимаю, показываю изменения как есть'
+} else {
+    Write-Step "Поднимаю номер сборки"
+    node (Join-Path $PSScriptRoot "bump-version.mjs")
+    if ($LASTEXITCODE -ne 0) { throw "не удалось поднять версию (bump-version.mjs)" }
+}
 
 Write-Step "Готовлю зеркало в $Stage"
 $hasRepo = Test-Path (Join-Path $Stage '.git')
@@ -81,7 +85,7 @@ if (-not $hasRepo) {
 
 # --- 2. копия проекта без личных данных ----------------------------------------
 $excludeDirs = @('data', 'preview', 'node_modules', '.git')
-$excludeFiles = @('rus-host.txt', '*.opml.xml', 'bazqux-*.xml', '*.log', '*.tmp')
+$excludeFiles = @('rus-host.txt', '*.opml.xml', 'bazqux-*.xml', '*.log', '*.tmp', 'publish-leaks.txt')
 
 Write-Step 'Копирую проект (без data, доступов и личных подписок)'
 # robocopy зеркалит каталоги и убирает удалённые файлы; .git этажа не трогает,
@@ -96,10 +100,17 @@ if ($LASTEXITCODE -ge 8) { throw "robocopy не смог скопировать 
 $copied = (Get-ChildItem $Stage -Force | Where-Object { $_.Name -ne '.git' }).Count
 Write-Note "скопировано объектов верхнего уровня: $copied"
 
-# Файлы, которые есть в репозитории, но не в проекте (LICENSE и подобные),
-# robocopy при зеркалировании удалил бы — возвращаем их из git.
+# Файлы, которые есть в репозитории, но не в проекте, robocopy при зеркалировании
+# удалил бы. Возвращаем только служебные (их нет в рабочей папке специально);
+# всё остальное считаем осознанным удалением, иначе из репозитория нельзя убрать
+# ни один устаревший файл.
+$restoreNames = @('LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING')
 $missing = @(& git -C $Stage ls-files 2>$null) | Where-Object { $_ -and -not (Test-Path (Join-Path $Stage $_)) }
 foreach ($file in $missing) {
+    if ($restoreNames -notcontains $file) {
+        Write-Note "удаляю из репозитория: $file"
+        continue
+    }
     Write-Note "возвращаю из репозитория: $file"
     $null = Invoke-Git @('-C', $Stage, 'checkout', '--', $file)
 }
@@ -116,7 +127,9 @@ if ($forbidden.Count -gt 0) {
     $forbidden | ForEach-Object { Write-Host "   лишнее: $_" -ForegroundColor Red }
     throw 'В копии оказались личные файлы — публикация остановлена.'
 }
-$textFiles = Get-ChildItem $Stage -Recurse -File -Include *.mjs, *.js, *.html, *.css, *.md, *.sh, *.cmd -ErrorAction SilentlyContinue
+$textFiles = Get-ChildItem $Stage -Recurse -File -Include *.mjs, *.js, *.html, *.css, *.md, *.sh, *.cmd, *.ps1, *.txt, *.json, *.service, *.example -ErrorAction SilentlyContinue
+# В списке шаблонов лежат сами запрещённые строки — его не проверяем.
+$textFiles = $textFiles | Where-Object { $_.Name -ne 'publish-leaks.txt' }
 # Домен в скриптах установки — это нормально, а вот адреса своего сервера публиковать не нужно.
 # Список запрещённых шаблонов в репозитории не хранится: он лежит рядом, в
 # tools/publish-leaks.txt (одна строка — один шаблон; файл в .gitignore).
