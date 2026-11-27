@@ -4674,8 +4674,10 @@ async function verifyItemsOnce() {
       for (const id of answer?.missing ?? []) gone.add(id);
     } catch { return; }
   }
+  if (!gone.size) return;                    // ничего не пропало — перерисовка не нужна
   state.data.items = (state.data.items ?? []).filter((item) => !gone.has(item.id));
   for (const id of gone) { state.snapshot?.ids?.delete(id); keepReadItems.delete(id); }
+  resetSnapshot();                           // состав изменился — список собираем заново
   render();
 }
 
@@ -4809,7 +4811,9 @@ async function loadData({ poll = false } = {}) {
       renderToolbar();
       // Новинки приходят отдельным лёгким запросом: иначе плашка их не видит.
       const freshCount = await pullNewItems();
-      if (freshCount) renderList();
+      // Плашку «Новых статей» рисует renderNewRow ниже; сам список не пересобираем,
+      // пока лента заморожена — иначе он прыгал под курсором.
+      if (freshCount && !(state.listFrozen && state.snapshot)) renderList();
       // Дерево показывает серверное число непрочитанных. Если в данных раздела
       // меньше статей — догружаем недостающие, иначе шапка и дерево расходятся.
       const expected = state.view.type === 'feed' ? Number(viewFeed()?.unread ?? 0) : 0;
@@ -4860,7 +4864,18 @@ async function loadData({ poll = false } = {}) {
     }
     if (!rememberData(payload)) return;         // ответ без данных не применяем
     verifyItemsOnce();                       // убрать карточки, которых на сервере уже нет
-    render();
+    if (state.listFrozen && state.snapshot) {
+      // Лента заморожена: человек читает или листает, состав не менялся.
+      // Пересобирать список нельзя — раньше он перерисовывался прямо под курсором
+      // при каждом обновлении с сервера (отметки, счётчики, новые статьи).
+      // Меняется только то, что вне ленты: дерево, шапка, плашка «Новых статей».
+      renderSidebar();
+      renderToolbar();
+      renderNewRow();
+      refreshTimes();
+    } else {
+      render();
+    }
     flushPendingReads();                        // заодно отправим отложенные отметки
   } catch (err) {
     if (state.session.authenticated) toast(err.message, true);
