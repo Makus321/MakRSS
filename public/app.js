@@ -486,30 +486,54 @@ function viewParam() {
 // Здесь догружаем полный список раздела страницами: /api/data?view=… отдаёт всё.
 let historyOffset = 0;
 let historyTotal = null;
+let historyDone = false;
 let historyBusy = false;
+const HISTORY_PAGE = 200;
 
 /** Начинаем историю заново: другой раздел или другой фильтр. */
 function resetHistory() {
   historyOffset = 0;
   historyTotal = null;
+  historyDone = false;
+}
+
+/**
+ * «Все статьи» в ленте или папке: показываем весь архив и начинаем с самой старой.
+ * В этом режиме порядок не зависит от селектора «Порядок» — иначе сверху снова
+ * оказывались бы свежие статьи.
+ */
+function archiveOrder() {
+  if (unreadModeFor()) return false;
+  const type = state.view?.type;
+  return type === 'feed' || type === 'folder';
 }
 
 /**
  * Одна страница истории текущего раздела.
+ * Обычный порядок — от свежих к старым (offset растёт). Архивный — от самых старых
+ * к новым (offset убывает), чтобы первая карточка была самой старой.
  * Возвращает число новых статей (0 — если больше нечего или режим не тот).
  */
 async function loadHistoryPage() {
-  if (historyBusy) return 0;
+  if (historyBusy || historyDone) return 0;
   if (unreadModeFor()) return 0;                 // в «непрочитанных» ничего не обрезается
   const type = state.view?.type;
   if (type !== 'feed' && type !== 'folder') return 0;
-  if (Number.isFinite(historyTotal) && historyOffset >= historyTotal) return 0;
   historyBusy = true;
   try {
+    // Первый вызов: узнаём общее число статей раздела, чтобы в архивном режиме
+    // сразу встать на самый старый край.
+    if (!Number.isFinite(historyTotal)) {
+      const probe = new URLSearchParams({ view: viewParam(), limit: '1', offset: '0', meta: '0' });
+      const info = await api(`/api/data?${probe.toString()}`);
+      historyTotal = Number(info?.total) || 0;
+      historyOffset = archiveOrder() ? Math.max(0, historyTotal - HISTORY_PAGE) : 0;
+    }
+    const offset = Math.max(0, Math.min(historyOffset, Math.max(0, historyTotal - 1)));
     const query = new URLSearchParams({
       view: viewParam(),
-      limit: '200',
-      offset: String(historyOffset),
+      limit: String(HISTORY_PAGE),
+      offset: String(offset),
       meta: '0',
     });
     const payload = await api(`/api/data?${query.toString()}`);
@@ -522,8 +546,17 @@ async function loadHistoryPage() {
       seen.add(item.id);
       added += 1;
     }
-    historyOffset += page.length;
     if (Number.isFinite(Number(payload?.total))) historyTotal = Number(payload.total);
+    if (archiveOrder()) {
+      historyOffset = offset - HISTORY_PAGE;
+      if (historyOffset < 0) {
+        historyOffset = 0;
+        if (offset === 0) historyDone = true;
+      }
+    } else {
+      historyOffset = offset + page.length;
+      if (!page.length || historyOffset >= (historyTotal || 0)) historyDone = true;
+    }
     // Состав раздела вырос: снимок и заморозку сбрасываем, иначе список
     // остаётся прежним (ключ вида не менялся) и новые карточки не появляются.
     state.snapshot = null;
@@ -803,7 +836,8 @@ function visibleItems() {
   if (state.view.type === 'starred') {
     return items.sort((a, b) => (Number(b.starredAt) || 0) - (Number(a.starredAt) || 0));
   }
-  const direction = sortDir() === 'asc' ? 1 : -1;
+  // «Все статьи»: первая карточка — самая старая, независимо от селектора «Порядок».
+  const direction = (archiveOrder() ? 'asc' : sortDir()) === 'asc' ? 1 : -1;
   return items.sort((a, b) => {
     const left = a.date ?? '';
     const right = b.date ?? '';
@@ -1660,6 +1694,11 @@ function switchView(view) {
   state.viewOffset = 0;
   state.viewTotal = 0;
   resetHistory();
+  // Лента открыта в режиме «Все статьи»: подтягиваем старый край архива, чтобы
+  // первой карточкой была самая старая.
+  if (archiveOrder()) {
+    loadHistoryPage().then((added) => { if (added) { state.limit = 10; render(); } });
+  }
   if (PAGED_DATA) {
     // Догружаем первую страницу нового вида: раньше здесь был уже весь список.
     fetchView({ reset: true }).then((ok) => { if (ok) render(); });
@@ -3688,9 +3727,9 @@ $('#unread-mode').addEventListener('change', (event) => {
   resetHistory();
   resetSnapshot();
   render();
-  // «Все»: сразу подтягиваем первую страницу полного списка — иначе видны только
-  // статьи из общего ответа (прочитанное старше недели туда не попадает).
-  loadHistoryPage().then((added) => { if (added) render(); });
+  // «Все»: сразу подтягиваем самый старый край архива — первой карточкой будет
+  // самая старая статья. Остальное догружается при прокрутке.
+  loadHistoryPage().then((added) => { if (added) { state.limit = 10; render(); } });
   if (PAGED_DATA) {
     // Первая страница нового режима: после неё станут известны реальные offset/total,
     // и прокрутка вниз продолжит догружать историю.
