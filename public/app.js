@@ -2023,6 +2023,16 @@ function patchCard(id) {
 }
 
 function renderList() {
+  // Диагностика перерисовок: при ?debug=1 пишем стек вызовов, чтобы по факту
+  // видеть, кто пересобирает ленту (опрос, события, действия, догрузка).
+  if (DEBUG) {
+    (window.__renderLog ||= []).push({
+      at: Date.now(),
+      selection: (window.getSelection()?.toString() ?? '').length,
+      stack: (new Error().stack ?? '').split('\n').slice(2, 7).map((line) => line.trim().replace(/^at /, '')).join(' ← '),
+    });
+    if (window.__renderLog.length > 200) window.__renderLog.shift();
+  }
   // Пока раздел догружается, вместо списка показываем заглушку.
   if (state.loadingView) {
     const loadingEl = $('#list');
