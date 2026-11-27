@@ -480,6 +480,62 @@ function viewParam() {
   return id ? `${type}:${id}` : String(type ?? 'unread');
 }
 
+// ------------------------------------------- история ленты постранично
+// Общий ответ /api/data не содержит прочитанное старше PAYLOAD_READ_DAYS (7 дней):
+// это экономит трафик, но из-за этого «Все» показывало только недавние статьи.
+// Здесь догружаем полный список раздела страницами: /api/data?view=… отдаёт всё.
+let historyOffset = 0;
+let historyTotal = null;
+let historyBusy = false;
+
+/** Начинаем историю заново: другой раздел или другой фильтр. */
+function resetHistory() {
+  historyOffset = 0;
+  historyTotal = null;
+}
+
+/**
+ * Одна страница истории текущего раздела.
+ * Возвращает число новых статей (0 — если больше нечего или режим не тот).
+ */
+async function loadHistoryPage() {
+  if (historyBusy) return 0;
+  if (unreadModeFor()) return 0;                 // в «непрочитанных» ничего не обрезается
+  const type = state.view?.type;
+  if (type !== 'feed' && type !== 'folder') return 0;
+  if (Number.isFinite(historyTotal) && historyOffset >= historyTotal) return 0;
+  historyBusy = true;
+  try {
+    const query = new URLSearchParams({
+      view: viewParam(),
+      limit: '200',
+      offset: String(historyOffset),
+      meta: '0',
+    });
+    const payload = await api(`/api/data?${query.toString()}`);
+    const page = payload?.items ?? [];
+    const seen = new Set((state.data.items ?? []).map((item) => item.id));
+    let added = 0;
+    for (const item of page) {
+      if (seen.has(item.id)) continue;
+      state.data.items.push(item);
+      seen.add(item.id);
+      added += 1;
+    }
+    historyOffset += page.length;
+    if (Number.isFinite(Number(payload?.total))) historyTotal = Number(payload.total);
+    // Состав раздела вырос: снимок и заморозку сбрасываем, иначе список
+    // остаётся прежним (ключ вида не менялся) и новые карточки не появляются.
+    state.snapshot = null;
+    state.listFrozen = false;
+    return added;
+  } catch {
+    return 0;
+  } finally {
+    historyBusy = false;
+  }
+}
+
 const viewRequests = new Map();      // ключ → время последнего запроса
 
 async function fetchView({ reset = false } = {}) {
@@ -1603,6 +1659,7 @@ function switchView(view) {
   }
   state.viewOffset = 0;
   state.viewTotal = 0;
+  resetHistory();
   if (PAGED_DATA) {
     // Догружаем первую страницу нового вида: раньше здесь был уже весь список.
     fetchView({ reset: true }).then((ok) => { if (ok) render(); });
@@ -3402,15 +3459,24 @@ $('#list').addEventListener('scroll', (event) => {
         state.growTimer = null;
         const total = visibleItems().length;
         if (state.limit < total) { state.limit = Math.min(total, state.limit + 10); renderList(); return; }
-        // Локальные карточки кончились — просим ОДНУ следующую страницу.
+        // Локальные карточки кончились — просим следующую страницу.
         // Раньше каждая перерисовка снова вызывала догрузку и за сессию
         // уходило до сотни запросов вместо десятка.
-        if (!PAGED_DATA) return;
-        if ((state.viewOffset ?? 0) >= (state.viewTotal ?? 0)) return;
         if (Date.now() - (state.lastPageAt ?? 0) < 800) return;
         state.lastPageAt = Date.now();
-        const ok = await fetchView();
-        if (ok) renderList();
+        if (PAGED_DATA) {
+          if ((state.viewOffset ?? 0) >= (state.viewTotal ?? 0)) return;
+          const ok = await fetchView();
+          if (ok) renderList();
+          return;
+        }
+        const added = await loadHistoryPage();
+        if (added) {
+          // Снимок уже сброшен в loadHistoryPage: visibleItems() соберёт новый,
+          // а render() обновит ещё и шапку с деревом.
+          state.limit = Math.min(visibleItems().length, state.limit + added);
+          render();
+        }
       }, 200);
     }
   }
@@ -3614,8 +3680,22 @@ $('#unread-mode').addEventListener('change', (event) => {
   savePrefs();
   state.limit = 10;
   state.view = { ...state.view };             // ключ вида изменится — снимок соберётся заново
+  // Пейджинг начинаем заново: фильтр изменился, и старые offset/total от другого
+  // режима останавливали догрузку — в «Все» показывались только уже загруженные
+  // статьи, а более старые так и не подтягивались.
+  state.viewOffset = 0;
+  state.viewTotal = 0;
+  resetHistory();
   resetSnapshot();
   render();
+  // «Все»: сразу подтягиваем первую страницу полного списка — иначе видны только
+  // статьи из общего ответа (прочитанное старше недели туда не попадает).
+  loadHistoryPage().then((added) => { if (added) render(); });
+  if (PAGED_DATA) {
+    // Первая страница нового режима: после неё станут известны реальные offset/total,
+    // и прокрутка вниз продолжит догружать историю.
+    fetchView({ reset: true }).then((ok) => { if (ok) render(); });
+  }
 });
 // «Только картинки»: у ленты сохраняется на сервере, как режим показа и число строк.
 $('#images-only').addEventListener('change', async (event) => {
