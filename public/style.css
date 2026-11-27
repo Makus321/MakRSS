@@ -768,6 +768,8 @@ body.dragging .tree-tail { display: flex; }
 .comment-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-family: inherit; font-size: calc(var(--font-article, 16px) * 0.85); color: var(--muted); margin-bottom: 2px; }
 .comment-author { color: var(--accent); font-weight: 600; }
 .comment-score { border: 1px solid var(--line); border-radius: 6px; padding: 0 4px; }
+/* Отрицательный рейтинг: красный, чтобы «минус» читался сразу. */
+.comment-score.neg { color: var(--danger); border-color: var(--danger); }
 /* Комментарии — тем же шрифтом и размером, что и статья: раньше они были на 1 px
    меньше и наследовали другую гарнитуру, из-за чего выглядели «чужими». */
 .comment-body {

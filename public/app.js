@@ -1230,6 +1230,15 @@ function commentDelta(item) {
   const diff = total - seen;
   return diff > 0 ? ` <b class="comment-delta">+${diff}</b>` : '';
 }
+/**
+ * Рейтинг комментария (Хабр и подобные): у положительного ставим «+», у
+ * отрицательного знак уже есть. Раньше «+» приписывался всегда и выходило «+-3».
+ */
+function scoreLabel(score) {
+  const num = Number(score);
+  if (!Number.isFinite(num) || !num) return '';
+  return num > 0 ? `+${num}` : String(num);
+}
 /** Блок комментариев в конце статьи. */
 function commentsHtml(item) {
   if (!item.comments) return '';
@@ -1259,7 +1268,7 @@ function commentsHtml(item) {
       <div class="comment-head">
         <span class="comment-author">${esc(node.author)}</span>
         <span>${esc(timeAgo(node.date))}</span>
-        ${node.score ? `<span class="comment-score">+${node.score}</span>` : ''}
+        ${scoreLabel(node.score) ? `<span class="comment-score${Number(node.score) < 0 ? ' neg' : ''}">${scoreLabel(node.score)}</span>` : ''}
         ${isNew ? '<span class="comment-new-chip">новый</span>' : ''}
       </div>
       <div class="comment-body">${sanitize(node.html, node.link ?? item.link)}</div>
