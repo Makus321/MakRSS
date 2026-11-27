@@ -1170,14 +1170,42 @@ function layoutArticleImages(root = document) {
  * Кнопка «Смотреть видео»: подставляет плеер по нажатию. Так статья не тянет
  * внешние скрипты и видео, пока их не попросили.
  */
+/** Домены, которые можно встраивать как плеер: остальным оставляем ссылку. */
+const PLAYER_HOSTS = /(^|\.)(youtube\.com|youtube-nocookie\.com|rutube\.ru|vk\.com|vkvideo\.ru|dzen\.ru|ok\.ru)$/i;
+
+/** Только http(s)-адрес: javascript:/data: в ссылках и плеерах недопустимы. */
+function safeHttpUrl(value, base) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw, base || location.href);
+    return /^https?:$/.test(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
 function setupEmbeds(root = document) {
-  for (const box of root.querySelectorAll('.embed-box[data-embed]')) {
+  for (const box of root.querySelectorAll('.embed-box[data-rss-embed]')) {
     if (box.dataset.ready) continue;
     box.dataset.ready = '1';
     box.addEventListener('click', (event) => {
       if (!event.target.closest('.embed-play')) return;
-      const src = box.dataset.embed;
-      if (!src) return;
+      // Адрес мог прийти из статьи: пускаем только https и только известные плееры,
+      // иначе «Смотреть здесь» подставляло iframe с произвольным адресом.
+      const src = safeHttpUrl(box.dataset.rssEmbed || '');
+      if (!src) { box.remove(); return; }
+      if (!PLAYER_HOSTS.test(new URL(src).hostname)) {
+        box.replaceChildren();
+        const link = document.createElement('a');
+        link.className = 'embed-alt';
+        link.href = src;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'Открыть на сайте';
+        box.append(link);
+        return;
+      }
       const frame = document.createElement('iframe');
       frame.src = src;
       frame.loading = 'lazy';
@@ -3327,7 +3355,8 @@ document.addEventListener('keydown', (event) => {
     case 's': if (state.selectedId) toggleStar(state.selectedId); break;
     case 'o': {
       const item = state.data.items.find((i) => i.id === state.selectedId);
-      if (item?.link) window.open(item.link, '_blank', 'noopener');
+      const link = safeHttpUrl(item?.link);
+  if (link) window.open(link, '_blank', 'noopener');
       break;
     }
     case 'u':
@@ -5261,7 +5290,7 @@ async function start() {
   hideLoader();                           // данные пришли — снимаем затемнение
 }
 
-if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, renderSidebar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, rememberData, render, viewKey, markCommentsSeen, commentHighlightHold, bodyHtml, sanitize, imageSrc };
+if (DEBUG) window.__rssDebug = { state, itemsOfView, visibleItems, renderList, renderToolbar, renderSidebar, updateFooterStats, ensureBodiesNeeded, expandItem, loadData, rememberData, render, viewKey, markCommentsSeen, commentHighlightHold, bodyHtml, sanitize, imageSrc, setupEmbeds, safeHttpUrl };
 
 start();
 let pollTimer = null;              // таймер опроса сервера (перепланируется сам)
@@ -5372,13 +5401,14 @@ function sanitize(html, baseUrl, { slot = true } = {}) {
     // javascript:… выполнилась бы в контексте читалки.
     if (!/^https?:/i.test(decoded)) return '';
     if (isAdEmbed(decoded)) return '';
+    // Атрибут свой: data-* из статьи вычищаются в sanitize(), подделать нельзя.
     const key = decoded.toLowerCase().replace(/\/+$/, '');
     if (seenEmbeds.has(key)) return '';
     seenEmbeds.add(key);
     const safe = decoded.replace(/"/g, '&quot;');
     // Плеер появляется только по нажатию — до этого никакого трафика.
     // Рядом ссылка на сайт: некоторые плееры (ВК) вне своего сайта не играют.
-    return `<div class="embed-box" data-embed="${safe}">`
+    return `<div class="embed-box" data-rss-embed="${safe}">`
       + `<button type="button" class="btn embed-play">▶ ${esc(title || 'Смотреть здесь')}</button>`
       + `<a class="embed-alt" href="${safe}" target="_blank" rel="noopener noreferrer">Открыть на сайте</a>`
       + `</div>`;
@@ -5474,13 +5504,19 @@ function sanitize(html, baseUrl, { slot = true } = {}) {
     for (const attr of [...el.attributes]) {
       const name = attr.name.toLowerCase();
       const value = attr.value.trim();
-      if (name.startsWith('on') || name === 'style' || name === 'srcdoc' || name === 'formaction') {
+      // data-* из разметки статьи вычищаем: подделанный data-rss-embed дал бы
+      // подстановку чужого адреса в плеер. Свой атрибут ставим только мы.
+      if (name.startsWith('data-') && name !== 'data-rss-embed') {
+        el.removeAttribute(attr.name);
+      } else if (name.startsWith('on') || name === 'style' || name === 'srcdoc' || name === 'formaction') {
         el.removeAttribute(attr.name);
       } else if (['href', 'src', 'poster'].includes(name)) {
         // Свои ссылки (/api/media) оставляем как есть — их не надо ни резолвить, ни проксировать.
         const internal = value.startsWith('/api/');
         const abs = internal ? value : resolve(value);
-        if (internal || /^(https?:|mailto:|data:image\/)/i.test(abs) || abs.startsWith(location.origin + '/api/')) {
+        // data: принимаем только для растровых картинок: svg с data: в src
+        // давал предупреждения и в принципе не должен попадать в разметку.
+        if (internal || /^(https?:|mailto:|data:image\/(png|jpe?g|gif|webp|avif)[;,])/i.test(abs) || abs.startsWith(location.origin + '/api/')) {
           // Картинки по http:// на странице https браузер блокирует («смешанное
           // содержимое») — отдаём их через свой прокси. Ссылки не трогаем.
           // Картинки и видео всегда отдаём через свой прокси: он снимает проблему

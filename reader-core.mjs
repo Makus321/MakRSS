@@ -48,6 +48,7 @@ import {
 } from './lib/telegram.mjs';
 import { Store } from './lib/store.mjs';
 import { safeFetch, SsrfError, finalUrlOf } from './lib/net-guard.mjs';
+import { safeImageType, safeVideoType, NOSNIFF } from './lib/media-types.mjs';
 import { handleFever } from './lib/fever.mjs';
 import { commentsProviderFor } from './lib/comments.mjs';
 import { fetchMostReading, isMostReadingFresh } from './lib/habr-now.mjs';
@@ -1971,14 +1972,15 @@ async function serveFavicon(req, res, url) {
     if (data.length > limit) {
       const webp = await compressToWebp(data, `${icon.file}.icon`, { quality: 70, width: 64 });
       if (webp) {
-        res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=86400' });
+        res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=86400', ...NOSNIFF });
         res.end(webp);
         return;
       }
       res.writeHead(404, { 'cache-control': 'private, max-age=86400' }).end('иконка слишком большая');
       return;
     }
-    res.writeHead(200, { 'content-type': icon.type, 'cache-control': 'private, max-age=86400' });
+    // Иконка приходит с чужого сайта: image/svg+xml с нашего origin выполнил бы скрипт.
+    res.writeHead(200, { 'content-type': safeImageType(icon.type), 'cache-control': 'private, max-age=86400', ...NOSNIFF });
     res.end(data);
   } catch {
     res.writeHead(404).end('иконка не читается');
@@ -2323,9 +2325,10 @@ async function serveVideo(req, res, url) {
     if (!response.ok && response.status !== 206) throw new Error(`ответ ${response.status}`);
     if (!response.body) throw new Error('пустой ответ');
     const out = {
-      'content-type': String(response.headers.get('content-type') ?? 'video/mp4'),
+      'content-type': safeVideoType(response.headers.get('content-type') ?? 'video/mp4'),
       'cache-control': 'no-store',
       'accept-ranges': String(response.headers.get('accept-ranges') ?? 'bytes'),
+      ...NOSNIFF,
     };
     for (const header of ['content-length', 'content-range']) {
       const value = response.headers.get(header);
@@ -2393,13 +2396,13 @@ async function serveThumb(req, res, url) {
   const file = thumbFileFor(source);
   try {
     const webp = await readFile(file + '.webp');
-    res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800' });
+    res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800', ...NOSNIFF });
     res.end(webp);
     return;
   } catch { /* ещё не сжимали */ }
   try {
     const data = await readFile(file);
-    res.writeHead(200, { 'content-type': MEDIA_TYPES[path.extname(file).toLowerCase()] ?? 'image/jpeg', 'cache-control': 'private, max-age=604800' });
+    res.writeHead(200, { 'content-type': MEDIA_TYPES[path.extname(file).toLowerCase()] ?? 'image/jpeg', 'cache-control': 'private, max-age=604800', ...NOSNIFF });
     res.end(data);
     return;
   } catch { /* ещё не скачивали */ }
@@ -2428,7 +2431,7 @@ async function serveThumb(req, res, url) {
     }
     await writeFile(file, buffer).catch(() => {});
     pruneMediaCache().catch(() => {});
-    res.writeHead(200, { 'content-type': /gif/i.test(type) ? 'image/gif' : type, 'cache-control': 'private, max-age=604800' });
+    res.writeHead(200, { 'content-type': /gif/i.test(type) ? 'image/gif' : safeImageType(type), 'cache-control': 'private, max-age=604800', ...NOSNIFF });
     res.end(buffer);
   } catch (err) {
     // Приватный адрес: отдавать редирект на него нельзя — это обход проверки.
@@ -2656,13 +2659,13 @@ async function serveImage(req, res, url) {
   const file = imageFileFor(source);
   try {
     const webp = await readFile(`${file}.webp`);
-    res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800' });
+    res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'private, max-age=604800', ...NOSNIFF });
     res.end(webp);
     return;
   } catch { /* webp ещё нет */ }
   try {
     const data = await readFile(file);
-    res.writeHead(200, { 'content-type': MEDIA_TYPES[path.extname(file).toLowerCase()] ?? 'image/jpeg', 'cache-control': 'private, max-age=604800' });
+    res.writeHead(200, { 'content-type': MEDIA_TYPES[path.extname(file).toLowerCase()] ?? 'image/jpeg', 'cache-control': 'private, max-age=604800', ...NOSNIFF });
     res.end(data);
     return;
   } catch { /* ещё не скачивали */ }
@@ -2687,7 +2690,7 @@ async function serveImage(req, res, url) {
       res.end(webp);
       return;
     }
-    res.writeHead(200, { 'content-type': type, 'cache-control': 'private, max-age=604800' });
+    res.writeHead(200, { 'content-type': safeImageType(type), 'cache-control': 'private, max-age=604800', ...NOSNIFF });
     res.end(buffer);
   } catch (err) {
     if (err instanceof SsrfError) { res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('адрес не разрешён'); return; }

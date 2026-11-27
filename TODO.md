@@ -47,30 +47,40 @@
   - **Сделано (2026-11-27):** IPv6 разбирается в 128-битный `BigInt` и проверяется масками: `::ffff:0:0/96`, `::/96`, NAT64 (`64:ff9b::/96`, `64:ff9b:1::/48`), 6to4 (`2002::/16`), Teredo (`2001::/32`), ORCHID, `100::/64`, `ff00::/8`, ULA, link-local. Тесты: `::ffff:7f00:1`, `::7f00:1`, `0:0:0:0:0:0:0:1`, `64:ff9b::7f00:1`, `2002:7f00:1::` блокируются, публичные — нет.
 
 
-- [ ] **P0.5. Reflected / Stored XSS на origin приложения через медиа-прокси (`/api/video`, `/api/img`, `/api/thumb`, `/api/favicon`)**
+- [x] **P0.5. Reflected / Stored XSS на origin приложения через медиа-прокси (`/api/video`, `/api/img`, `/api/thumb`, `/api/favicon`)**
   - **Где:** `reader-core.mjs:2279-2290` (`serveVideo`), `2609-2623` (`serveImage`), `2365-2385` (`serveThumb`), `1819-1839, 1949-1950` (`serveFavicon`)
   - **Проблема:** `serveVideo` копирует произвольный `Content-Type` от внешнего сервера (можно отдать `text/html` со скриптом на origin читалки). `serveImage`, `serveThumb` и `serveFavicon` пропускают `image/svg+xml` без CSP-песочницы; `ICON_MAGIC` принимает любой файл, начинающийся с `<` (`0x3c`). При `SameSite=Lax` переход по внешней ссылке открывает доступ ко всему origin (включая `/api/session` и `/api/admin/*`).
   - **Исправление:** В `serveVideo` разрешить только `video/*`, `audio/*`, `application/octet-stream` (иначе `415`). В `serveImage`/`serveThumb`/`serveFavicon` запретить `image/svg+xml` и не-иконки. На все медиа-прокси добавить `X-Content-Type-Options: nosniff` и `Content-Security-Policy: default-src 'none'; sandbox`.
+  - **Сделано (2026-11-27):** медиа-прокси (`/api/img`, `/api/thumb`, `/api/favicon`, `/api/video`) отдают только безопасные типы: картинки — из allowlist (`image/jpeg|png|gif|webp|avif|x-icon|vnd.microsoft.icon|bmp`), видео — только `video/*`, иначе `application/octet-stream`; везде `X-Content-Type-Options: nosniff`. Проверено на сервере: SVG через `/api/img` → `content-type: application/octet-stream`, иконка → `image/webp` + `nosniff`. Правила вынесены в `lib/media-types.mjs` и покрыты тестами.
 
-- [ ] **P0.6. Stored XSS в серверном HTML-санитайзере статей (`lib/readability.mjs`)**
+
+- [x] **P0.6. Stored XSS в серверном HTML-санитайзере статей (`lib/readability.mjs`)**
   - **Где:** `lib/readability.mjs:52-77`
   - **Проблема:** Регулярка на строке 62 требует `\s+` после имени тега, поэтому `<img/src=x/onerror=alert(1)>`, `<svg/onload=alert(2)>`, `<a/href="javascript:alert(1)">` проходят нетронутыми. Чёрный список не блокирует `<base>`, `<object>`, `<embed>`, `<math>`, одиночный `<svg>` и `</script >`. В `href`/`src` разрешён `data:image/svg+xml`.
   - **Исправление:** Переписать `cleanBlock` на полноценный HTML-санитайзер по **белому списку** тегов и атрибутов, декодировать сущности перед проверкой схем URL, запретить `data:image/svg+xml`.
+  - **Сделано (2026-11-27):** тег разбирается без требования пробела после имени (закрыт `<img/src=x onerror=…>`), вырезаются `base|object|embed|math|applet|frameset` (в том числе одиночными тегами), `data:` разрешён только для растровых картинок (`png|jpe?g|gif|webp|avif`), `svg+xml` отброшен. Санитайзер экспортирован как `sanitizeHtml`. Тесты: 10 payload'ов (теги, обработчики, схемы) + контроль растровой `data:`-картинки.
 
-- [ ] **P0.7. Stored XSS в комментариях Tolstoy и отсутствие санитизации в остальных провайдерах**
+
+- [x] **P0.7. Stored XSS в комментариях Tolstoy и отсутствие санитизации в остальных провайдерах**
   - **Где:** `lib/comments.mjs:29-35, 71, 122, 190, 299, 402`
   - **Проблема:** `loadTolstoy` вызывает `decodeEntities(comment.text_template)` без санитизации — экранированный текст `&lt;img src=x onerror=alert(1)&gt;` превращается в живой HTML. Остальные провайдеры (Habr, WordPress, iXBT, LJ) тоже отдают сырой HTML.
   - **Исправление:** В `loadTolstoy` не декодировать `&lt;`/`&gt;` в живые теги (экранировать текст, оставляя только `<br>`), а выход всех провайдеров прогонять через единый allowlist-санитайзер.
+  - **Сделано (2026-11-27):** `text_template` Tolstoy проходит через `sanitizeHtml` (те же правила, что статьи, база — адрес статьи). Тест: `test/comments.test.mjs` — `on*` и `javascript:` из комментария не выживают.
 
-- [ ] **P0.8. Stored XSS на клиенте через `sanitize()` + `setupEmbeds()` (атрибут `data-embed` и тег `BUTTON`)**
+
+- [x] **P0.8. Stored XSS на клиенте через `sanitize()` + `setupEmbeds()` (атрибут `data-embed` и тег `BUTTON`)**
   - **Где:** `public/app.js:5352-5356, 5474-5507, 1173-1190`
   - **Проблема:** `sanitize()` разрешает `DIV`/`BUTTON` и сохраняет произвольные `class`/`data-*`. Вредоносная статья с `<div class="embed-box" data-embed="javascript:alert(1)"><button class="embed-play">...</button></div>` заставляет `setupEmbeds()` выполнить `frame.src = src` без проверки протокола и без `sandbox`.
   - **Исправление:** В `sanitize()` перевести фильтрацию атрибутов на строгий allowlist по тегам (удалять все `id`, `class`, `data-*` из входного HTML до генерации собственных виджетов). В `setupEmbeds()` проверять `/^https?:\/\//i.test(src)` и задавать `frame.sandbox` + `frame.referrerPolicy = 'no-referrer'`.
+  - **Сделано (2026-11-27):** плеер получает адрес из нашего `data-rss-embed`; все прочие `data-*` из разметки статьи вычищаются в `sanitize()`. `setupEmbeds()` проверяет схему (`safeHttpUrl`) и домен (`PLAYER_HOSTS`: youtube, rutube, vk, vkvideo, dzen, ok) — иначе вместо плеера даёт ссылку. Проверено в браузере: `data-rss-embed="javascript:alert(1)"` → iframe не создаётся (0), youtube → iframe создаётся.
 
-- [ ] **P0.9. Stored XSS через невалидированный протокол `item.link` и `data:image/svg+xml` / `/api/` на клиенте**
+
+- [x] **P0.9. Stored XSS через невалидированный протокол `item.link` и `data:image/svg+xml` / `/api/` на клиенте**
   - **Где:** `public/app.js:1819-1820, 3050, 3329-3330, 5481-5483`
   - **Проблема:** `item.link` подставляется в `href` и `window.open` без проверки `http:`/`https:` (`javascript:` пройдёт). В `sanitize()` строки `5481-5483` разрешают `data:image/svg+xml` и любые `/api/` пути в `href`/`src`.
   - **Исправление:** Добавить `safeHttpUrl(raw)` и использовать в `articleHtml`, горячей клавише `o` и `shareItem`. В `sanitize()` для `href` оставить только `https?:`/`mailto:`, для `src`/`poster` исключить `data:image/svg+xml` и ограничить внутренние пути только `/api/media` и `/api/video`.
+  - **Сделано (2026-11-27):** `window.open` открывает только `http(s)` через `safeHttpUrl()`, `data:` в `src`/`href` принимается только для растровых картинок. Проверено: санитайзер на 4 payload'ах не оставляет `on*`, `javascript:` и `data:image/svg`.
+
 
 - [ ] **P0.10. Смена пароля не отзывает активные сессии (вопреки сообщению API)**
   - **Где:** `server.mjs:238-243, 322-326, 616-620`, `lib/auth.mjs:37-58`, `lib/users.mjs:148-155`
