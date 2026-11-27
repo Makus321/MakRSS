@@ -374,7 +374,10 @@ async function api(path, body, options = {}) {
     state.session.authenticated = false;
     showLogin();
   }
-  if (!res.ok && payload.ok !== false) throw new Error(payload.error || `HTTP ${res.status}`);
+  // 5xx — всегда ошибка. Раньше ответ с payload.ok === false считался успешным,
+  // и вызывающий код молча продолжал работать с пустыми данными.
+  if (res.status >= 500) throw new Error(payload?.error || `HTTP ${res.status}`);
+  if (!res.ok && payload?.ok !== false) throw new Error(payload?.error || `HTTP ${res.status}`);
   if (path.startsWith('/api/items') && res.ok) {
     state.listBytes = responseBytes || new TextEncoder().encode(JSON.stringify(payload)).length;
     updateFooterStats();
@@ -427,11 +430,17 @@ async function flushSettings() {
       await api('/api/settings', { [key]: value });
     }
   } catch {
-    // не получилось — вернём в очередь и попробуем позже
-    Object.assign(pendingSettings.patch, patch);
+    // Не получилось — возвращаем в очередь, но свежие правки главнее старых:
+    // раньше Object.assign затирал их значениями из неудавшегося патча.
+    pendingSettings.patch = { ...patch, ...pendingSettings.patch };
+    clearTimeout(pendingSettings.timer);
     pendingSettings.timer = setTimeout(flushSettings, 8000);
   } finally {
     pendingSettings.busy = false;
+    // Пока шла запись, могли накопиться новые правки — отправляем их сразу.
+    if (Object.keys(pendingSettings.patch).length && !pendingSettings.timer) {
+      pendingSettings.timer = setTimeout(flushSettings, 0);
+    }
   }
 }
 
@@ -484,6 +493,9 @@ function viewParam() {
 // Общий ответ /api/data не содержит прочитанное старше PAYLOAD_READ_DAYS (7 дней):
 // это экономит трафик, но из-за этого «Все» показывало только недавние статьи.
 // Здесь догружаем полный список раздела страницами: /api/data?view=… отдаёт всё.
+// Каждое переключение раздела увеличивает счётчик: ответы, пришедшие для
+// прежнего раздела, отбрасываются — раньше они перерисовывали уже новый список.
+let viewSeq = 0;
 let historyOffset = 0;
 let historyTotal = null;
 let historyDone = false;
@@ -516,6 +528,9 @@ async function loadHistoryPage() {
   if (unreadModeFor()) return 0;                 // в «непрочитанных» ничего не обрезается
   const type = state.view?.type;
   if (type !== 'feed' && type !== 'folder') return 0;
+  // Пока запрос идёт, раздел может смениться: тогда страница уже чужая.
+  const keyAtStart = viewKey();
+  const sameView = () => viewKey() === keyAtStart;
   historyBusy = true;
   try {
     // Первый вызов: узнаём общее число статей раздела, чтобы в архивном режиме
@@ -523,6 +538,7 @@ async function loadHistoryPage() {
     if (!Number.isFinite(historyTotal)) {
       const probe = new URLSearchParams({ view: viewParam(), limit: '1', offset: '0', meta: '0' });
       const info = await api(`/api/data?${probe.toString()}`);
+      if (!sameView()) return 0;
       historyTotal = Number(info?.total) || 0;
       historyOffset = ascendingOrder() ? Math.max(0, historyTotal - HISTORY_PAGE) : 0;
     }
@@ -534,6 +550,7 @@ async function loadHistoryPage() {
       meta: '0',
     });
     const payload = await api(`/api/data?${query.toString()}`);
+    if (!sameView()) return 0;
     const page = payload?.items ?? [];
     const seen = new Set((state.data.items ?? []).map((item) => item.id));
     let added = 0;
@@ -1315,7 +1332,13 @@ function bodyHtml(item) {
     // иначе кнопка завернёт его второй раз и сервер ответит «400».
     const unwrap = (src) => {
       const nested = /^\/api\/video\?u=([\s\S]+)$/.exec(src);
-      return nested ? decodeURIComponent(nested[1]) : src;
+      // Битый процент (%zz) в ссылке из статьи раньше ронял отрисовку тела.
+  if (!nested) return src;
+  try {
+    return decodeURIComponent(nested[1]);
+  } catch {
+    return nested[1];
+  }
     };
     const videoList = bodyVideos.map(unwrap);
     // Видео из текста не вынимаем: санитайзер сам превращает его в плеер.
@@ -1600,7 +1623,7 @@ async function markCommentsSeen(id, maxId, options = {}) {
       if (left) chip.insertAdjacentHTML("beforeend", ` <b class="comment-delta">+${left}</b>`);
     }
   if (options.silent) {
-    const block = document.querySelector(`.a-comments[data-comments-block="${id}"]`);
+    const block = document.querySelector(`.a-comments[data-comments-block="${cssId(id)}"]`);
     if (block) {
       for (const node of block.querySelectorAll('.comment.is-new')) {
         const num = Number(node.dataset.commentId);
@@ -1685,6 +1708,8 @@ async function requestCommentCounts() {
 
 /** Переключение вида: список открывается с начала, состояние чтения сбрасывается. */
 function switchView(view) {
+  viewSeq += 1;
+  const mySeq = viewSeq;
   state.view = view;
   // Раздел «Непрочитанные» включает фильтр, «Все статьи» и «Избранное» — выключают;
   // в ленте и папке галочка остаётся такой, какой её поставил пользователь.
@@ -1710,6 +1735,8 @@ function switchView(view) {
   // ушедшие из блока на сайте, оставались бы в ленте.
   if (state.view.type === 'feed' && feedById(state.view.id)?.virtual) {
     api('/api/habr-now/refresh', {}).then(() => {
+      // Пока запрос шёл, человек мог уйти в другой раздел: чужой ответ не применяем.
+      if (mySeq !== viewSeq) return;
       // Список открыли — метку «(+N)» больше не держим: новое уже на экране.
       if (state.data.addedByFeed) delete state.data.addedByFeed[state.view.id];
       return loadData({ poll: false });
@@ -1725,7 +1752,7 @@ function switchView(view) {
   }
   if (PAGED_DATA) {
     // Догружаем первую страницу нового вида: раньше здесь был уже весь список.
-    fetchView({ reset: true }).then((ok) => { if (ok) render(); });
+    fetchView({ reset: true }).then((ok) => { if (ok && mySeq === viewSeq) render(); });
   }
   // Панель подписок закрываем только на сенсорных экранах (там это выдвижное
   // меню). На компьютере с узким окном дерево должно оставаться на месте.
@@ -2171,6 +2198,17 @@ function patchComments(id) {
     const delta = after.getBoundingClientRect().top - top;
     if (Math.abs(delta) > 1) list.scrollTop += delta;
   }
+  // Новые узлы комментариев: инициализируем картинки и плееры, иначе они
+  // оставались пустыми до полной перерисовки списка.
+  if (after) {
+    try {
+      setupImageSlots(after);
+      markBrokenImages(after);
+      holdImageSpace(after);
+      layoutArticleImages(after);
+      setupEmbeds(after);
+    } catch { /* вёрстка уже могла измениться */ }
+  }
   return true;
 }
 
@@ -2191,6 +2229,15 @@ function patchCard(id) {
   if (after && list) {
     const delta = after.getBoundingClientRect().top - top;
     if (Math.abs(delta) > 1) list.scrollTop += delta;   // сохраняем позицию чтения
+    // Инициализируем картинки и плееры новой карточки: без этого после отметки
+    // «прочитано» картинки не подгружались, а кнопка плеера не работала.
+    try {
+      setupImageSlots(after);
+      markBrokenImages(after);
+      holdImageSpace(after);
+      layoutArticleImages(after);
+      setupEmbeds(after);
+    } catch { /* вёрстка уже могла измениться */ }
   }
   return true;
 }
@@ -2724,8 +2771,10 @@ async function ensureBodiesNeeded(force = false) {
   state.bodiesPromise = (async () => {
   try {
     // Свой таймаут: зависший запрос раньше оставлял «Загрузка текста…» навсегда.
-    state.bodyRetryCount = 0;                 // тела пришли — счётчик повторов сбрасываем
     const payload = await api('/api/bodies', { ids: need.slice(0, 60) }, { signal: timeoutSignal(10000) });
+    // Сбрасываем счётчик только после успешного ответа: раньше он обнулялся до
+    // запроса, лимит «<= 3» никогда не достигался и опрос шёл бесконечно.
+    state.bodyRetryCount = 0;
     for (const [id, body] of Object.entries(payload.bodies ?? {})) {
       state.bodies.set(id, { ...body, loaded: true });
       // Сервер сообщает, есть ли реально скачанный текст: правим метку «скачан».
@@ -3208,7 +3257,19 @@ async function toggleStar(id, event) {
     // Список НЕ пересобираем: карточка остаётся на месте, иначе лента прыгает.
     renderSidebar();
     renderToolbar();
-  } catch (err) { toast(err.message, true); }
+  } catch (err) {
+    // Сеть пропала — возвращаем звёздочку и счётчик: иначе карточка выглядела
+    // сохранённой, а после перезагрузки звезда исчезала.
+    item.starred = !next;
+    if (next) delete item.starredAt; else item.starredAt = Date.now();
+    if (state.data?.counts) {
+      state.data.counts.starred = Math.max(0, Number(state.data.counts.starred ?? 0) + (next ? -1 : 1));
+    }
+    state.snapshot?.ids?.delete(id);
+    updateStarVisual(id, !next);
+    renderToolbar();
+    toast(err.message, true);
+  }
 }
 
 async function refreshFeeds(feedId) {
@@ -3221,11 +3282,16 @@ async function refreshFeeds(feedId) {
       // пользователь нажал «обновить» именно чтобы их увидеть.
       toast('Обновляю ленты…');
       const startedAt = Date.now();
+      let sawRefreshing = false;
       while (Date.now() - startedAt < 90_000) {
-        await new Promise((done) => setTimeout(done, 2000));
+        await new Promise((done) => setTimeout(done, 1000));
         const check = await api(`/api/data?rev=${state.revision}`).catch(() => null);
-        if (check && check.unchanged && (check.refreshing === false || !check.started)) break;
-        if (check && check.changed) break;
+        if (!check) continue;
+        if (check.refreshing) { sawRefreshing = true; continue; }
+        // Раньше первая же проверка через 2 с видела «не обновляется» и выходила,
+        // не дождавшись даже старта: новых статей в списке не появлялось.
+        if (sawRefreshing || check.changed) break;
+        if (Date.now() - startedAt > 15_000) break;   // сервер так и не начал
       }
       await loadData();
       resetSnapshot();
@@ -3325,10 +3391,16 @@ function moveFeed(feedId, folderId, beforeFeedId = null) {
 // --------------------------------------------------------------- клавиатура
 
 document.addEventListener('keydown', (event) => {
-  if (event.target.matches('input, textarea, select')) {
-    if (event.key === 'Escape') event.target.blur();
+  // Ctrl+R, Ctrl+S, Alt+… — это команды браузера, их перехватывать нельзя.
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  // target бывает и документом (событие отправлено программно) — проверяем тип.
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.matches('input, textarea, select')) {
+    if (event.key === 'Escape') target.blur();
     return;
   }
+  // В открытом окне или лайтбоксе клавиши списка не должны срабатывать.
+  if (document.querySelector('#login-modal:not([hidden]), .modal:not([hidden]), .lightbox:not([hidden])')) return;
   const items = visibleItems();
   const index = items.findIndex((i) => i.id === state.selectedId);
   const step = (delta) => {
@@ -3968,6 +4040,8 @@ async function searchSubscriptions() {
   addCandidates = [];
   try {
     const payload = await api('/api/discover', { url });
+    // Пока искали, в поле мог быть введён другой адрес: старый ответ не применяем.
+    if (input.value.trim() !== url) return;
     addCandidates = payload.candidates ?? [];
     if (!payload.ok || !addCandidates.length) {
       result.textContent = payload.error ?? 'Подписки не найдены';
@@ -4589,9 +4663,17 @@ function showLogin() {
   hideLoader();                     // экран входа показывает себя сам
 
   // Пока не вошли — интерфейс читалки не показываем, только окно входа.
+  // Если окно входа уже открыто, поля не трогаем: иначе фоновый опрос (401)
+  // стирал введённый логин и текст ошибки прямо во время набора.
+  const wasOpen = !$('#login-modal').hidden;
   document.body.classList.add('logged-out');
   $('#toast').hidden = true;
   $('#login-modal').hidden = false;
+  // Живые события при выходе закрываем: иначе они держали поток без сессии.
+  try { events?.close?.(); } catch { /* уже закрыт */ }
+  events = null;
+  state.eventsReady = false;
+  if (wasOpen) return;
   $('#login-user').value = state.settings.user ?? '';
   $('#login-pass').value = '';
   $('#login-error').textContent = '';
@@ -4984,8 +5066,12 @@ function setupLightboxHandlers() {
   });
 }
 
+let imageErrorBound = false;
 function startEvents() {
   // Ошибки картинок ловим делегированно, без инлайн onerror в разметке.
+  // Вешаем один раз: при повторном входе слушатель добавлялся снова и снова.
+  if (!imageErrorBound) {
+    imageErrorBound = true;
   document.addEventListener('error', (event) => {
     const img = event.target;
     if (!(img instanceof HTMLImageElement)) return;
@@ -4996,6 +5082,7 @@ function startEvents() {
       img.remove();
     }
   }, true);
+  }
   if (!('EventSource' in window) || events) return;
   try {
     events = new EventSource('/api/events');
