@@ -1778,6 +1778,33 @@ let activePin = { id: null, until: 0 };
 /** Последняя активная статья и положение списка на тот момент (защита от мигания). */
 let activeMeta = { id: null, scrollTop: -1 };
 
+/**
+ * Есть ли в ленте выделенный текст. Пока он есть, список не пересобираем совсем:
+ * ни по опросу, ни по живым событиям, ни по догрузке. Выделение — работа человека,
+ * и терять его из-за фонового обновления нельзя. Дерево и плашка «Новых статей»
+ * при этом обновляются: по ним видно, что пора пересобрать ленту вручную.
+ */
+function listSelectionActive() {
+  const sel = window.getSelection?.();
+  if (!sel || !sel.rangeCount || sel.isCollapsed) return false;
+  const node = sel.anchorNode;
+  if (!node) return false;
+  const el = node.nodeType === 1 ? node : node.parentElement;
+  return Boolean(el?.closest?.('#list'));
+}
+
+/** Выделение сняли — выполняем отложенную перерисовку ленты (одну). */
+let selectionFlushTimer = null;
+document.addEventListener('selectionchange', () => {
+  if (!state.deferredRender || listSelectionActive()) return;
+  clearTimeout(selectionFlushTimer);
+  selectionFlushTimer = setTimeout(() => {
+    if (!state.deferredRender || listSelectionActive() || pointerDown || state.scrolling) return;
+    state.deferredRender = false;
+    renderList();
+  }, 150);
+});
+
 /** Ставит рамку на конкретную статью и держит её, пока список не тронут руками. */
 function pinActive(id, ms = 1500) {
   activePin = { id: id ?? null, until: Date.now() + ms };
@@ -1982,6 +2009,7 @@ async function pumpCoverQueue() {
  * Полная пересборка (renderList) сбрасывала прокрутку, и лента прыгала вверх.
  */
 function patchComments(id) {
+  if (listSelectionActive()) return false;   // внутри ленты выделение — не трогаем
   const row = document.querySelector(`#list .article[data-item="${cssId(id)}"]`);
   const item = state.data.items.find((i) => i.id === id);
   if (!row || !item) return false;
@@ -2004,6 +2032,7 @@ function patchComments(id) {
 
 
 function patchCard(id) {
+  if (listSelectionActive()) return false;   // внутри ленты выделение — не трогаем
   const row = document.querySelector(`#list .article[data-item="${cssId(id)}"]`);
   const item = state.data.items.find((i) => i.id === id);
   if (!row || !item) return false;
@@ -2041,6 +2070,10 @@ function renderList() {
     ignoreScrollUntil = Date.now() + 900;
     return;
   }
+  // Выделил текст в ленте — список не меняем совсем: ни по опросу, ни по событиям,
+  // ни по догрузке. Всё, что пришло, выполним, когда выделение снимут. Дерево и
+  // плашка «Новых статей» обновляются отдельно, по ним и видно, что пора обновить.
+  if (listSelectionActive()) { state.deferredRender = true; return; }
   if (pointerDown) { renderPending = true; return; }
   if (state.scrolling) { state.deferredRender = true; return; }
   const listEl = $('#list');
