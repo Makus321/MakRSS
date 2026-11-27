@@ -1702,7 +1702,7 @@ async function requestCommentCounts() {
       if (!item) continue;
       if (Number.isFinite(count)) { item.commentsCount = count; changed = true; }
     }
-    if (changed) { for (const id of Object.keys(payload.counts ?? {})) patchCard(id); }
+    if (changed) { for (const id of Object.keys(payload.counts ?? {})) patchCard(id, { background: true }); }
   } catch { /* счётчики не критичны */ }
 }
 
@@ -2163,7 +2163,7 @@ async function pumpCoverQueue() {
     const res = await api(`/api/cover?id=${encodeURIComponent(id)}`);
     if (res?.image) {
       const item = state.data.items.find((i) => i.id === id);
-      if (item) { item.image = res.image; patchCard(id); }
+      if (item) { item.image = res.image; patchCard(id, { background: true }); }
     }
   } catch { /* обложка не критична */ }
   coverBusy = false;
@@ -2179,8 +2179,11 @@ async function pumpCoverQueue() {
  * Перерисовывает только блок комментариев в карточке, не трогая список.
  * Полная пересборка (renderList) сбрасывала прокрутку, и лента прыгала вверх.
  */
-function patchComments(id) {
+function patchComments(id, { background = false } = {}) {
   if (listSelectionActive()) return false;   // внутри ленты выделение — не трогаем
+  // Фоновые обновления (счётчики, обложки, события) не трогают карточки, пока
+  // человек стоит на ленте: состав и вид меняются только по его действию.
+  if (background && state.listFrozen) return false;
   const row = document.querySelector(`#list .article[data-item="${cssId(id)}"]`);
   const item = state.data.items.find((i) => i.id === id);
   if (!row || !item) return false;
@@ -2213,8 +2216,10 @@ function patchComments(id) {
 }
 
 
-function patchCard(id) {
+function patchCard(id, { background = false } = {}) {
   if (listSelectionActive()) return false;   // внутри ленты выделение — не трогаем
+  // То же для карточки: фоновый вызов при замороженной ленте не применяем.
+  if (background && state.listFrozen) return false;
   const row = document.querySelector(`#list .article[data-item="${cssId(id)}"]`);
   const item = state.data.items.find((i) => i.id === id);
   if (!row || !item) return false;
@@ -3294,8 +3299,9 @@ async function refreshFeeds(feedId) {
         if (Date.now() - startedAt > 15_000) break;   // сервер так и не начал
       }
       await loadData();
-      resetSnapshot();
-      render();
+      // Новые статьи НЕ вставляем в ленту: они ждут плашки «Показать».
+      // Пользователь нажал «обновить» — это не разрешение пересобирать список.
+      refreshChromeOnly();
       const added = Number(state.data.lastRefreshAdded) || 0;
       toast(added ? `Новых статей: ${added}` : 'Новых статей нет');
       return;
@@ -3304,12 +3310,27 @@ async function refreshFeeds(feedId) {
     const results = payload.results ?? [];
     const added = results.reduce((n, r) => n + (r.added ?? 0), 0);
     const failed = results.filter((r) => r.error);
-    render();
+    // Состав ленты не меняем: только дерево, шапка и плашка.
+    refreshChromeOnly();
     toast(failed.length
       ? `Обновлено, но ${failed.length} ${plural(failed.length, 'лента', 'ленты', 'лент')} с ошибкой`
       : (added ? `Новых статей: ${added}` : 'Новых статей нет'), failed.length > 0);
   } catch (err) { toast(err.message, true); }
   finally { $('#refresh-all').classList.remove('spin'); }
+}
+
+/**
+ * Обновляет всё, что вне списка: дерево, шапку, плашку «Новых статей» и подвал.
+ * Список не трогаем — он пересобирается только по явному действию
+ * (клик по ленте в дереве или кнопка «Показать»).
+ */
+function refreshChromeOnly() {
+  renderSidebar();
+  renderToolbar();
+  renderNewRow();
+  renderDebugInfo();
+  updateFooterStats();
+  refreshTimes();
 }
 
 /** Человеческая подпись режима показа. */
@@ -4924,7 +4945,7 @@ async function loadData({ poll = false } = {}) {
       if (state_.lastRefresh !== undefined) state.data.lastRefresh = state_.lastRefresh;
       if (state_.nextRefreshAt !== undefined) state.data.nextRefreshAt = state_.nextRefreshAt;
       // Пересобираем только изменившиеся карточки — остальной список не трогаем.
-      for (const id of new Set(touched)) patchCard(id);
+      for (const id of new Set(touched)) patchCard(id, { background: true });
       renderSidebar();
       renderToolbar();
       // Новинки приходят отдельным лёгким запросом: иначе плашка их не видит.
