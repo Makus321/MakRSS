@@ -498,14 +498,11 @@ function resetHistory() {
 }
 
 /**
- * «Все статьи» в ленте или папке: показываем весь архив и начинаем с самой старой.
- * В этом режиме порядок не зависит от селектора «Порядок» — иначе сверху снова
- * оказывались бы свежие статьи.
+ * Порядок «старые сверху». Его задаёт селектор «Порядок» (Дата: возрастание),
+ * и от него же зависит, с какой стороны догружается история архива.
  */
-function archiveOrder() {
-  if (unreadModeFor()) return false;
-  const type = state.view?.type;
-  return type === 'feed' || type === 'folder';
+function ascendingOrder() {
+  return sortDir() === 'asc';
 }
 
 /**
@@ -527,7 +524,7 @@ async function loadHistoryPage() {
       const probe = new URLSearchParams({ view: viewParam(), limit: '1', offset: '0', meta: '0' });
       const info = await api(`/api/data?${probe.toString()}`);
       historyTotal = Number(info?.total) || 0;
-      historyOffset = archiveOrder() ? Math.max(0, historyTotal - HISTORY_PAGE) : 0;
+      historyOffset = ascendingOrder() ? Math.max(0, historyTotal - HISTORY_PAGE) : 0;
     }
     const offset = Math.max(0, Math.min(historyOffset, Math.max(0, historyTotal - 1)));
     const query = new URLSearchParams({
@@ -547,7 +544,7 @@ async function loadHistoryPage() {
       added += 1;
     }
     if (Number.isFinite(Number(payload?.total))) historyTotal = Number(payload.total);
-    if (archiveOrder()) {
+    if (ascendingOrder()) {
       historyOffset = offset - HISTORY_PAGE;
       if (historyOffset < 0) {
         historyOffset = 0;
@@ -836,8 +833,7 @@ function visibleItems() {
   if (state.view.type === 'starred') {
     return items.sort((a, b) => (Number(b.starredAt) || 0) - (Number(a.starredAt) || 0));
   }
-  // «Все статьи»: первая карточка — самая старая, независимо от селектора «Порядок».
-  const direction = (archiveOrder() ? 'asc' : sortDir()) === 'asc' ? 1 : -1;
+  const direction = ascendingOrder() ? 1 : -1;
   return items.sort((a, b) => {
     const left = a.date ?? '';
     const right = b.date ?? '';
@@ -1694,9 +1690,9 @@ function switchView(view) {
   state.viewOffset = 0;
   state.viewTotal = 0;
   resetHistory();
-  // Лента открыта в режиме «Все статьи»: подтягиваем старый край архива, чтобы
-  // первой карточкой была самая старая.
-  if (archiveOrder()) {
+  // Порядок «старые сверху»: подтягиваем старый край архива, чтобы первой
+  // карточкой была самая старая. При «новые сверху» старое придёт при прокрутке.
+  if (ascendingOrder()) {
     loadHistoryPage().then((added) => { if (added) { state.limit = 10; render(); } });
   }
   if (PAGED_DATA) {
@@ -3727,9 +3723,9 @@ $('#unread-mode').addEventListener('change', (event) => {
   resetHistory();
   resetSnapshot();
   render();
-  // «Все»: сразу подтягиваем самый старый край архива — первой карточкой будет
-  // самая старая статья. Остальное догружается при прокрутке.
-  loadHistoryPage().then((added) => { if (added) { state.limit = 10; render(); } });
+  // «Все» + порядок «старые сверху»: сразу встаём на старый край архива.
+  // При «новые сверху» свежие уже в данных, остальное придёт при прокрутке.
+  if (ascendingOrder()) loadHistoryPage().then((added) => { if (added) { state.limit = 10; render(); } });
   if (PAGED_DATA) {
     // Первая страница нового режима: после неё станут известны реальные offset/total,
     // и прокрутка вниз продолжит догружать историю.
@@ -3757,7 +3753,17 @@ $('#sort-select').addEventListener('change', async (event) => {
     render();
     toast(sort === 'asc' ? 'Порядок: старые сверху' : 'Порядок: новые сверху');
   }
-  renderList();
+  // Порядок сменился — список пересобираем с начала, историю начинаем заново.
+  resetSnapshot();
+  resetHistory();
+  state.limit = 10;
+  state.resetScroll = true;
+  render();
+  // «Старые сверху»: первый экран должен начинаться с самого старого края,
+  // иначе видны только недавние статьи из общего ответа сервера.
+  if (ascendingOrder()) {
+    loadHistoryPage().then((added) => { if (added) { state.limit = 10; render(); } });
+  }
 });
 
 /** «−» и «+» меняют ширину текста — для этого устройства (на других своя). */
