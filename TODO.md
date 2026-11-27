@@ -33,15 +33,19 @@
   - **Исправление:** Перенести разбор URL и `trackTraffic` внутрь `try/catch`, парсить `req.url` с фиксированной базой `'http://localhost'`, при ошибке возвращать `400 Bad Request`. В `lib/traffic.mjs:36` также обернуть `new URL(...)` в `try/catch`.
   - **Сделано (2026-11-27, коммит `01f74fc`):** разбор адреса перенесён в `try/catch` с фиксированной базой `http://localhost` (Host больше не влияет на разбор пути), при мусоре — `400 Bad Request`; в `lib/traffic.mjs` разбор тоже защищён и при ошибке запрос считается как `OTHER`. Проверено на сервере: `GET http://[ HTTP/1.1` → `400`, служба `active`, обычный запрос → `200`.
 
-- [ ] **P0.3. SSRF в `httpGetOnce` и `httpGetBinary` (обход `net-guard.mjs`)**
+- [x] **P0.3. SSRF в `httpGetOnce` и `httpGetBinary` (обход `net-guard.mjs`)**
   - **Где:** `reader-core.mjs:394`, `reader-core.mjs:1845`
   - **Проблема:** Обе функции вызывают `fetch(url, { redirect: 'follow' })` напрямую вместо `safeFetch`. Через `/api/discover`, `/api/feeds`, `/api/opml`, `fetchFullText` (`reader-core.mjs:1090`) и `/api/favicon` (`reader-core.mjs:1889, 1913`) можно обращаться к `127.0.0.1`, LAN и `169.254.169.254` (включая 302-редирект).
   - **Исправление:** Заменить `fetch` в `httpGetOnce` и `httpGetBinary` на `safeFetch` (с возвратом `finalUrl` из последнего редиректа).
+  - **Сделано (2026-11-27):** `httpGetOnce` и `httpGetBinary` переведены на `safeFetch` (редиректы проверяются пошагово, адрес — по резолву); `safeFetch` теперь запоминает финальный адрес (`finalUrlOf`), чтобы относительные ссылки считались от реального URL. Проверено на сервере: `/api/img?u=http://127.0.0.1/` → **403**, `/api/video?u=http://127.0.0.1/` → **403**, `/api/discover` с `http://127.0.0.1/` → `ok:false, «адрес в приватной сети»`.
 
-- [ ] **P0.4. Полный обход SSRF-защиты `net-guard.mjs` через IPv4-mapped IPv6**
+
+- [x] **P0.4. Полный обход SSRF-защиты `net-guard.mjs` через IPv4-mapped IPv6**
   - **Где:** `lib/net-guard.mjs:60-70, 87-92`
   - **Проблема:** `new URL('http://[::ffff:127.0.0.1]/')` в Node.js нормализует адрес в `::ffff:7f00:1`. Регулярка `/^::ffff:(\d+\.\d+\.\d+\.\d+)$/` его не ловит — `assertPublicUrl` пропускает loopback и cloud metadata (`::ffff:a9fe:a9fe`). Также не блокируются неканонический loopback (`0:0:0:0:0:0:0:1`), IPv4-compatible (`::7f00:1`), NAT64 (`64:ff9b::/96`), 6to4 (`2002::/16`), Teredo (`2001::/32`), multicast (`ff00::/8`).
   - **Исправление:** Парсить IPv6 в 128-битный `BigInt` и проверять диапазоны битовыми масками (для `::ffff:0:0/96` и `::/96` извлекать младшие 32 бита и прогонять через IPv4-блоклист). Добавить юнит-тесты в `test/net-guard.test.mjs`.
+  - **Сделано (2026-11-27):** IPv6 разбирается в 128-битный `BigInt` и проверяется масками: `::ffff:0:0/96`, `::/96`, NAT64 (`64:ff9b::/96`, `64:ff9b:1::/48`), 6to4 (`2002::/16`), Teredo (`2001::/32`), ORCHID, `100::/64`, `ff00::/8`, ULA, link-local. Тесты: `::ffff:7f00:1`, `::7f00:1`, `0:0:0:0:0:0:0:1`, `64:ff9b::7f00:1`, `2002:7f00:1::` блокируются, публичные — нет.
+
 
 - [ ] **P0.5. Reflected / Stored XSS на origin приложения через медиа-прокси (`/api/video`, `/api/img`, `/api/thumb`, `/api/favicon`)**
   - **Где:** `reader-core.mjs:2279-2290` (`serveVideo`), `2609-2623` (`serveImage`), `2365-2385` (`serveThumb`), `1819-1839, 1949-1950` (`serveFavicon`)
@@ -137,15 +141,19 @@
   - **Проблема:** `GET /api/session` и `GET /api/admin/users` (содержат `apiKey`) могут кэшироваться браузером/прокси.
   - **Исправление:** Добавить `'cache-control': 'no-store'` в `json()` в `server.mjs:186`.
 
-- [ ] **P1.8. Отсутствие backpressure, таймаута и проверки `response.body` в `serveVideo`**
+- [x] **P1.8. Отсутствие backpressure, таймаута и проверки `response.body` в `serveVideo`**
   - **Где:** `reader-core.mjs:2266-2296`
   - **Проблема:** `for await (...) res.write(chunk)` не ждёт `'drain'` (риск OOM), переданный `controller.signal` отключает дефолтный таймаут `safeFetch`, а `response.body === null` кидает `TypeError` после `writeHead`.
   - **Исправление:** Перейти на `pipeline(Readable.fromWeb(response.body), res)`, комбинировать `AbortSignal.any([controller.signal, AbortSignal.timeout(20000)])`, проверять `if (!response.body)`.
+  - **Сделано (2026-11-27):** `serveVideo` отдаёт поток через `pipeline(Readable.fromWeb(...), res)` (с противодавлением), таймаут 20 с через `AbortSignal.any([controller.signal, AbortSignal.timeout(20000)])`, проверка `response.body` до `writeHead`.
 
-- [ ] **P1.9. Неограниченный `spawn('cwebp')` без таймаута и гонка временного файла `.webp.tmp`**
+
+- [x] **P1.9. Неограниченный `spawn('cwebp')` без таймаута и гонка временного файла `.webp.tmp`**
   - **Где:** `reader-core.mjs:2437-2483`
   - **Проблема:** Десятки параллельных картинок порождают десятки процессов `cwebp` без таймаута; `tmp` на строке 2456 использует `Date.now()` вместо `webpSeq`, что даёт коллизию при параллельных запросах.
   - **Исправление:** Добавить семафор (2–4 слота), таймаут с `kill('SIGKILL')` (15 с) и использовать один `webpSeq` для `source` и `tmp`.
+  - **Сделано (2026-11-27):** не больше двух `cwebp` одновременно (очередь), таймаут 30 с с `SIGKILL`, временный файл `.webp.tmp` получает номер из того же счётчика `webpSeq`, что и `.src` (раньше `Date.now()` совпадал у параллельных картинок).
+
 
 - [ ] **P1.10. Утечка мёртвых SSE-подписчиков и отсутствие закрытия SSE при отключении пользователя**
   - **Где:** `server.mjs:141-152, 416-449, 505-527`
@@ -182,10 +190,12 @@
   - **Проблема:** При `?api=1&groups&feeds&items` или `?api=1&unread_item_ids&mark=item&...` truthy-значение `api` вызывает ранний `return` на первой секции, отбрасывая остальные секции и операции `mark`/`save`.
   - **Исправление:** Считать одиночным режимом только конкретные имена команд из `Set`; выполнять блок записи (`isWrite`) **до** формирования `unread_item_ids`/`saved_item_ids`.
 
-- [ ] **P1.16. Экспоненциальный OOM DoS в `stripJunkBlocks`**
+- [x] **P1.16. Экспоненциальный OOM DoS в `stripJunkBlocks`**
   - **Где:** `lib/readability.mjs:127-134, 152`
   - **Проблема:** При совпадении `JUNK_BLOCK` до первого `<` (`start === -1`) строка 133 выполняет `result = result.slice(0, -1) + result.slice(0)`, удваивая строку до 40 раз (`2^40` байт → OOM-краш).
   - **Исправление:** Проверять `if (start < 0) break;` (или сдвигать `lastIndex` вперёд), а при `end - start > JUNK_MAX_BYTES` продолжать поиск вместо `break`.
+  - **Сделано (2026-11-27):** если `lastIndexOf('<')` вернул -1 (совпадение класса в тексте, а не в теге), цикл прерывается — раньше `slice(0, -1) + slice(0)` дублировал строку до 40 раз. Тест в `test/readability.test.mjs` (укладывается в 2 с, html не раздувается).
+
 
 - [x] **P1.17. Необработанный `URIError` в `parseCookies`**
   - **Где:** `lib/auth.mjs:67`
@@ -277,9 +287,11 @@
   - **Где:** `reader-core.mjs:2172-2225`
   - **Исправление:** Проверять `botStopped` после каждого `await`, сбрасывать `botLoopRunning` в `finally`, прерывать `telegramGetUpdates` через `AbortController` в `stop()`, делать `await store.saveStateNow()` и сбрасывать `lastUpdateId` при смене токена.
 
-- [ ] **P2.7. `500` вместо `400`/`413` на битый ввод и утечка `chunks` в `readRawBody`**
+- [x] **P2.7. `500` вместо `400`/`413` на битый ввод и утечка `chunks` в `readRawBody`**
   - **Где:** `server.mjs:84, 195-206`, `reader-core.mjs:1800-1810, 2259`
   - **Исправление:** Обернуть `decodeURIComponent` в `try/catch`; в `reader-core.mjs` выставлять `statusCode = 400/413` и проверять, что распарсенный JSON — не-null объект; при превышении лимита в `readRawBody` очищать `chunks` и снимать `data`-слушатель.
+  - **Сделано (2026-11-27):** `readJson` возвращает 400 на битый JSON и на не-объект; `readBody`/`readRawBody` помечают переполнение как 413 и освобождают буферы; `handleRequest` в ядре отдаёт код из `err.statusCode`, а не всегда 500; `serveStaticFromPublic` и `serveVideo` больше не падают на `decodeURIComponent`. Проверено: `POST /api/read` с `{bad` → **400** «тело запроса не JSON», `GET /%zz` → **404** (было 500).
+
 
 - [ ] **P2.8. `X-Forwarded-Proto` без проверки `isTrustedProxy` и отсутствие CSRF-проверки `Origin`/`Content-Type`**
   - **Где:** `server.mjs:754-756, 217-234`, `reader-core.mjs:1810`

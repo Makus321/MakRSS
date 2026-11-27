@@ -36,6 +36,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { parseFeed, looksLikeFeed, discoverFeedLinks, htmlToText, itemId, stripFeedNoise } from './lib/feed.mjs';
 import { parseXml, localName, elementChildren } from './lib/xml.mjs';
 import { imageSize } from './lib/imagesize.mjs';
@@ -45,7 +47,7 @@ import {
   telegramBotMe, telegramGetUpdates, parseBotUpdate, telegramFileUrl,
 } from './lib/telegram.mjs';
 import { Store } from './lib/store.mjs';
-import { safeFetch, SsrfError } from './lib/net-guard.mjs';
+import { safeFetch, SsrfError, finalUrlOf } from './lib/net-guard.mjs';
 import { handleFever } from './lib/fever.mjs';
 import { commentsProviderFor } from './lib/comments.mjs';
 import { fetchMostReading, isMostReadingFresh } from './lib/habr-now.mjs';
@@ -391,13 +393,15 @@ async function httpGetOnce(url, { etag, lastModified, timeout = 20000, accept } 
   if (etag) headers['if-none-match'] = etag;
   if (lastModified) headers['if-modified-since'] = lastModified;
   try {
-    const res = await fetch(url, { redirect: 'follow', signal: controller.signal, headers });
+    // Идём через safeFetch: обычный fetch ходил и на 127.0.0.1, и в приватную
+    // сеть (SSRF через /api/discover, /api/feeds, докачку полного текста).
+    const res = await safeFetch(url, { signal: controller.signal, headers });
     // Ленты бывают по несколько мегабайт, но не бесконечно: 8 МБ хватает с запасом.
     const buffer = res.status === 304 ? new ArrayBuffer(0) : await readLimited(res, FEED_MAX_BYTES, 'лента');
     return {
       status: res.status,
       ok: res.ok,
-      finalUrl: res.url || url,
+      finalUrl: finalUrlOf(res, url),
       etag: res.headers.get('etag') || '',
       lastModified: res.headers.get('last-modified') || '',
       contentType: res.headers.get('content-type') || '',
@@ -1799,7 +1803,17 @@ function readBody(req, limit = 2 * 1024 * 1024) {
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > limit) { reject(new Error('слишком большое тело запроса')); req.destroy(); return; }
+      if (size > limit) {
+        // Помечаем как ошибку клиента (413) и отпускаем буферы: раньше это был
+        // 500, а chunks оставались в памяти до конца запроса.
+        const error = new Error('слишком большое тело запроса');
+        error.statusCode = 413;
+        chunks.length = 0;
+        req.removeAllListeners('data');
+        req.on('data', () => {});
+        reject(error);
+        return;
+      }
       chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
@@ -1807,7 +1821,24 @@ function readBody(req, limit = 2 * 1024 * 1024) {
   });
 }
 
-const readJson = async (req) => JSON.parse((await readBody(req)) || '{}');
+/** Тело как JSON. Битый JSON — ошибка клиента (400), а не 500. */
+const readJson = async (req) => {
+  let parsed;
+  try {
+    parsed = JSON.parse((await readBody(req)) || '{}');
+  } catch (err) {
+    if (err?.statusCode) throw err;
+    const error = new Error('тело запроса не JSON');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    const error = new Error('тело запроса должно быть объектом JSON');
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed;
+};
 
 // --------------------------------------------------------------- иконки подписок
 
@@ -1842,8 +1873,9 @@ async function httpGetBinary(url, timeout = 15000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const res = await fetch(url, {
-      redirect: 'follow',
+    // Картинки тоже только через safeFetch: иначе /api/img?u=http://127.0.0.1
+    // тянул содержимое локальных сервисов.
+    const res = await safeFetch(url, {
       signal: controller.signal,
       headers: { 'user-agent': UA, accept: 'image/avif,image/webp,image/png,image/*,*/*;q=0.5' },
     });
@@ -2256,7 +2288,15 @@ async function serveVideo(req, res, url) {
   let source = String(url.searchParams.get('u') ?? '');
   // На случай двойной обёртки: /api/video?u=/api/video?u=https%3A%2F%2F…
   const nestedSource = /^\/api\/video\?u=([\s\S]+)$/.exec(source);
-  if (nestedSource) source = decodeURIComponent(nestedSource[1]);
+  // Битый процент в адресе раньше бросал URIError и давал 500.
+  if (nestedSource) {
+    try {
+      source = decodeURIComponent(nestedSource[1]);
+    } catch {
+      res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('плохой адрес');
+      return;
+    }
+  }
   let parsed;
   try { parsed = new URL(source); } catch { res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('плохой адрес'); return; }
   if (!/^https?:$/.test(parsed.protocol)) {
@@ -2274,8 +2314,14 @@ async function serveVideo(req, res, url) {
       referer: telegramCdn ? 'https://t.me/' : parsed.origin + '/',
     };
     if (req.headers.range) headers.range = req.headers.range;   // перемотка
-    const response = await safeFetch(source, { headers, signal: controller.signal });
+    // Таймаут обязателен: переданный signal отключает стандартный таймаут safeFetch,
+    // и зависший сервер держал соединение бесконечно.
+    const response = await safeFetch(source, {
+      headers,
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]),
+    });
     if (!response.ok && response.status !== 206) throw new Error(`ответ ${response.status}`);
+    if (!response.body) throw new Error('пустой ответ');
     const out = {
       'content-type': String(response.headers.get('content-type') ?? 'video/mp4'),
       'cache-control': 'no-store',
@@ -2286,8 +2332,9 @@ async function serveVideo(req, res, url) {
       if (value) out[header] = value;
     }
     res.writeHead(response.status === 206 ? 206 : 200, out);
-    for await (const chunk of response.body) res.write(chunk);
-    res.end();
+    // Поток с противодавлением: res.write не ждал 'drain', и большое видео
+    // копилось в памяти процесса (риск OOM).
+    await pipeline(Readable.fromWeb(response.body), res, { end: true });
   } catch (err) {
     // Приватный адрес: отвечаем 403, а не «не удалось получить».
     if (err instanceof SsrfError) { if (!res.headersSent) res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }); res.end('адрес не разрешён'); return; }
@@ -2434,14 +2481,33 @@ const IMG_WEBP_WIDTH = Number(process.env.IMG_WEBP_WIDTH || 900);
 let webpAvailable = null;
 let webpSeq = 0;               // счётчик уникальных имён временных файлов
 
+// Десятки картинок в ленте порождали десятки процессов cwebp разом: держим
+// не больше двух одновременно и убиваем зависший процесс по таймауту.
+const CWEBP_LIMIT = 2;
+const CWEBP_TIMEOUT_MS = 30_000;
+let cwebpRunning = 0;
+const cwebpQueue = [];
+
 async function runCwebp(args) {
-  return new Promise((resolve) => {
-    const child = spawn('cwebp', args, { stdio: 'ignore' });
-    // 'missing' — инструмента нет вовсе: тогда сжатие больше не пытаемся.
-    // 'failed' — не сжался конкретный файл (например, SVG): остальные пробуем.
-    child.on('error', () => resolve('missing'));
-    child.on('close', (code) => resolve(code === 0 ? 'ok' : 'failed'));
-  });
+  if (cwebpRunning >= CWEBP_LIMIT) await new Promise((resolve) => cwebpQueue.push(resolve));
+  cwebpRunning += 1;
+  try {
+    return await new Promise((resolve) => {
+      const child = spawn('cwebp', args, { stdio: 'ignore' });
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        resolve('failed');
+      }, CWEBP_TIMEOUT_MS);
+      // 'missing' — инструмента нет вовсе: тогда сжатие больше не пытаемся.
+      // 'failed' — не сжался конкретный файл (например, SVG): остальные пробуем.
+      child.on('error', () => { clearTimeout(timer); resolve('missing'); });
+      child.on('close', (code) => { clearTimeout(timer); resolve(code === 0 ? 'ok' : 'failed'); });
+    });
+  } finally {
+    cwebpRunning -= 1;
+    const next = cwebpQueue.shift();
+    if (next) next();
+  }
 }
 
 /** Пережимает картинку в WebP. Возвращает буфер или null, если не вышло. */
@@ -2453,7 +2519,9 @@ async function compressToWebp(buffer, baseFile, { quality, width } = {}) {
   // общий .src друг у друга, и вместо картинки получался мусор.
   const source = `${baseFile}.${process.pid}.${(webpSeq += 1)}.src`;
   const target = `${baseFile}.webp`;
-  const tmp = `${baseFile}.${process.pid}.${Date.now()}.webp.tmp`;
+  // Тот же счётчик, что и у .src: Date.now() у двух параллельных картинок совпадал,
+  // и они перетирали временный файл друг друга.
+  const tmp = `${baseFile}.${process.pid}.${(webpSeq += 1)}.webp.tmp`;
   try {
     await mkdir(MEDIA_DIR, { recursive: true });
     await writeFile(source, buffer);
@@ -3981,7 +4049,16 @@ const OPEN_API = new Set(['/api/session', '/api/login', '/api/logout']);
 
 /** Обрабатывает запрос уже опознанного пользователя. */
 export async function handleRequest(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
+  // Адрес разбираем так же, как в контроллере: невалидный request-target не должен
+  // бросать ERR_INVALID_URL вне try (иначе падает процесс ядра).
+  let url;
+  try {
+    url = new URL(req.url ?? '/', 'http://localhost');
+  } catch {
+    if (!res.headersSent) res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('bad request');
+    return;
+  }
   try {
     if (url.pathname === '/fever' || url.pathname === '/fever/') {
       await handleFever(req, res, url, feverContext);
@@ -3995,8 +4072,12 @@ export async function handleRequest(req, res) {
     else if (req.method === 'GET' || req.method === 'HEAD') await staticFile(req, res, url);
     else res.writeHead(405).end('method not allowed');
   } catch (err) {
-    log('ошибка обработки запроса:', err.stack ?? err.message);
-    if (!res.headersSent) json(res, 500, { ok: false, error: String(err.message ?? err) });
+    // Ошибки клиента (битый JSON, слишком большое тело) не должны выглядеть
+    // как авария сервера: обработчики выставляют statusCode 400/413.
+    const status = Number(err?.statusCode) || 500;
+    if (status >= 500) log('ошибка обработки запроса:', err.stack ?? err.message);
+    else log(`запрос отклонён (${status}): ${err.message}`);
+    if (!res.headersSent) json(res, status, { ok: false, error: String(err.message ?? err) });
     else res.end();
   }
 }

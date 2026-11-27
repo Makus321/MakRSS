@@ -81,7 +81,14 @@ const MIME = {
  */
 async function serveStaticFromPublic(req, res, url) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
-  const rel = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname).replace(/^\/+/, '');
+  // Битый процент (%zz) раньше бросал URIError и давал 500 на любой такой адрес.
+  let decoded;
+  try {
+    decoded = decodeURIComponent(url.pathname);
+  } catch {
+    return false;
+  }
+  const rel = url.pathname === '/' ? 'index.html' : decoded.replace(/^\/+/, '');
   if (!rel || rel.includes('..')) return false;
   const file = path.join(PUBLIC_DIR, rel);
   if (!file.startsWith(PUBLIC_DIR + path.sep)) return false;
@@ -195,9 +202,11 @@ function readRawBody(req, limit = 4 * 1024 * 1024) {
     req.on('data', (chunk) => {
       size += chunk.length;
       if (size > limit) {
-        // Не рвём соединение: обработчик ещё должен ответить 413. Тело дочитываем вхолостую.
+        // Не рвём соединение: обработчик ещё должен ответить 413. Тело дочитываем
+        // вхолостую, а накопленные буферы отпускаем — иначе они висели в памяти.
         const error = new Error('слишком большое тело запроса');
         error.statusCode = 413;
+        chunks.length = 0;
         req.resume();
         reject(error);
         return;
