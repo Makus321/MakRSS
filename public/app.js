@@ -1805,6 +1805,24 @@ document.addEventListener('selectionchange', () => {
   }, 150);
 });
 
+/**
+ * Снимает выделение в ленте. Нужно перед действиями пользователя, которые всё
+ * равно пересобирают список (вид, фильтр, порядок, строки, ширина, настройки):
+ * иначе «висящее» выделение блокировало перерисовку, и в ленте оставалось старое
+ * содержимое — например, после переключения «Непрочитанные → Все».
+ */
+function dropListSelection() {
+  if (!listSelectionActive()) return;
+  window.getSelection()?.removeAllRanges();
+}
+
+// Клик вне ленты и любое переключение контрола — это явное действие: выделение
+// больше не защищаем, иначе пользователь не увидит результат своего же выбора.
+document.addEventListener('click', (event) => {
+  if (!event.target.closest?.('#list')) dropListSelection();
+}, true);
+document.addEventListener('change', () => dropListSelection(), true);
+
 /** Ставит рамку на конкретную статью и держит её, пока список не тронут руками. */
 function pinActive(id, ms = 1500) {
   activePin = { id: id ?? null, until: Date.now() + ms };
@@ -1823,7 +1841,13 @@ document.addEventListener('mouseup', () => {
   pointerDown = false;
   // Ждём завершения события click (оно идёт сразу после mouseup), иначе
   // обработчик нажатия получит уже заменённый узел и нажатие потеряется.
-  if (renderPending) setTimeout(() => { if (renderPending) { renderPending = false; renderList(); } }, 0);
+  // Если в ленте осталось выделение (его только что протянули мышью), перерисовку
+  // не делаем: ждём, пока выделение снимут — иначе оно исчезало бы сразу после drag.
+  if (renderPending) setTimeout(() => {
+    if (!renderPending || listSelectionActive()) return;
+    renderPending = false;
+    renderList();
+  }, 0);
 }, true);
 
 state.filling = false;
