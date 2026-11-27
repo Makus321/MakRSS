@@ -157,6 +157,16 @@ async function stopCore(userId) {
     await mod.shutdown?.();
     mod.stop?.();
   } catch { /* экземпляр мог не подняться */ }
+  // Живые события отключённого пользователя закрываем: иначе вкладки висели
+  // с открытым потоком и ждали данные, которых больше не будет.
+  const set = subscribers.get(userId);
+  if (set) {
+    for (const res of set) {
+      try { res.end(); } catch { /* уже закрыт */ }
+    }
+    subscribers.delete(userId);
+    revisions.delete(userId);
+  }
 }
 
 /** Если данные пользователя уже подняты — сообщаем ядру новый логин и ключ. */async function refreshCoreAuth(user) {

@@ -601,15 +601,20 @@ async function mergeItems(feedId, fresh) {
   // иначе каждый опрос «забывал бы», что текст уже скачан или что попытка была.
   // Читалка докидывает историю Telegram «вниз»: посты старше самой старой
   // известной записи сразу помечаем прочитанными, иначе они всплывают как новые.
-  const newestKnown = old.reduce((max, i) => {
+  // Докидываем историю только у Telegram: посты старше самой СТАРОЙ известной
+  // записи сразу считаем прочитанными, иначе они всплывают как новые. Раньше здесь
+  // брали максимум даты, и любая статья с датой в прошлом (часовой пояс,
+  // отложенная публикация) молча помечалась прочитанной.
+  const telegramFeed = String(feed?.kind ?? '').startsWith('telegram');
+  const oldestKnown = old.reduce((min, i) => {
     const t = Date.parse(i.date ?? '');
-    return Number.isFinite(t) && t > max ? t : max;
+    return Number.isFinite(t) && (min === 0 || t < min) ? t : min;
   }, 0);
-  if (newestKnown) {
+  if (telegramFeed && oldestKnown) {
     for (const item of fresh) {
       if (oldIds.has(item.id)) continue;
       const t = Date.parse(item.date ?? '');
-      if (Number.isFinite(t) && t < newestKnown) db.read[item.id] = Date.now();
+      if (Number.isFinite(t) && t < oldestKnown) db.read[item.id] = Date.now();
     }
   }
   const merged = [
@@ -3799,20 +3804,22 @@ async function payloadBody() {
 
 async function sendPayload(req, res) {
   const rev = Number(db?.revision) || 0;
-  const etag = `"${rev}"`;
   const headers = {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
     vary: 'Accept-Encoding',
-    etag,
   };
-  // Клиент уже видел эту ревизию — тело не отправляем.
-  if (String(req.headers['if-none-match'] ?? '') === etag) {
-    res.writeHead(304, headers);
+  // Клиент уже видел эту ревизию — тело не отправляем (быстрый путь без сборки).
+  if (String(req.headers['if-none-match'] ?? '') === `"${rev}"`) {
+    res.writeHead(304, { ...headers, etag: `"${rev}"` });
     res.end();
     return;
   }
   const body = await payloadBody();
+  // Ревизия могла вырасти, пока собирали тело: ETag берём от того, что реально
+  // отдаём, иначе браузер закэширует старое тело под новым номером.
+  const etag = `"${body.revision}"`;
+  headers.etag = etag;
   if (accepts(req, 'br') && body.br) {
     headers['content-encoding'] = 'br';
     res.writeHead(200, headers);
@@ -3833,9 +3840,18 @@ async function sendPayload(req, res) {
 const staticCompressed = new Map();
 
 async function staticFile(req, res, url) {
-  const rel = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
+  // Битый процент в адресе не должен давать 500.
+  let decoded;
+  try {
+    decoded = decodeURIComponent(url.pathname);
+  } catch {
+    res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('плохой адрес');
+    return;
+  }
+  const rel = decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, '');
   const file = path.join(PUBLIC_DIR, path.normalize(rel));
-  if (!file.startsWith(PUBLIC_DIR)) { res.writeHead(403).end('forbidden'); return; }
+  // Без path.sep проверка пропускала соседний каталог вида public-old/…
+  if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403).end('forbidden'); return; }
   try {
     const data = await readFile(file);
     const ext = path.extname(file).toLowerCase();
@@ -3881,6 +3897,12 @@ async function staticFile(req, res, url) {
  * @param {{ dataDir?: string, login?: string, apiKey?: string, secret?: string, tag?: string }} options
  */
 export async function init(options = {}) {
+  // Модуль кэшируется Node по адресу (?u=<id>), поэтому после disable → enable
+  // сюда приходит ТОТ ЖЕ экземпляр. Снимаем флаг остановки и чистим кэш ответа:
+  // иначе автообновление лент молча не запускалось до перезапуска службы.
+  stopped = false;
+  botStopped = false;
+  payloadCache = { revision: -1, json: Buffer.alloc(0), gzip: null, br: null, building: null };
   await loadVersion();   // номер сборки нужен в полезной нагрузке клиента
   if (options.dataDir) DATA_DIR = path.resolve(options.dataDir);
   MEDIA_DIR = path.join(DATA_DIR, 'media');
@@ -4027,6 +4049,9 @@ export function stop() {
   if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
   if (pumpTimer) { clearTimeout(pumpTimer); pumpTimer = null; }
   nextRefreshAt = null;
+  // Хранилище перестаёт быть «открытым»: без этого оно висело в liveStores,
+  // и flushAllStores при остановке службы дёргал удалённого пользователя.
+  store?.close?.().catch((err) => log(`хранилище не закрыто: ${err.message}`));
   log('остановлен: обновление и докачка больше не идут');
 }
 
@@ -4158,7 +4183,9 @@ async function cleanStoredBodies() {
         if (after !== before) { next[field] = after; bodyChanged = true; fixed += 1; }
       }
       if (bodyChanged) { await store.setBody(feed.id, item.id, next); dirty = true; }
-      if (!item.hasFull && (next.content || next.fullHtml)) { item.hasFull = true; restored += 1; dirty = true; }
+      // «Текст скачан» — только при реальном полном тексте. Обычный анонс
+      // (content есть у всех) ставил отметку, и докачка больше не предлагалась.
+      if (!item.hasFull && next.fullHtml) { item.hasFull = true; restored += 1; dirty = true; }
     }
     if (dirty) await store.flushFeed(feed.id);   // одна запись на ленту
   }
