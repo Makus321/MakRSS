@@ -895,7 +895,9 @@ async function refreshFeed(feed, { force = false } = {}) {
     if (isTelegram && !channel) throw new Error('не разобрано имя Telegram-канала');
     const requestUrl = isTelegram ? telegramPreviewUrl(channel) : feed.url;
     // Если разборщик обновился, кэш сайта не используем: нужен свежий разбор.
-    const stale = Number(db.parserVersion) !== PARSER_VERSION;
+    // Версию разборщика храним у каждой ленты: раньше она была общей, и после
+  // первого обновления сбрасывалась — остальные ленты так и не переразбирались.
+  const stale = Number(feed.parserVersion ?? db.parserVersion ?? 0) !== PARSER_VERSION;
     const res = await httpGet(requestUrl, force || stale ? {} : { etag: feed.etag, lastModified: feed.lastModified });
     if (res.status === 304) {
       feed.lastFetched = new Date().toISOString();
@@ -932,7 +934,7 @@ async function refreshFeed(feed, { force = false } = {}) {
     feed.description = parsed.meta.description || feed.description || '';
     feed.icon = parsed.meta.icon || feed.icon || '';
     feed.format = parsed.format;
-    db.parserVersion = PARSER_VERSION;
+    feed.parserVersion = PARSER_VERSION;
     feed.etag = res.etag || '';
     feed.lastModified = res.lastModified || '';
     feed.lastFetched = new Date().toISOString();
@@ -2218,19 +2220,28 @@ async function storeBotPost({ channel, post }) {
   store.saveStateSoon();
 }
 
+// Поколение цикла: при смене токена старое поколение выходит, новое запускается
+// из finally — иначе два цикла работали с разными токенами одновременно.
+let botGeneration = 0;
+
 async function startTelegramBot() {
+  if (!telegramToken()) return;
+  botGeneration += 1;
+  if (botLoopRunning) return;            // старый цикл дослушает и перезапустится сам
+  const myGen = botGeneration;
   botStopped = false;                    // новый запуск — сбрасываем просьбу остановиться
-  if (botLoopRunning || !telegramToken()) return;
   botLoopRunning = true;
   let offset = Number(settings().telegram.lastUpdateId) || 0;
   log(`Telegram-бот: слушаю обновления каналов (offset ${offset})`);
-  while (!botStopped) {
+  try {
+  while (!botStopped && myGen === botGeneration) {
     if (!telegramToken()) {
-      botLoopRunning = false;
       log('Telegram-бот: токен убран — опрос остановлен');
       return;
     }
     const res = await telegramGetUpdates(telegramToken(), offset, 30);
+    // Пока шёл long poll, токен могли сменить или остановить бота.
+    if (botStopped || myGen !== botGeneration) break;
     if (!res.ok) {
       log(`Telegram-бот: ${res.error} (повтор через 20 с)`);
       await sleep(20_000);
@@ -2252,6 +2263,11 @@ async function startTelegramBot() {
       store.saveStateSoon();
     }
   }
+  } finally {
+    botLoopRunning = false;
+    // Токен сменили, пока шёл опрос: запускаемся заново с новым токеном.
+    if (myGen !== botGeneration && telegramToken()) setTimeout(() => startTelegramBot(), 200);
+  }
 }
 
 async function applyTelegramToken(rawToken) {
@@ -2265,11 +2281,14 @@ async function applyTelegramToken(rawToken) {
   }
   const me = await telegramBotMe(token);
   if (!me.ok) return { ok: false, error: `Telegram не принял токен: ${me.error}` };
+  const tokenChanged = s.telegram.token !== token;
   s.telegram.token = token;
   s.telegram.botUsername = me.username ?? '';
-  s.telegram.lastUpdateId = Number(s.telegram.lastUpdateId) || 0;
-  store.saveStateNow();
-  startTelegramBot();
+  // Новый бот не знает старых offset: иначе первый же опрос «съедал» обновления.
+  s.telegram.lastUpdateId = tokenChanged ? 0 : (Number(s.telegram.lastUpdateId) || 0);
+  await store.saveStateNow();
+  botStopped = true;            // старый цикл завершится после текущего long poll
+  startTelegramBot();           // новое поколение поднимется из finally старого
   return { ok: true, username: me.username };
 }
 
@@ -3308,7 +3327,11 @@ async function api(req, res, url) {
     const onlyUnread = url.searchParams.get('unread') === '1';
     const folderId = url.searchParams.get('folderId') ?? '';
     const out = [];
-    for (const feed of db.feeds) {
+    // Витрина «Читают сейчас» живёт вне db.feeds: без неё она не попадала в выборку.
+    const sources = [...db.feeds];
+    const virtual = habrNowFeedView();
+    if (virtual) sources.push(virtual);
+    for (const feed of sources) {
       if (feedId && feed.id !== feedId) continue;
       if (!feedId && folderId && feed.folderId !== folderId) continue;
       for (const item of db.items[feed.id] ?? []) {
@@ -3356,6 +3379,9 @@ async function api(req, res, url) {
       const feedIds = new Set();
       if (type === 'feed') {
         feedIds.add(id);
+        // Отдельный запрос витрины должен её и отдавать: раньше habr-now
+        // отсутствовал в db.feeds и страница приходила пустой.
+        if (id === HABR_NOW_ID) { /* добавим ниже вместе с виртуальной лентой */ }
       } else if (type === 'folder') {
         for (const f of db.feeds) if (f.folderId === id) feedIds.add(f.id);
       } else {
@@ -3363,7 +3389,10 @@ async function api(req, res, url) {
       }
 
       const viewItems = [];
-      for (const feed of db.feeds) {
+      const viewSources = [...db.feeds];
+      const virtualFeed = type === 'feed' && id === HABR_NOW_ID ? habrNowFeedView() : null;
+      if (virtualFeed) viewSources.push(virtualFeed);
+      for (const feed of viewSources) {
         if (!feedIds.has(feed.id)) continue;
         for (const item of db.items[feed.id] ?? []) {
           if (type === 'unread' && db.read[item.id]) continue;
